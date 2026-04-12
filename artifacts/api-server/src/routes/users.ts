@@ -38,10 +38,22 @@ router.get("/v1/users", requireAuth, async (req, res) => {
       .leftJoin(provinces, eq(userScope.provinceId, provinces.id))
       .orderBy(users.fullName);
 
+    const user = req.user;
     const filtered =
-      req.user.scopeLevel === "national"
+      user.scopeLevel === "national"
         ? allUsers
-        : allUsers.filter((u) => u.scope?.provinceId === req.user!.provinceId);
+        : allUsers.filter((u) => {
+            if (user.facilityId) {
+              return u.scope?.facilityId === user.facilityId;
+            }
+            if (user.districtId) {
+              return u.scope?.districtId === user.districtId || u.scope?.facilityId != null;
+            }
+            if (user.provinceId) {
+              return u.scope?.provinceId === user.provinceId;
+            }
+            return false;
+          });
 
     res.json({ success: true, message: "Users retrieved", data: filtered });
   } catch (err) {

@@ -190,43 +190,60 @@ export function requireAdminRole(req: Request, res: Response, next: NextFunction
   return requireAssetAdmin(req, res, next);
 }
 
+export interface EffectiveScope {
+  provinceId: string | null;
+  districtId: string | null;
+  facilityId: string | null;
+}
+
+export function resolveEffectiveScope(user: TokenPayload): EffectiveScope {
+  return {
+    provinceId: user.scopedProvinceId ?? null,
+    districtId: user.scopedDistrictId ?? null,
+    facilityId: user.scopedFacilityId ?? null,
+  };
+}
+
 export function enforceScopeFilter(
   req: Request,
   res: Response,
   next: NextFunction,
 ): void {
   if (!req.user) {
-    res.status(401).json({ success: false, message: "Authentication required" });
+    res.status(401).json({ success: false, message: "Authentication required", data: null });
     return;
   }
 
   if (req.user.scopeLevel === "national") {
+    req.user.scopedProvinceId = null;
+    req.user.scopedDistrictId = null;
+    req.user.scopedFacilityId = null;
     next();
     return;
   }
 
-  const requestedProvinceId = (req.query.province_id as string) || (req.body?.province_id as string) || (req.params?.province_id as string);
-  const requestedDistrictId = (req.query.district_id as string) || (req.body?.district_id as string) || (req.params?.district_id as string);
-  const requestedFacilityId = (req.query.facility_id as string) || (req.body?.facility_id as string) || (req.params?.facility_id as string);
+  const requestedProvinceId = (req.query.province_id as string | undefined) || (req.body?.province_id as string | undefined) || (req.params?.province_id as string | undefined) || undefined;
+  const requestedDistrictId = (req.query.district_id as string | undefined) || (req.body?.district_id as string | undefined) || (req.params?.district_id as string | undefined) || undefined;
+  const requestedFacilityId = (req.query.facility_id as string | undefined) || (req.body?.facility_id as string | undefined) || (req.params?.facility_id as string | undefined) || undefined;
 
-  if (requestedProvinceId && req.user.provinceId && requestedProvinceId !== req.user.provinceId) {
-    res.status(403).json({ success: false, message: "Access denied: outside your geographic scope" });
+  if (requestedProvinceId !== undefined && req.user.provinceId !== null && requestedProvinceId !== req.user.provinceId) {
+    res.status(403).json({ success: false, message: "Access denied: outside your geographic scope", data: null });
     return;
   }
 
-  if (requestedDistrictId && req.user.districtId && requestedDistrictId !== req.user.districtId) {
-    res.status(403).json({ success: false, message: "Access denied: outside your district scope" });
+  if (requestedDistrictId !== undefined && req.user.districtId !== null && requestedDistrictId !== req.user.districtId) {
+    res.status(403).json({ success: false, message: "Access denied: outside your district scope", data: null });
     return;
   }
 
-  if (requestedFacilityId && req.user.facilityId && requestedFacilityId !== req.user.facilityId) {
-    res.status(403).json({ success: false, message: "Access denied: outside your facility scope" });
+  if (requestedFacilityId !== undefined && req.user.facilityId !== null && requestedFacilityId !== req.user.facilityId) {
+    res.status(403).json({ success: false, message: "Access denied: outside your facility scope", data: null });
     return;
   }
 
-  req.user.scopedProvinceId = (!requestedProvinceId && req.user.provinceId) ? req.user.provinceId : null;
-  req.user.scopedDistrictId = (!requestedDistrictId && req.user.districtId) ? req.user.districtId : null;
-  req.user.scopedFacilityId = (!requestedFacilityId && req.user.facilityId) ? req.user.facilityId : null;
+  req.user.scopedProvinceId = requestedProvinceId ?? req.user.provinceId ?? null;
+  req.user.scopedDistrictId = requestedDistrictId ?? req.user.districtId ?? null;
+  req.user.scopedFacilityId = requestedFacilityId ?? req.user.facilityId ?? null;
 
   next();
 }

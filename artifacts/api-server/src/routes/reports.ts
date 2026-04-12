@@ -58,7 +58,7 @@ router.get("/v1/reports/assets", requireAuth, enforceScopeFilter, async (req, re
       .orderBy(assets.assetTag)
       .limit(10000);
 
-    res.json({ success: true, message: "Report generated", data: rows, total: rows.length });
+    res.json({ success: true, message: "Report generated", data: { items: rows, total: rows.length } });
   } catch (err) {
     req.log.error({ err }, "Reports assets error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
@@ -67,11 +67,18 @@ router.get("/v1/reports/assets", requireAuth, enforceScopeFilter, async (req, re
 
 router.get("/v1/reports/summary", requireAuth, enforceScopeFilter, async (req, res) => {
   try {
-    const scopedProvinceId = req.user?.scopedProvinceId || (req.query.province_id as string) || undefined;
+    const user = req.user!;
+    const scopedProvinceId = user.scopedProvinceId;
+    const scopedDistrictId = user.scopedDistrictId;
+    const scopedFacilityId = user.scopedFacilityId;
 
     const provinceConditions = scopedProvinceId
       ? and(eq(provinces.active, true), eq(provinces.id, scopedProvinceId))
       : eq(provinces.active, true);
+
+    const assetJoinConditions = [eq(assets.provinceId, provinces.id), isNull(assets.deletedAt)];
+    if (scopedDistrictId) assetJoinConditions.push(eq(assets.districtId, scopedDistrictId));
+    if (scopedFacilityId) assetJoinConditions.push(eq(assets.facilityId, scopedFacilityId));
 
     const summary = await db
       .select({
@@ -83,7 +90,7 @@ router.get("/v1/reports/summary", requireAuth, enforceScopeFilter, async (req, r
         total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
       })
       .from(provinces)
-      .leftJoin(assets, and(eq(assets.provinceId, provinces.id), isNull(assets.deletedAt)))
+      .leftJoin(assets, and(...assetJoinConditions))
       .where(provinceConditions)
       .groupBy(provinces.id, provinces.provinceName, provinces.flagUrl)
       .orderBy(provinces.provinceName);
