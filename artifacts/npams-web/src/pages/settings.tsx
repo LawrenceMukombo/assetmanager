@@ -1,6 +1,5 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useProvinceBranding } from "@/hooks/use-province-branding";
-import { useUpdateUser } from "@workspace/api-client-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -15,7 +14,7 @@ import { useState } from "react";
 
 const profileSchema = z.object({
   full_name: z.string().min(1, "Name is required"),
-  phone: z.string().optional(),
+  phone_number: z.string().optional(),
 });
 
 const passwordSchema = z
@@ -33,6 +32,7 @@ export default function Settings() {
   const { user } = useAuth();
   const { branding } = useProvinceBranding();
   const { toast } = useToast();
+  const [profileLoading, setProfileLoading] = useState(false);
   const [pwdLoading, setPwdLoading] = useState(false);
 
   const isSuperAdmin = user?.role === "Super Admin";
@@ -41,7 +41,7 @@ export default function Settings() {
 
   const profileForm = useForm<z.infer<typeof profileSchema>>({
     resolver: zodResolver(profileSchema),
-    defaultValues: { full_name: user?.full_name || "", phone: "" },
+    defaultValues: { full_name: user?.full_name || "", phone_number: "" },
   });
 
   const passwordForm = useForm<z.infer<typeof passwordSchema>>({
@@ -49,39 +49,45 @@ export default function Settings() {
     defaultValues: { old_password: "", new_password: "", confirm_password: "" },
   });
 
-  const updateProfileMutation = useUpdateUser({
-    mutation: {
-      onSuccess: () => {
-        toast({ title: "Profile updated successfully" });
+  const authFetch = (path: string, options: RequestInit = {}) => {
+    const token = localStorage.getItem("npams_token");
+    return fetch(path, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers ?? {}),
       },
-      onError: (err: Error) => {
-        toast({ variant: "destructive", title: "Error", description: err.message });
-      },
-    },
-  });
+    });
+  };
 
-  const onProfileSubmit = (values: z.infer<typeof profileSchema>) => {
-    if (user?.id) {
-      updateProfileMutation.mutate({ id: user.id, data: values });
+  const onProfileSubmit = async (values: z.infer<typeof profileSchema>) => {
+    setProfileLoading(true);
+    try {
+      const resp = await authFetch("/api/v1/auth/me", {
+        method: "PATCH",
+        body: JSON.stringify({ full_name: values.full_name, phone_number: values.phone_number }),
+      });
+      const body = await resp.json().catch(() => ({ message: "Unexpected error" }));
+      if (!resp.ok) throw new Error((body as { message?: string }).message ?? "Update failed");
+      toast({ title: "Profile updated successfully" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Update failed";
+      toast({ variant: "destructive", title: "Error", description: msg });
+    } finally {
+      setProfileLoading(false);
     }
   };
 
   const onPasswordSubmit = async (values: z.infer<typeof passwordSchema>) => {
     setPwdLoading(true);
     try {
-      const token = localStorage.getItem("npams_token");
-      const resp = await fetch("/api/v1/auth/change-password", {
+      const resp = await authFetch("/api/v1/auth/change-password", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
         body: JSON.stringify({ old_password: values.old_password, new_password: values.new_password }),
       });
       const body = await resp.json().catch(() => ({ message: "Unexpected error" }));
-      if (!resp.ok) {
-        throw new Error((body as { message?: string }).message || "Failed to change password");
-      }
+      if (!resp.ok) throw new Error((body as { message?: string }).message || "Failed to change password");
       toast({ title: "Password changed successfully" });
       passwordForm.reset();
     } catch (err: unknown) {
@@ -104,7 +110,7 @@ export default function Settings() {
           <Card>
             <CardHeader>
               <CardTitle>My Profile</CardTitle>
-              <CardDescription>Update your display name.</CardDescription>
+              <CardDescription>Update your display name and phone number.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="mb-4 flex items-center gap-3">
@@ -130,7 +136,7 @@ export default function Settings() {
                   />
                   <FormField
                     control={profileForm.control}
-                    name="phone"
+                    name="phone_number"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Phone Number</FormLabel>
@@ -140,8 +146,8 @@ export default function Settings() {
                     )}
                   />
                   <div className="pt-2">
-                    <Button type="submit" disabled={updateProfileMutation.isPending}>
-                      {updateProfileMutation.isPending ? "Saving..." : "Save Changes"}
+                    <Button type="submit" disabled={profileLoading}>
+                      {profileLoading ? "Saving..." : "Save Changes"}
                     </Button>
                   </div>
                 </form>

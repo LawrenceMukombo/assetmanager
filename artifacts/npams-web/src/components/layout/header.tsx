@@ -30,11 +30,23 @@ export function Header() {
   const unreadCount = notifications?.data?.filter((n) => !n.readStatus).length ?? 0;
   const recentNotifs = (notifications?.data ?? []).slice(0, 8);
 
-  const markAllRead = async () => {
+  const getAuthHeaders = (): Record<string, string> => {
     const token = localStorage.getItem("npams_token");
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  const markAllRead = async () => {
     await fetch("/api/v1/notifications/mark-all-read", {
       method: "POST",
-      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      headers: getAuthHeaders(),
+    }).catch(() => null);
+    queryClient.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
+  };
+
+  const markOneRead = async (id: string) => {
+    await fetch(`/api/v1/notifications/${id}/read`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
     }).catch(() => null);
     queryClient.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
   };
@@ -97,6 +109,7 @@ export function Header() {
                   <div
                     key={n.id}
                     className={`flex items-start gap-3 px-4 py-3 border-b last:border-0 hover:bg-muted/50 cursor-pointer transition-colors ${!n.readStatus ? "bg-primary/5" : ""}`}
+                    onClick={() => { if (!n.readStatus && n.id) markOneRead(n.id); }}
                   >
                     <div className="mt-0.5 shrink-0">
                       {!n.readStatus

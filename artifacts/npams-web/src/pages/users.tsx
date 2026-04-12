@@ -100,14 +100,31 @@ export default function Users() {
   const deactivateMutation = useDeactivateUser({
     mutation: {
       onSuccess: () => {
-        toast({ title: "User status updated" });
+        toast({ title: "User deactivated" });
         refetch();
       },
       onError: (err: Error) => {
-        toast({ variant: "destructive", title: "Failed to update user", description: err.message });
+        toast({ variant: "destructive", title: "Failed to deactivate user", description: err.message });
       },
     },
   });
+
+  const reactivateUser = async (userId: string) => {
+    const token = localStorage.getItem("npams_token");
+    try {
+      const resp = await fetch(`/api/v1/users/${userId}/reactivate`, {
+        method: "PATCH",
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      const body = await resp.json().catch(() => ({ message: "Unexpected error" }));
+      if (!resp.ok) throw new Error((body as { message?: string }).message ?? "Reactivation failed");
+      toast({ title: "User reactivated" });
+      refetch();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Reactivation failed";
+      toast({ variant: "destructive", title: "Error", description: msg });
+    }
+  };
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),
@@ -179,7 +196,13 @@ export default function Users() {
                 <TableCell>
                   <Switch
                     checked={!!u.active}
-                    onCheckedChange={() => deactivateMutation.mutate({ id: u.id! })}
+                    onCheckedChange={() => {
+                      if (u.active) {
+                        deactivateMutation.mutate({ id: u.id! });
+                      } else {
+                        reactivateUser(u.id!);
+                      }
+                    }}
                     disabled={deactivateMutation.isPending || u.id === user?.id}
                   />
                 </TableCell>

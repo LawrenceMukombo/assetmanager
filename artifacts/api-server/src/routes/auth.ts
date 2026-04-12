@@ -171,4 +171,98 @@ router.post("/v1/auth/forgot-password", (_req, res) => {
   });
 });
 
+router.get("/v1/auth/me", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const [row] = await db
+      .select({
+        id: users.id,
+        fullName: users.fullName,
+        email: users.email,
+        phoneNumber: users.phoneNumber,
+        active: users.active,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!row) {
+      res.status(404).json({ success: false, message: "User not found", data: null });
+      return;
+    }
+    res.json({ success: true, message: "Profile retrieved", data: row });
+  } catch (err) {
+    req.log.error({ err }, "Get me error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
+router.patch("/v1/auth/me", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const { full_name, phone_number } = req.body as { full_name?: string; phone_number?: string };
+
+    if (!full_name && phone_number === undefined) {
+      res.status(400).json({ success: false, message: "No fields to update", data: null });
+      return;
+    }
+
+    const existing = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (existing.length === 0) {
+      res.status(404).json({ success: false, message: "User not found", data: null });
+      return;
+    }
+
+    const [updated] = await db
+      .update(users)
+      .set({
+        fullName: full_name ?? existing[0].fullName,
+        phoneNumber: phone_number !== undefined ? phone_number : existing[0].phoneNumber,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning({ id: users.id, fullName: users.fullName, email: users.email, phoneNumber: users.phoneNumber });
+
+    res.json({ success: true, message: "Profile updated", data: updated });
+  } catch (err) {
+    req.log.error({ err }, "Update me error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
+router.post("/v1/auth/change-password", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const { old_password, new_password } = req.body as { old_password?: string; new_password?: string };
+
+    if (!old_password || !new_password) {
+      res.status(400).json({ success: false, message: "Both old_password and new_password are required", data: null });
+      return;
+    }
+    if (new_password.length < 8) {
+      res.status(400).json({ success: false, message: "New password must be at least 8 characters", data: null });
+      return;
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!user) {
+      res.status(404).json({ success: false, message: "User not found", data: null });
+      return;
+    }
+
+    const valid = await bcrypt.compare(old_password, user.passwordHash);
+    if (!valid) {
+      res.status(401).json({ success: false, message: "Current password is incorrect", data: null });
+      return;
+    }
+
+    const newHash = await bcrypt.hash(new_password, 12);
+    await db.update(users).set({ passwordHash: newHash, updatedAt: new Date() }).where(eq(users.id, userId));
+
+    res.json({ success: true, message: "Password changed successfully", data: null });
+  } catch (err) {
+    req.log.error({ err }, "Change password error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
 export default router;

@@ -40,4 +40,18 @@ router.patch("/v1/notifications/:id/read", requireAuth, async (req, res) => {
   }
 });
 
+router.post("/v1/notifications/mark-all-read", requireAuth, async (req, res) => {
+  if (!req.user) return;
+  try {
+    await db
+      .update(notifications)
+      .set({ readStatus: true })
+      .where(and(eq(notifications.userId, req.user.userId), eq(notifications.readStatus, false)));
+    res.json({ success: true, message: "All notifications marked as read", data: null });
+  } catch (err) {
+    req.log.error({ err }, "Mark all notifications read error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
 export default router;

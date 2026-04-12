@@ -345,6 +345,35 @@ router.patch("/v1/users/:id/deactivate", requireAuth, requireUserAdmin, async (r
   }
 });
 
+router.patch("/v1/users/:id/reactivate", requireAuth, requireUserAdmin, async (req, res) => {
+  if (!req.user) return;
+
+  try {
+    const targetId = String(req.params.id);
+    const [targetScope] = await db.select().from(userScope).where(eq(userScope.userId, targetId)).limit(1);
+    if (req.user.scopeLevel !== "national" && targetScope?.provinceId !== req.user.provinceId) {
+      res.status(403).json({ success: false, message: "Cannot modify user outside your province", data: null });
+      return;
+    }
+
+    const [updated] = await db
+      .update(users)
+      .set({ active: true, updatedAt: new Date() })
+      .where(eq(users.id, targetId))
+      .returning();
+
+    if (!updated) {
+      res.status(404).json({ success: false, message: "User not found", data: null });
+      return;
+    }
+
+    res.json({ success: true, message: "User reactivated", data: null });
+  } catch (err) {
+    req.log.error({ err }, "Reactivate user error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
 router.get("/v1/roles", requireAuth, requireUserAdmin, async (req, res) => {
   try {
     const rows = await db
