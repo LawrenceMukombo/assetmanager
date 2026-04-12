@@ -57,12 +57,14 @@ export interface LoginResponse {
 }
 
 export type RefreshResponseData = {
-  access_token?: string;
-  expires_in?: number;
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
 };
 
 export interface RefreshResponse {
-  success?: boolean;
+  success: boolean;
+  message: string;
   data?: RefreshResponseData;
 }
 

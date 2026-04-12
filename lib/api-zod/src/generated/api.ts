@@ -65,11 +65,13 @@ export const RefreshTokenBody = zod.object({
 });
 
 export const RefreshTokenResponse = zod.object({
-  success: zod.boolean().optional(),
+  success: zod.boolean(),
+  message: zod.string(),
   data: zod
     .object({
-      access_token: zod.string().optional(),
-      expires_in: zod.number().optional(),
+      access_token: zod.string(),
+      refresh_token: zod.string(),
+      expires_in: zod.number(),
     })
     .optional(),
 });

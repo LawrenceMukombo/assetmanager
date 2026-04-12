@@ -42,7 +42,7 @@ export const assets = pgTable(
     usefulLifeYears: integer("useful_life_years"),
     status: assetStatusEnum("status").notNull().default("active"),
     condition: assetConditionEnum("condition").notNull().default("good"),
-    provinceId: uuid("province_id").references(() => provinces.id),
+    provinceId: uuid("province_id").notNull().references(() => provinces.id),
     districtId: uuid("district_id").references(() => districts.id),
     facilityId: uuid("facility_id").references(() => facilities.id),
     assignedToUser: uuid("assigned_to_user").references(() => users.id),
