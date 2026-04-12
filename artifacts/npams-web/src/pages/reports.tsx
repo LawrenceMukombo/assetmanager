@@ -8,19 +8,26 @@ import { FileText, Download, Printer, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Papa from "papaparse";
 import { apiFetch } from "@/lib/api-fetch";
+import { statusBadgeClass } from "@/lib/status";
 
 interface AssetReportRow {
-  id?: string;
-  asset_name?: string;
   asset_tag?: string;
-  category?: string;
+  asset_name?: string;
+  serial_number?: string;
+  brand?: string;
+  model?: string;
   status?: string;
   condition?: string;
-  province?: string;
-  district?: string;
-  facility?: string;
+  purchase_date?: string;
   purchase_cost?: string | number;
+  supplier?: string;
+  warranty_expiry?: string;
+  useful_life_years?: number;
   created_at?: string;
+  category_name?: string;
+  province_name?: string;
+  district_name?: string;
+  facility_name?: string;
 }
 
 interface SummaryRow {
@@ -151,14 +158,6 @@ export default function Reports() {
     return `PGK ${num.toLocaleString("en-PG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const statusColor = (status?: string) => {
-    if (!status) return "secondary";
-    const s = status.toLowerCase();
-    if (s === "active" || s === "operational") return "default";
-    if (s === "disposed" || s === "missing") return "destructive";
-    return "secondary";
-  };
-
   return (
     <div className="space-y-6">
       <div>
@@ -269,17 +268,17 @@ export default function Reports() {
                     </TableRow>
                   ) : (
                     reportData.map((row, i) => (
-                      <TableRow key={row.id ?? i}>
+                      <TableRow key={row.asset_tag ?? i}>
                         <TableCell className="font-medium">{row.asset_name ?? "—"}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{row.asset_tag ?? "—"}</TableCell>
-                        <TableCell>{row.category ?? "—"}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground font-mono">{row.asset_tag ?? "—"}</TableCell>
+                        <TableCell>{row.category_name ?? "—"}</TableCell>
                         <TableCell>
-                          <Badge variant={statusColor(row.status)}>
-                            {row.status ?? "—"}
+                          <Badge className={`capitalize ${statusBadgeClass(row.status)}`}>
+                            {row.status?.replace("_", " ") ?? "—"}
                           </Badge>
                         </TableCell>
-                        <TableCell>{row.province ?? "—"}</TableCell>
-                        <TableCell>{row.facility ?? row.district ?? "—"}</TableCell>
+                        <TableCell>{row.province_name ?? "—"}</TableCell>
+                        <TableCell>{row.facility_name ?? row.district_name ?? "—"}</TableCell>
                         <TableCell>{formatCurrency(row.purchase_cost)}</TableCell>
                       </TableRow>
                     ))

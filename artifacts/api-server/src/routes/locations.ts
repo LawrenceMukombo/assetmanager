@@ -274,6 +274,88 @@ router.get("/v1/locations/facilities/:id", requireAuth, async (req, res) => {
   }
 });
 
+router.patch("/v1/locations/districts/:id", requireAuth, async (req, res) => {
+  try {
+    const user = req.user!;
+    if (user.roleName !== "Super Admin") {
+      res.status(403).json({ success: false, message: "Only Super Admin can update districts", data: null });
+      return;
+    }
+    const districtId = String(req.params.id);
+    const { districtName, districtCode } = req.body as { districtName?: string; districtCode?: string | null };
+
+    if (districtName === undefined && districtCode === undefined) {
+      res.status(400).json({ success: false, message: "No fields to update", data: null });
+      return;
+    }
+
+    const existing = await db.select().from(districts).where(eq(districts.id, districtId)).limit(1);
+    if (existing.length === 0) {
+      res.status(404).json({ success: false, message: "District not found", data: null });
+      return;
+    }
+
+    const [updated] = await db
+      .update(districts)
+      .set({
+        districtName: districtName !== undefined ? districtName : existing[0].districtName,
+        districtCode: districtCode !== undefined ? districtCode : existing[0].districtCode,
+      })
+      .where(eq(districts.id, districtId))
+      .returning();
+
+    if (!updated) {
+      res.status(404).json({ success: false, message: "District not found", data: null });
+      return;
+    }
+    res.json({ success: true, message: "District updated", data: updated });
+  } catch (err) {
+    req.log.error({ err }, "Patch district error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
+router.patch("/v1/locations/facilities/:id", requireAuth, async (req, res) => {
+  try {
+    const user = req.user!;
+    if (user.roleName !== "Super Admin") {
+      res.status(403).json({ success: false, message: "Only Super Admin can update facilities", data: null });
+      return;
+    }
+    const facilityId = String(req.params.id);
+    const { facilityName, facilityType } = req.body as { facilityName?: string; facilityType?: string | null };
+
+    if (facilityName === undefined && facilityType === undefined) {
+      res.status(400).json({ success: false, message: "No fields to update", data: null });
+      return;
+    }
+
+    const existing = await db.select().from(facilities).where(eq(facilities.id, facilityId)).limit(1);
+    if (existing.length === 0) {
+      res.status(404).json({ success: false, message: "Facility not found", data: null });
+      return;
+    }
+
+    const [updated] = await db
+      .update(facilities)
+      .set({
+        facilityName: facilityName !== undefined ? facilityName : existing[0].facilityName,
+        facilityType: facilityType !== undefined ? facilityType : existing[0].facilityType,
+      })
+      .where(eq(facilities.id, facilityId))
+      .returning();
+
+    if (!updated) {
+      res.status(404).json({ success: false, message: "Facility not found", data: null });
+      return;
+    }
+    res.json({ success: true, message: "Facility updated", data: updated });
+  } catch (err) {
+    req.log.error({ err }, "Patch facility error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
 async function resolveUserProvinceId(user: { provinceId: string | null; districtId: string | null; facilityId: string | null }): Promise<string | null> {
   if (user.provinceId) return user.provinceId;
 
