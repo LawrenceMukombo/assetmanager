@@ -1,0 +1,314 @@
+MVP Build Strategy Document
+National Public Asset Management System (NPAMS)
+Practical First-Build Roadmap for Lean Development
+
+Prepared: April 2026
+
+1. Document Purpose
+
+This document converts the full enterprise NPAMS concept into a practical Minimum Viable Product (MVP) strategy for early-stage development.
+
+Its purpose is to answer:
+
+What should be built first?
+What should be postponed?
+How can the product be launched quickly?
+How can risk and development cost be reduced?
+How can the MVP validate market demand before full investment?
+
+This approach follows Lean Startup principles, where an initial functional version is released quickly to validate assumptions before scaling (Ries, 2011).
+
+2. Why an MVP is Critical
+
+Building the full enterprise version immediately introduces high risk:
+
+Risk	Explanation
+Overbuilding	Creating features no one may use
+Financial Risk	Large upfront development cost
+Time Risk	Long build before testing market
+Scope Creep	Endless additions delaying launch
+Complexity	Difficult for first users to adopt
+Strategic Principle:
+
+Build only enough to prove value and secure adoption.
+
+3. MVP Objective
+
+The MVP must prove one thing:
+
+That government institutions will adopt and pay for a digital asset management platform.
+
+Everything else is secondary.
+
+4. MVP Scope Philosophy
+
+The MVP should focus on the single most painful user problem:
+
+“Tracking and managing assets digitally instead of manually.”
+
+NOT trying to solve every asset governance challenge immediately.
+
+5. Recommended MVP Features (Phase 1 Build)
+
+Only include the essential modules:
+
+Module 1: User Authentication
+
+Features:
+
+Login/logout
+Password reset
+Basic RBAC
+Module 2: Province-Based Multi-Tenancy
+
+Features:
+
+Province-specific login scope
+National vs provincial visibility
+Tenant filtering
+Module 3: Asset Registry
+
+Features:
+
+Create/edit/delete asset
+Assign category
+Assign location
+Assign custodian
+Module 4: QR / Barcode Generation
+
+Features:
+
+Auto-generate QR code
+Download/print labels
+Module 5: Asset Search / Filtering
+
+Features:
+
+Search by asset name/tag
+Filter by category/location/status
+Module 6: Dashboard
+
+Features:
+
+Total assets
+Missing assets
+Assets by category
+Asset value summary
+Module 7: Reports Export
+
+Features:
+
+Export asset register PDF/Excel
+Export filtered reports
+6. Excluded from MVP (Build Later)
+
+DO NOT BUILD YET:
+
+Feature	Why Delay
+Maintenance Module	Nice-to-have later
+GIS Mapping	High complexity
+Mobile App	Web responsive enough first
+Offline Sync	Advanced requirement
+Audit Workflows	Phase 2
+Notifications	Can wait
+Disposal Workflow	Later
+Transfer Workflow	Later
+AI Analytics	Far future
+7. MVP Architecture Simplification
+
+Reduce complexity for initial launch.
+
+Recommended Lean Stack
+Layer	Stack
+Frontend	Next.js
+Backend	Supabase / Node.js
+Database	PostgreSQL
+Hosting	Vercel / DigitalOcean
+File Storage	Supabase Storage / S3
+QR Generator	Open-source library
+Why This Stack?
+
+Because it enables:
+
+Fast development
+Low cost
+Easy deployment
+Minimal DevOps burden
+8. MVP User Journey
+Provincial User Flow
+Login
+ → Dashboard
+ → Register Asset
+ → Generate QR
+ → Search/View Assets
+ → Export Report
+National User Flow
+Login
+ → National Dashboard
+ → Select Province
+ → View Provincial Assets
+ → Export Comparative Reports
+9. MVP UI Pages Required
+
+Only build:
+
+Login Page
+Dashboard
+Asset List Page
+Add/Edit Asset Form
+Asset Detail Page
+User Management Page
+Reports Export Page
+Settings Page
+10. Lean Database Scope
+
+Only essential tables initially:
+
+users
+roles
+provinces
+districts
+facilities
+assets
+asset_categories
+activity_logs
+
+Avoid advanced tables initially.
+
+11. Suggested Development Timeline (Lean Team)
+Option A — Small Professional Team
+Task	Duration
+Design/UI	1 Week
+Backend Setup	1 Week
+Frontend Build	2 Weeks
+Testing	1 Week
+Deployment	1 Week
+Total:
+
+6 Weeks
+
+Option B — Solo/Part-Time Build
+Task	Duration
+Setup	2 Weeks
+Build	6 Weeks
+Testing	2 Weeks
+Total:
+
+10–12 Weeks
+
+12. Budget Estimate
+Outsourced Professional Build
+Tier	Cost Estimate
+Basic MVP	USD 5K–15K
+Mid Quality	USD 15K–30K
+Enterprise Ready	USD 30K–50K
+Self-Build Assisted
+
+Could reduce to:
+
+USD 500–2,000 infrastructure/tools only.
+
+13. Validation Strategy
+
+After MVP launch:
+
+Test with:
+
+One department
+One province
+One donor-funded agency
+
+Measure:
+
+Metric	Target
+User adoption	80%+
+Active weekly users	70%+
+Asset records created	500+
+Satisfaction	Positive feedback
+14. Feedback Loop Strategy
+
+Collect:
+
+Missing features requests
+Pain points
+Workflow blockers
+UI improvement ideas
+
+Then iterate before enterprise scaling.
+
+15. Commercial Launch Strategy
+
+Sell MVP as:
+
+“NPAMS Lite / Starter Edition”
+
+Pricing Example:
+
+Package	Price
+Pilot Setup	PGK 15K–30K
+Small Agency	PGK 30K–50K
+Province Pilot	PGK 50K–80K
+
+Use low barrier pricing initially.
+
+16. Growth Roadmap After MVP
+Phase 2 Features
+
+Add:
+
+Maintenance
+Audit workflows
+Notifications
+Phase 3 Features
+
+Add:
+
+Mobile App
+Offline Mode
+GIS
+Phase 4 Features
+
+Add:
+
+Integrations
+AI analytics
+17. Strategic Advice for You Specifically
+
+Given your technical background:
+
+Recommended Build Strategy
+
+Instead of hiring full team immediately:
+
+Build clickable prototype/mockup first
+Validate with stakeholders
+Build lean MVP
+Pilot/test
+Expand gradually
+18. Final Reality Check
+
+Remember:
+
+Buyers do not care about how advanced the system is.
+They care that it solves their immediate pain.
+
+Avoid overengineering early.
+
+19. Recommended Immediate Next Step
+
+Your most practical next move should be:
+
+Create the MVP Technical Build Blueprint
+
+This is different from architecture docs.
+
+It breaks down:
+
+Folder structure
+Component tree
+Database migrations
+Actual coding sequence
+Developer setup instructions
+Step-by-step build order
+
+This becomes your developer’s construction manual.
