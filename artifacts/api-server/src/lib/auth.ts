@@ -1,13 +1,12 @@
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import type { Request, Response, NextFunction } from "express";
-import { db, refreshTokens } from "@workspace/db";
+import { db, refreshTokens, users, userRoles, roles, userScope } from "@workspace/db";
 import { eq, and, isNull } from "drizzle-orm";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = "8h";
 const REFRESH_SECRET = process.env.REFRESH_SECRET;
-const REFRESH_EXPIRES_IN = "7d";
 const REFRESH_EXPIRES_MS = 7 * 24 * 60 * 60 * 1000;
 
 if (!JWT_SECRET) {
@@ -46,7 +45,6 @@ export async function issueRefreshToken(userId: string): Promise<string> {
   const rawToken = crypto.randomBytes(48).toString("hex");
   const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
   const expiresAt = new Date(Date.now() + REFRESH_EXPIRES_MS);
-
   await db.insert(refreshTokens).values({ userId, tokenHash, expiresAt });
   return rawToken;
 }
@@ -88,6 +86,36 @@ declare global {
   }
 }
 
+async function loadDbScope(userId: string): Promise<TokenPayload | null> {
+  const [userRows, roleRows, scopeRows] = await Promise.all([
+    db.select({ active: users.active }).from(users).where(eq(users.id, userId)).limit(1),
+    db
+      .select({ role: roles })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(eq(userRoles.userId, userId))
+      .limit(1),
+    db.select().from(userScope).where(eq(userScope.userId, userId)).limit(1),
+  ]);
+
+  const user = userRows[0];
+  if (!user || !user.active) return null;
+
+  const roleRow = roleRows[0];
+  const scope = scopeRows[0];
+
+  return {
+    userId,
+    email: "",
+    roleId: roleRow?.role.id ?? "",
+    roleName: roleRow?.role.roleName ?? "",
+    scopeLevel: roleRow?.role.scopeLevel ?? "provincial",
+    provinceId: scope?.provinceId ?? null,
+    districtId: scope?.districtId ?? null,
+    facilityId: scope?.facilityId ?? null,
+  };
+}
+
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -95,50 +123,71 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     return;
   }
   const token = authHeader.slice(7);
+
+  let tokenPayload: TokenPayload;
   try {
-    req.user = verifyAccessToken(token);
-    next();
+    tokenPayload = verifyAccessToken(token);
   } catch {
     res.status(401).json({ success: false, message: "Invalid or expired token" });
+    return;
+  }
+
+  loadDbScope(tokenPayload.userId)
+    .then((dbUser) => {
+      if (!dbUser) {
+        res.status(401).json({ success: false, message: "User account inactive or not found" });
+        return;
+      }
+      req.user = { ...dbUser, email: tokenPayload.email };
+      next();
+    })
+    .catch(() => {
+      res.status(500).json({ success: false, message: "Authentication error" });
+    });
+}
+
+export const requireAuthWithDbScope = requireAuth;
+
+function checkRole(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+  check: (user: TokenPayload) => boolean,
+  message: string,
+): void {
+  if (req.user) {
+    if (!check(req.user)) {
+      res.status(403).json({ success: false, message });
+      return;
+    }
+    next();
+  } else {
+    requireAuth(req, res, () => {
+      if (!req.user || !check(req.user)) {
+        res.status(403).json({ success: false, message });
+        return;
+      }
+      next();
+    });
   }
 }
 
 export function requireNational(req: Request, res: Response, next: NextFunction): void {
-  requireAuth(req, res, () => {
-    if (!req.user || req.user.scopeLevel !== "national") {
-      res.status(403).json({ success: false, message: "National access required" });
-      return;
-    }
-    next();
-  });
+  checkRole(req, res, next, (u) => u.scopeLevel === "national", "National access required");
 }
 
 export function requireUserAdmin(req: Request, res: Response, next: NextFunction): void {
-  requireAuth(req, res, () => {
-    if (!req.user) return;
-    const userAdminRoles = ["Super Admin", "Provincial Admin"];
-    if (!userAdminRoles.includes(req.user.roleName)) {
-      res.status(403).json({ success: false, message: "Insufficient privileges for user administration" });
-      return;
-    }
-    next();
-  });
+  const userAdminRoles = ["Super Admin", "Provincial Admin"];
+  checkRole(req, res, next, (u) => userAdminRoles.includes(u.roleName), "Insufficient privileges for user administration");
+}
+
+export function requireAssetAdmin(req: Request, res: Response, next: NextFunction): void {
+  const assetAdminRoles = ["Super Admin", "National Asset Controller", "Provincial Admin"];
+  checkRole(req, res, next, (u) => assetAdminRoles.includes(u.roleName), "Insufficient privileges");
 }
 
 export function requireAdminRole(req: Request, res: Response, next: NextFunction): void {
   return requireAssetAdmin(req, res, next);
-}
-
-export function requireAssetAdmin(req: Request, res: Response, next: NextFunction): void {
-  requireAuth(req, res, () => {
-    if (!req.user) return;
-    const assetAdminRoles = ["Super Admin", "National Asset Controller", "Provincial Admin"];
-    if (!assetAdminRoles.includes(req.user.roleName)) {
-      res.status(403).json({ success: false, message: "Insufficient privileges" });
-      return;
-    }
-    next();
-  });
 }
 
 export function enforceScopeFilter(
