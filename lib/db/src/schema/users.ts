@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, text, boolean, timestamp, unique } from "drizzle-orm/pg-core";
 import { roles } from "./roles";
 import { provinces } from "./provinces";
 import { districts } from "./districts";
@@ -20,7 +20,7 @@ export const userRoles = pgTable("user_roles", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id),
   roleId: uuid("role_id").notNull().references(() => roles.id),
-});
+}, (t) => [unique("user_roles_user_id_role_id_key").on(t.userId, t.roleId)]);
 
 export const userScope = pgTable("user_scope", {
   id: uuid("id").primaryKey().defaultRandom(),

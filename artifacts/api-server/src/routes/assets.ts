@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { eq, and, isNull, ilike, or, sql, desc } from "drizzle-orm";
 import { db, assets, assetCategories, provinces, districts, facilities, users, activityLogs } from "@workspace/db";
-import { requireAuth, enforceScopeFilter } from "../lib/auth";
+import { requireAuth, enforceScopeFilter, requireAssetAdmin } from "../lib/auth";
 
 const router = Router();
 
@@ -26,9 +26,12 @@ router.get("/v1/assets", requireAuth, enforceScopeFilter, async (req, res) => {
     const conditions = [isNull(assets.deletedAt)];
 
     const effectiveProvinceId = province_id || req.user?.scopedProvinceId || undefined;
+    const effectiveDistrictId = district_id || req.user?.scopedDistrictId || undefined;
+    const effectiveFacilityId = facility_id || req.user?.scopedFacilityId || undefined;
+
     if (effectiveProvinceId) conditions.push(eq(assets.provinceId, effectiveProvinceId));
-    if (district_id) conditions.push(eq(assets.districtId, district_id));
-    if (facility_id) conditions.push(eq(assets.facilityId, facility_id));
+    if (effectiveDistrictId) conditions.push(eq(assets.districtId, effectiveDistrictId));
+    if (effectiveFacilityId) conditions.push(eq(assets.facilityId, effectiveFacilityId));
     if (category_id) conditions.push(eq(assets.categoryId, category_id));
     if (status) conditions.push(eq(assets.status, status as "active" | "disposed" | "missing" | "under_maintenance"));
     if (condition) conditions.push(eq(assets.condition, condition as "excellent" | "good" | "fair" | "poor"));
@@ -104,6 +107,7 @@ router.get("/v1/assets", requireAuth, enforceScopeFilter, async (req, res) => {
 
     res.json({
       success: true,
+      message: "Assets retrieved",
       data: {
         items: rows,
         pagination: {
@@ -120,7 +124,7 @@ router.get("/v1/assets", requireAuth, enforceScopeFilter, async (req, res) => {
   }
 });
 
-router.post("/v1/assets", requireAuth, async (req, res) => {
+router.post("/v1/assets", requireAuth, requireAssetAdmin, async (req, res) => {
   if (!req.user) return;
 
   const scopeLevel = req.user.scopeLevel;
@@ -251,14 +255,14 @@ router.get("/v1/assets/:id", requireAuth, async (req, res) => {
       .orderBy(desc(activityLogs.createdAt))
       .limit(20);
 
-    res.json({ success: true, data: { ...row, activity_logs: logs } });
+    res.json({ success: true, message: "Asset retrieved", data: { ...row, activity_logs: logs } });
   } catch (err) {
     req.log.error({ err }, "Get asset error");
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
 
-router.put("/v1/assets/:id", requireAuth, async (req, res) => {
+router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) => {
   if (!req.user) return;
 
   try {
@@ -325,7 +329,7 @@ router.put("/v1/assets/:id", requireAuth, async (req, res) => {
   }
 });
 
-router.delete("/v1/assets/:id", requireAuth, async (req, res) => {
+router.delete("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) => {
   if (!req.user) return;
 
   try {

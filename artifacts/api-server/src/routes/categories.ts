@@ -17,7 +17,7 @@ router.get("/v1/categories", requireAuth, async (req, res) => {
       })
       .from(assetCategories)
       .orderBy(assetCategories.categoryName);
-    res.json({ success: true, data: rows });
+    res.json({ success: true, message: "Categories retrieved", data: rows });
   } catch (err) {
     req.log.error({ err }, "Get categories error");
     res.status(500).json({ success: false, message: "Internal server error" });

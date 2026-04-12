@@ -14,7 +14,7 @@ router.get("/v1/notifications", requireAuth, async (req, res) => {
       .where(eq(notifications.userId, req.user.userId))
       .orderBy(desc(notifications.createdAt))
       .limit(50);
-    res.json({ success: true, data: rows });
+    res.json({ success: true, message: "Notifications retrieved", data: rows });
   } catch (err) {
     req.log.error({ err }, "Get notifications error");
     res.status(500).json({ success: false, message: "Internal server error" });

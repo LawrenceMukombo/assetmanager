@@ -34,6 +34,8 @@ export interface TokenPayload {
   districtId: string | null;
   facilityId: string | null;
   scopedProvinceId?: string | null;
+  scopedDistrictId?: string | null;
+  scopedFacilityId?: string | null;
 }
 
 export function signAccessToken(payload: TokenPayload): string {
@@ -154,18 +156,28 @@ export function enforceScopeFilter(
     return;
   }
 
-  const requestedProvinceId = (req.query.province_id as string) || (req.body?.province_id as string);
+  const requestedProvinceId = (req.query.province_id as string) || (req.body?.province_id as string) || (req.params?.province_id as string);
+  const requestedDistrictId = (req.query.district_id as string) || (req.body?.district_id as string) || (req.params?.district_id as string);
+  const requestedFacilityId = (req.query.facility_id as string) || (req.body?.facility_id as string) || (req.params?.facility_id as string);
 
   if (requestedProvinceId && req.user.provinceId && requestedProvinceId !== req.user.provinceId) {
     res.status(403).json({ success: false, message: "Access denied: outside your geographic scope" });
     return;
   }
 
-  if (!requestedProvinceId && req.user.provinceId) {
-    req.user.scopedProvinceId = req.user.provinceId;
-  } else {
-    req.user.scopedProvinceId = null;
+  if (requestedDistrictId && req.user.districtId && requestedDistrictId !== req.user.districtId) {
+    res.status(403).json({ success: false, message: "Access denied: outside your district scope" });
+    return;
   }
+
+  if (requestedFacilityId && req.user.facilityId && requestedFacilityId !== req.user.facilityId) {
+    res.status(403).json({ success: false, message: "Access denied: outside your facility scope" });
+    return;
+  }
+
+  req.user.scopedProvinceId = (!requestedProvinceId && req.user.provinceId) ? req.user.provinceId : null;
+  req.user.scopedDistrictId = (!requestedDistrictId && req.user.districtId) ? req.user.districtId : null;
+  req.user.scopedFacilityId = (!requestedFacilityId && req.user.facilityId) ? req.user.facilityId : null;
 
   next();
 }

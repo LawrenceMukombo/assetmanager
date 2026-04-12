@@ -11,9 +11,11 @@ router.get("/v1/reports/assets", requireAuth, enforceScopeFilter, async (req, re
 
     const conditions = [isNull(assets.deletedAt)];
     const effectiveProvinceId = province_id || req.user?.scopedProvinceId || undefined;
+    const effectiveDistrictId = district_id || req.user?.scopedDistrictId || undefined;
+    const effectiveFacilityId = facility_id || req.user?.scopedFacilityId || undefined;
     if (effectiveProvinceId) conditions.push(eq(assets.provinceId, effectiveProvinceId));
-    if (district_id) conditions.push(eq(assets.districtId, district_id));
-    if (facility_id) conditions.push(eq(assets.facilityId, facility_id));
+    if (effectiveDistrictId) conditions.push(eq(assets.districtId, effectiveDistrictId));
+    if (effectiveFacilityId) conditions.push(eq(assets.facilityId, effectiveFacilityId));
     if (category_id) conditions.push(eq(assets.categoryId, category_id));
     if (status) conditions.push(eq(assets.status, status as "active" | "disposed" | "missing" | "under_maintenance"));
     if (condition) conditions.push(eq(assets.condition, condition as "excellent" | "good" | "fair" | "poor"));
@@ -56,7 +58,7 @@ router.get("/v1/reports/assets", requireAuth, enforceScopeFilter, async (req, re
       .orderBy(assets.assetTag)
       .limit(10000);
 
-    res.json({ success: true, data: rows, total: rows.length });
+    res.json({ success: true, message: "Report generated", data: rows, total: rows.length });
   } catch (err) {
     req.log.error({ err }, "Reports assets error");
     res.status(500).json({ success: false, message: "Internal server error" });

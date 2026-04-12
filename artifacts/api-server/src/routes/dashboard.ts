@@ -77,6 +77,7 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
 
     res.json({
       success: true,
+      message: "Provincial dashboard retrieved",
       data: {
         province,
         total_assets: totals.total_assets ?? 0,
@@ -140,6 +141,7 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
 
     res.json({
       success: true,
+      message: "National dashboard retrieved",
       data: {
         total_assets: totals.total_assets ?? 0,
         total_value: totals.total_value ?? "0",
