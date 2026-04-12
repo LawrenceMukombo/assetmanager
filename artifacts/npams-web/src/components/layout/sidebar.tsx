@@ -1,0 +1,167 @@
+import { Link, useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import {
+  Sidebar as SidebarComponent,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
+} from "@/components/ui/sidebar";
+import {
+  LayoutDashboard,
+  Box,
+  Tags,
+  FileBarChart,
+  Users,
+  MapPin,
+  Settings,
+  LogOut,
+  Bell,
+} from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
+
+export function Sidebar() {
+  const { user, logout } = useAuth();
+  const [location] = useLocation();
+
+  const isNational = user?.scope_level === "national";
+  const isAdmin = user?.role === "Super Admin" || user?.role === "Provincial Admin";
+
+  return (
+    <SidebarComponent>
+      <SidebarHeader className="border-b border-[var(--province-accent,hsl(var(--border)))] border-t-4 border-t-[var(--province-accent,hsl(var(--primary)))] p-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center text-primary-foreground font-bold">
+            NP
+          </div>
+          <div className="flex flex-col">
+            <span className="font-semibold text-sm">NPAMS</span>
+            <span className="text-xs text-muted-foreground truncate">{user?.scope_level === "national" ? "National" : "Provincial"}</span>
+          </div>
+        </div>
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location === "/dashboard"}>
+                  <Link href="/dashboard">
+                    <LayoutDashboard />
+                    <span>Dashboard</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <Collapsible defaultOpen className="group/collapsible">
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton>
+                      <Box />
+                      <span>Assets</span>
+                      <ChevronDown className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton asChild isActive={location === "/assets"}>
+                          <Link href="/assets">
+                            <Box className="w-4 h-4" />
+                            <span>Asset Register</span>
+                          </Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      {isAdmin && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild isActive={location === "/categories"}>
+                            <Link href="/categories">
+                              <Tags className="w-4 h-4" />
+                              <span>Categories</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      )}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location === "/reports"}>
+                  <Link href="/reports">
+                    <FileBarChart />
+                    <span>Reports</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              {isAdmin && (
+                <>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={location === "/users"}>
+                      <Link href="/users">
+                        <Users />
+                        <span>Users</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={location === "/locations"}>
+                      <Link href="/locations">
+                        <MapPin />
+                        <span>Locations</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </>
+              )}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup className="mt-auto">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location === "/notifications"}>
+                  <Link href="/notifications">
+                    <Bell />
+                    <span>Notifications</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location === "/settings"}>
+                  <Link href="/settings">
+                    <Settings />
+                    <span>Settings</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+      <SidebarFooter className="p-4 border-t">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={logout} className="text-destructive hover:text-destructive">
+              <LogOut />
+              <span>Log out</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </SidebarComponent>
+  );
+}
