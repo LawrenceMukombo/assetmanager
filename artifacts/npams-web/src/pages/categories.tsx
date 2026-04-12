@@ -24,6 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Edit, Trash } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { ADMIN_ROLES } from "@/App";
 import { Redirect } from "wouter";
 import {
   AlertDialog,
@@ -43,7 +44,7 @@ const categorySchema = z.object({
 
 export default function Categories() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "Super Admin" || user?.role === "Provincial Admin";
+  const isAdmin = ADMIN_ROLES.includes(user?.role as typeof ADMIN_ROLES[number]);
   const { toast } = useToast();
 
   const [isModalOpen, setIsModalOpen] = useState(false);

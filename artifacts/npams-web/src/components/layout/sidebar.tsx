@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useProvinceBranding } from "@/hooks/use-province-branding";
 import { ADMIN_ROLES, OFFICER_ROLES } from "@/App";
+import { useGetNotifications, getGetNotificationsQueryKey } from "@workspace/api-client-react";
 import {
   Sidebar as SidebarComponent,
   SidebarContent,
@@ -35,6 +36,14 @@ export function Sidebar() {
   const { user, logout } = useAuth();
   const { branding } = useProvinceBranding();
   const [location] = useLocation();
+
+  const { data: notifications } = useGetNotifications({
+    query: {
+      refetchInterval: 60000,
+      queryKey: getGetNotificationsQueryKey(),
+    },
+  });
+  const unreadCount = notifications?.data?.filter((n) => !n.readStatus).length ?? 0;
 
   const isNational = user?.scope_level === "national";
   const isAdmin = user?.role ? ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]) : false;
@@ -153,6 +162,11 @@ export function Sidebar() {
                   <Link href="/notifications">
                     <Bell />
                     <span>Notifications</span>
+                    {unreadCount > 0 && (
+                      <span className="ml-auto inline-flex items-center justify-center h-5 min-w-5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold px-1">
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </span>
+                    )}
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
