@@ -6,7 +6,6 @@ import { eq, and, isNull } from "drizzle-orm";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = "8h";
-const REFRESH_SECRET = process.env.REFRESH_SECRET;
 const REFRESH_EXPIRES_MS = 7 * 24 * 60 * 60 * 1000;
 
 if (!JWT_SECRET) {
@@ -14,14 +13,8 @@ if (!JWT_SECRET) {
     throw new Error("JWT_SECRET environment variable is required in production");
   }
 }
-if (!REFRESH_SECRET) {
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("REFRESH_SECRET environment variable is required in production");
-  }
-}
 
 const jwtSecret = JWT_SECRET ?? "npams-dev-secret-do-not-use-in-prod";
-const refreshSecret = REFRESH_SECRET ?? "npams-refresh-dev-secret-do-not-use-in-prod";
 
 export interface TokenPayload {
   userId: string;

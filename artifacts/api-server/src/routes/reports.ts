@@ -8,6 +8,8 @@ const router = Router();
 router.get("/v1/reports/assets", requireAuth, enforceScopeFilter, async (req, res) => {
   try {
     const { province_id, district_id, facility_id, category_id, status, condition, search } = req.query as Record<string, string>;
+    // NOTE: `format` query param (json|csv) is accepted by the API spec but this endpoint always
+    // returns JSON. CSV/PDF generation is handled client-side by the frontend using this data.
 
     const conditions = [isNull(assets.deletedAt)];
     const effectiveProvinceId = province_id || req.user?.scopedProvinceId || undefined;
