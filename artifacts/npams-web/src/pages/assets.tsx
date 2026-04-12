@@ -13,6 +13,7 @@ import {
 import type { GetAssetsParams } from "@workspace/api-client-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { OFFICER_ROLES } from "@/App";
 import {
   Table,
   TableBody,
@@ -69,6 +70,7 @@ export default function Assets() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const isNational = user?.scope_level === "national";
+  const canCreateAsset = OFFICER_ROLES.includes(user?.role as typeof OFFICER_ROLES[number]);
 
   const filters: GetAssetsParams = {
     page,
@@ -126,10 +128,12 @@ export default function Assets() {
           <h2 className="text-3xl font-bold tracking-tight">Asset Register</h2>
           <p className="text-muted-foreground">Manage and track all public assets.</p>
         </div>
-        <Button onClick={() => setLocation("/assets/new")}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Asset
-        </Button>
+        {canCreateAsset && (
+          <Button onClick={() => setLocation("/assets/new")}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Asset
+          </Button>
+        )}
       </div>
 
       <div className="bg-card p-4 rounded-lg border space-y-3">

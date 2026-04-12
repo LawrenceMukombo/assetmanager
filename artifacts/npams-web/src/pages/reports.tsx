@@ -292,10 +292,10 @@ export default function Reports() {
 
       <style>{`
         @media print {
-          body > *:not(.print-wrapper) { visibility: hidden; }
-          .print-wrapper, .print-wrapper *, .print-area, .print-area * { visibility: visible !important; }
+          body > * { visibility: hidden; }
+          .print-area, .print-area * { visibility: visible !important; }
+          .print-area { position: fixed; left: 0; top: 0; width: 100%; z-index: 9999; }
           .print\\:hidden { display: none !important; }
-          .print-area { position: absolute; left: 0; top: 0; width: 100%; }
           .print\\:block { display: block !important; }
         }
       `}</style>
