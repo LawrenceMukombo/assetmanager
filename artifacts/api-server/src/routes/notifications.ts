@@ -27,7 +27,7 @@ router.patch("/v1/notifications/:id/read", requireAuth, async (req, res) => {
     const [updated] = await db
       .update(notifications)
       .set({ readStatus: true })
-      .where(and(eq(notifications.id, req.params.id), eq(notifications.userId, req.user.userId)))
+      .where(and(eq(notifications.id, req.params.id as string), eq(notifications.userId, req.user.userId)))
       .returning();
     if (!updated) {
       res.status(404).json({ success: false, message: "Notification not found" });

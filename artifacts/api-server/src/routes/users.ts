@@ -133,7 +133,7 @@ router.get("/v1/users/:id", requireAuth, async (req, res) => {
       .leftJoin(userRoles, eq(userRoles.userId, users.id))
       .leftJoin(roles, eq(userRoles.roleId, roles.id))
       .leftJoin(userScope, eq(userScope.userId, users.id))
-      .where(eq(users.id, req.params.id))
+      .where(eq(users.id, req.params.id as string))
       .limit(1);
 
     if (!row) {
@@ -161,7 +161,7 @@ router.put("/v1/users/:id", requireAuth, requireUserAdmin, async (req, res) => {
       .select({ id: users.id })
       .from(users)
       .leftJoin(userScope, eq(userScope.userId, users.id))
-      .where(eq(users.id, req.params.id))
+      .where(eq(users.id, req.params.id as string))
       .limit(1);
 
     if (!targetUser) {
@@ -169,7 +169,7 @@ router.put("/v1/users/:id", requireAuth, requireUserAdmin, async (req, res) => {
       return;
     }
 
-    const [targetScope] = await db.select().from(userScope).where(eq(userScope.userId, req.params.id)).limit(1);
+    const [targetScope] = await db.select().from(userScope).where(eq(userScope.userId, req.params.id as string)).limit(1);
     if (req.user.scopeLevel !== "national" && targetScope?.provinceId !== req.user.provinceId) {
       res.status(403).json({ success: false, message: "Cannot modify user outside your province" });
       return;
@@ -179,7 +179,7 @@ router.put("/v1/users/:id", requireAuth, requireUserAdmin, async (req, res) => {
     const [updated] = await db
       .update(users)
       .set({ fullName: full_name, phoneNumber: phone_number, updatedAt: new Date() })
-      .where(eq(users.id, req.params.id))
+      .where(eq(users.id, req.params.id as string))
       .returning();
 
     res.json({ success: true, message: "User updated", data: { id: updated.id, fullName: updated.fullName } });
@@ -193,7 +193,7 @@ router.patch("/v1/users/:id/deactivate", requireAuth, requireUserAdmin, async (r
   if (!req.user) return;
 
   try {
-    const [targetScope] = await db.select().from(userScope).where(eq(userScope.userId, req.params.id)).limit(1);
+    const [targetScope] = await db.select().from(userScope).where(eq(userScope.userId, req.params.id as string)).limit(1);
     if (req.user.scopeLevel !== "national" && targetScope?.provinceId !== req.user.provinceId) {
       res.status(403).json({ success: false, message: "Cannot modify user outside your province" });
       return;
@@ -202,7 +202,7 @@ router.patch("/v1/users/:id/deactivate", requireAuth, requireUserAdmin, async (r
     const [updated] = await db
       .update(users)
       .set({ active: false, updatedAt: new Date() })
-      .where(eq(users.id, req.params.id))
+      .where(eq(users.id, req.params.id as string))
       .returning();
 
     if (!updated) {

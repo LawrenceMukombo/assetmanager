@@ -55,7 +55,7 @@ router.put("/v1/categories/:id", requireAdminRole, async (req, res) => {
         categoryName: category_name,
         description,
       })
-      .where(eq(assetCategories.id, req.params.id))
+      .where(eq(assetCategories.id, req.params.id as string))
       .returning();
     if (!row) {
       res.status(404).json({ success: false, message: "Category not found" });
@@ -72,7 +72,7 @@ router.delete("/v1/categories/:id", requireAdminRole, async (req, res) => {
   try {
     const [row] = await db
       .delete(assetCategories)
-      .where(eq(assetCategories.id, req.params.id))
+      .where(eq(assetCategories.id, req.params.id as string))
       .returning();
     if (!row) {
       res.status(404).json({ success: false, message: "Category not found" });

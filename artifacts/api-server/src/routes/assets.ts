@@ -235,7 +235,7 @@ router.get("/v1/assets/:id", requireAuth, async (req, res) => {
       .leftJoin(districts, eq(assets.districtId, districts.id))
       .leftJoin(facilities, eq(assets.facilityId, facilities.id))
       .leftJoin(users, eq(assets.assignedToUser, users.id))
-      .where(and(eq(assets.id, req.params.id), isNull(assets.deletedAt)))
+      .where(and(eq(assets.id, req.params.id as string), isNull(assets.deletedAt)))
       .limit(1);
 
     if (!row) {
@@ -251,7 +251,7 @@ router.get("/v1/assets/:id", requireAuth, async (req, res) => {
     const logs = await db
       .select()
       .from(activityLogs)
-      .where(and(eq(activityLogs.entityType, "asset"), eq(activityLogs.entityId, req.params.id)))
+      .where(and(eq(activityLogs.entityType, "asset"), eq(activityLogs.entityId, req.params.id as string)))
       .orderBy(desc(activityLogs.createdAt))
       .limit(20);
 
@@ -269,7 +269,7 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
     const [existing] = await db
       .select({ id: assets.id, provinceId: assets.provinceId })
       .from(assets)
-      .where(and(eq(assets.id, req.params.id), isNull(assets.deletedAt)))
+      .where(and(eq(assets.id, req.params.id as string), isNull(assets.deletedAt)))
       .limit(1);
 
     if (!existing) {
@@ -311,14 +311,14 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
         assignedToUser: body.assigned_to_user ?? null,
         updatedAt: new Date(),
       })
-      .where(eq(assets.id, req.params.id))
+      .where(eq(assets.id, req.params.id as string))
       .returning();
 
     await db.insert(activityLogs).values({
       userId: req.user.userId,
       actionType: "UPDATE",
       entityType: "asset",
-      entityId: req.params.id,
+      entityId: req.params.id as string,
       description: `Updated asset ${updated.assetTag}`,
     });
 
@@ -336,7 +336,7 @@ router.delete("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res)
     const [existing] = await db
       .select({ id: assets.id, provinceId: assets.provinceId, assetTag: assets.assetTag })
       .from(assets)
-      .where(and(eq(assets.id, req.params.id), isNull(assets.deletedAt)))
+      .where(and(eq(assets.id, req.params.id as string), isNull(assets.deletedAt)))
       .limit(1);
 
     if (!existing) {
@@ -352,13 +352,13 @@ router.delete("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res)
     await db
       .update(assets)
       .set({ deletedAt: new Date() })
-      .where(eq(assets.id, req.params.id));
+      .where(eq(assets.id, req.params.id as string));
 
     await db.insert(activityLogs).values({
       userId: req.user.userId,
       actionType: "DELETE",
       entityType: "asset",
-      entityId: req.params.id,
+      entityId: req.params.id as string,
       description: `Deleted asset ${existing.assetTag}`,
     });
 
@@ -385,7 +385,7 @@ router.get("/v1/assets/:id/qr-data", requireAuth, async (req, res) => {
       .from(assets)
       .leftJoin(provinces, eq(assets.provinceId, provinces.id))
       .leftJoin(facilities, eq(assets.facilityId, facilities.id))
-      .where(and(eq(assets.id, req.params.id), isNull(assets.deletedAt)))
+      .where(and(eq(assets.id, req.params.id as string), isNull(assets.deletedAt)))
       .limit(1);
 
     if (!row) {

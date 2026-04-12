@@ -24,7 +24,7 @@ router.get("/v1/locations/provinces/:id", requireAuth, async (req, res) => {
     const [row] = await db
       .select()
       .from(provinces)
-      .where(eq(provinces.id, req.params.id))
+      .where(eq(provinces.id, req.params.id as string))
       .limit(1);
     if (!row) {
       res.status(404).json({ success: false, message: "Province not found" });
@@ -42,7 +42,7 @@ router.get("/v1/locations/provinces/:id/districts", requireAuth, async (req, res
     const rows = await db
       .select()
       .from(districts)
-      .where(eq(districts.provinceId, req.params.id))
+      .where(eq(districts.provinceId, req.params.id as string))
       .orderBy(districts.districtName);
     res.json({ success: true, message: "Districts retrieved", data: rows });
   } catch (err) {
@@ -56,7 +56,7 @@ router.get("/v1/locations/districts/:id/facilities", requireAuth, async (req, re
     const rows = await db
       .select()
       .from(facilities)
-      .where(eq(facilities.districtId, req.params.id))
+      .where(eq(facilities.districtId, req.params.id as string))
       .orderBy(facilities.facilityName);
     res.json({ success: true, message: "Facilities retrieved", data: rows });
   } catch (err) {
@@ -70,7 +70,7 @@ router.get("/v1/locations/facilities/:id", requireAuth, async (req, res) => {
     const [row] = await db
       .select()
       .from(facilities)
-      .where(eq(facilities.id, req.params.id))
+      .where(eq(facilities.id, req.params.id as string))
       .limit(1);
     if (!row) {
       res.status(404).json({ success: false, message: "Facility not found" });
