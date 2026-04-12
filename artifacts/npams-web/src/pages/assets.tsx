@@ -50,6 +50,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Search, MoreHorizontal, Eye, Edit, Trash, X } from "lucide-react";
+import { statusBadgeClass } from "@/lib/status";
 
 const ALL = "__all__";
 
@@ -278,7 +279,7 @@ export default function Assets() {
                       <Badge variant="outline" className="capitalize">{asset.condition}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge className="capitalize">{asset.status?.replace("_", " ")}</Badge>
+                      <Badge className={`capitalize ${statusBadgeClass(asset.status)}`}>{asset.status?.replace("_", " ")}</Badge>
                     </TableCell>
                     <TableCell>{asset.province?.provinceName || "N/A"}</TableCell>
                     <TableCell>{asset.facility?.facilityName || "N/A"}</TableCell>

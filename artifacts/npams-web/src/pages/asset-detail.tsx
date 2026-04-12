@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Edit, Printer, Download, Activity } from "lucide-react";
+import { statusBadgeClass, conditionBadgeClass } from "@/lib/status";
 import QRCode from "react-qr-code";
 import { useRef } from "react";
 import { format } from "date-fns";
@@ -78,7 +79,7 @@ export default function AssetDetail() {
           <div className="flex items-center gap-3 flex-wrap">
             <h2 className="text-3xl font-bold tracking-tight">{asset.assetName}</h2>
             <Badge variant="outline" className="text-sm font-mono">{asset.assetTag}</Badge>
-            <Badge className="capitalize">{asset.status?.replace("_", " ")}</Badge>
+            <Badge className={`capitalize ${statusBadgeClass(asset.status)}`}>{asset.status?.replace("_", " ")}</Badge>
           </div>
         </div>
         <Button variant="outline" asChild>

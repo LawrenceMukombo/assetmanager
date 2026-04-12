@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { FileText, Download, Printer, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Papa from "papaparse";
+import { apiFetch } from "@/lib/api-fetch";
 
 interface AssetReportRow {
   id?: string;
@@ -42,12 +43,6 @@ export default function Reports() {
   const [loadingAssets, setLoadingAssets] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(false);
 
-  const authFetch = (path: string) => {
-    const token = localStorage.getItem("npams_token");
-    return fetch(path, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-  };
 
   const downloadCSV = (data: object[], filename: string) => {
     const csv = Papa.unparse(data);
@@ -65,7 +60,7 @@ export default function Reports() {
   const fetchAndExportAssets = async () => {
     setLoadingAssets(true);
     try {
-      const res = await authFetch("/api/v1/reports/assets");
+      const res = await apiFetch("/api/v1/reports/assets");
       const body = await res.json();
       if (!res.ok) throw new Error(body.message ?? "Failed to fetch");
       const items: AssetReportRow[] = body.data?.items ?? body.data ?? [];
@@ -87,7 +82,7 @@ export default function Reports() {
   const fetchAndExportSummary = async () => {
     setLoadingSummary(true);
     try {
-      const res = await authFetch("/api/v1/reports/summary");
+      const res = await apiFetch("/api/v1/reports/summary");
       const body = await res.json();
       if (!res.ok) throw new Error(body.message ?? "Failed to fetch");
       const rows: SummaryRow[] = Array.isArray(body.data) ? body.data : [body.data];
@@ -109,7 +104,7 @@ export default function Reports() {
   const fetchAndExportProvinceComparison = async () => {
     setLoadingSummary(true);
     try {
-      const res = await authFetch("/api/v1/reports/summary");
+      const res = await apiFetch("/api/v1/reports/summary");
       const body = await res.json();
       if (!res.ok) throw new Error(body.message ?? "Failed to fetch");
       const rows: SummaryRow[] = Array.isArray(body.data) ? body.data : [body.data];
@@ -131,7 +126,7 @@ export default function Reports() {
   const loadPreviewData = async () => {
     setLoadingAssets(true);
     try {
-      const res = await authFetch("/api/v1/reports/assets");
+      const res = await apiFetch("/api/v1/reports/assets");
       const body = await res.json();
       if (!res.ok) throw new Error(body.message ?? "Failed to fetch");
       const items: AssetReportRow[] = body.data?.items ?? body.data ?? [];

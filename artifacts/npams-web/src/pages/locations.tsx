@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Skeleton } from "@/components/ui/skeleton";
 import { Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiFetchJson } from "@/lib/api-fetch";
 
 export default function Locations() {
   const [selectedProvince, setSelectedProvince] = useState<string>("");
@@ -49,31 +50,20 @@ export default function Locations() {
   const handleSave = async () => {
     if (!editProvince?.id) return;
     setSaving(true);
-    try {
-      const token = localStorage.getItem("npams_token");
-      const resp = await fetch(`/api/v1/locations/provinces/${editProvince.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          flagUrl: editForm.flagUrl || null,
-          themeAccentColor: editForm.themeAccentColor || null,
-        }),
-      });
-      const body = await resp.json().catch(() => ({ message: "Unexpected error" }));
-      if (!resp.ok) {
-        throw new Error((body as { message?: string }).message ?? "Update failed");
-      }
+    const result = await apiFetchJson(`/api/v1/locations/provinces/${editProvince.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        flagUrl: editForm.flagUrl || null,
+        themeAccentColor: editForm.themeAccentColor || null,
+      }),
+    });
+    setSaving(false);
+    if (result.ok) {
       toast({ title: "Province updated" });
       setEditProvince(null);
       queryClient.invalidateQueries({ queryKey: getGetProvincesQueryKey() });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Update failed";
-      toast({ variant: "destructive", title: "Error", description: msg });
-    } finally {
-      setSaving(false);
+    } else {
+      toast({ variant: "destructive", title: "Error", description: result.message });
     }
   };
 

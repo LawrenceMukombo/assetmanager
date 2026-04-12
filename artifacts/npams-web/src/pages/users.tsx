@@ -12,6 +12,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_ROLES } from "@/App";
+import { apiFetchJson } from "@/lib/api-fetch";
 import { Redirect } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -110,19 +111,12 @@ export default function Users() {
   });
 
   const reactivateUser = async (userId: string) => {
-    const token = localStorage.getItem("npams_token");
-    try {
-      const resp = await fetch(`/api/v1/users/${userId}/reactivate`, {
-        method: "PATCH",
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      });
-      const body = await resp.json().catch(() => ({ message: "Unexpected error" }));
-      if (!resp.ok) throw new Error((body as { message?: string }).message ?? "Reactivation failed");
+    const result = await apiFetchJson(`/api/v1/users/${userId}/reactivate`, { method: "PATCH" });
+    if (result.ok) {
       toast({ title: "User reactivated" });
       refetch();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Reactivation failed";
-      toast({ variant: "destructive", title: "Error", description: msg });
+    } else {
+      toast({ variant: "destructive", title: "Error", description: result.message });
     }
   };
 

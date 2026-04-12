@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
+import { MobileNav } from "./mobile-nav";
 import { SidebarProvider } from "@/components/ui/sidebar";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -10,11 +11,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Sidebar />
         <div className="flex flex-col flex-1 overflow-hidden w-full">
           <Header />
-          <main className="flex-1 overflow-auto p-4 md:p-6">
+          <main className="flex-1 overflow-auto p-4 md:p-6 pb-20 md:pb-6">
             {children}
           </main>
         </div>
       </div>
+      <MobileNav />
     </SidebarProvider>
   );
 }

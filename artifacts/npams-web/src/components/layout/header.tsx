@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useGetNotifications, getGetNotificationsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api-fetch";
 import { formatDistanceToNow } from "date-fns";
 
 export function Header() {
@@ -30,24 +31,13 @@ export function Header() {
   const unreadCount = notifications?.data?.filter((n) => !n.readStatus).length ?? 0;
   const recentNotifs = (notifications?.data ?? []).slice(0, 8);
 
-  const getAuthHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem("npams_token");
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   const markAllRead = async () => {
-    await fetch("/api/v1/notifications/mark-all-read", {
-      method: "POST",
-      headers: getAuthHeaders(),
-    }).catch(() => null);
+    await apiFetch("/api/v1/notifications/mark-all-read", { method: "POST" }).catch(() => null);
     queryClient.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
   };
 
   const markOneRead = async (id: string) => {
-    await fetch(`/api/v1/notifications/${id}/read`, {
-      method: "PATCH",
-      headers: getAuthHeaders(),
-    }).catch(() => null);
+    await apiFetch(`/api/v1/notifications/${id}/read`, { method: "PATCH" }).catch(() => null);
     queryClient.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
   };
 

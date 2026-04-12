@@ -1,5 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useProvinceBranding } from "@/hooks/use-province-branding";
+import { apiFetchJson } from "@/lib/api-fetch";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -49,52 +50,32 @@ export default function Settings() {
     defaultValues: { old_password: "", new_password: "", confirm_password: "" },
   });
 
-  const authFetch = (path: string, options: RequestInit = {}) => {
-    const token = localStorage.getItem("npams_token");
-    return fetch(path, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(options.headers ?? {}),
-      },
-    });
-  };
-
   const onProfileSubmit = async (values: z.infer<typeof profileSchema>) => {
     setProfileLoading(true);
-    try {
-      const resp = await authFetch("/api/v1/auth/me", {
-        method: "PATCH",
-        body: JSON.stringify({ full_name: values.full_name, phone_number: values.phone_number }),
-      });
-      const body = await resp.json().catch(() => ({ message: "Unexpected error" }));
-      if (!resp.ok) throw new Error((body as { message?: string }).message ?? "Update failed");
+    const result = await apiFetchJson("/api/v1/auth/me", {
+      method: "PATCH",
+      body: JSON.stringify({ full_name: values.full_name, phone_number: values.phone_number }),
+    });
+    setProfileLoading(false);
+    if (result.ok) {
       toast({ title: "Profile updated successfully" });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Update failed";
-      toast({ variant: "destructive", title: "Error", description: msg });
-    } finally {
-      setProfileLoading(false);
+    } else {
+      toast({ variant: "destructive", title: "Error", description: result.message });
     }
   };
 
   const onPasswordSubmit = async (values: z.infer<typeof passwordSchema>) => {
     setPwdLoading(true);
-    try {
-      const resp = await authFetch("/api/v1/auth/change-password", {
-        method: "POST",
-        body: JSON.stringify({ old_password: values.old_password, new_password: values.new_password }),
-      });
-      const body = await resp.json().catch(() => ({ message: "Unexpected error" }));
-      if (!resp.ok) throw new Error((body as { message?: string }).message || "Failed to change password");
+    const result = await apiFetchJson("/api/v1/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ old_password: values.old_password, new_password: values.new_password }),
+    });
+    setPwdLoading(false);
+    if (result.ok) {
       toast({ title: "Password changed successfully" });
       passwordForm.reset();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to change password";
-      toast({ variant: "destructive", title: "Error", description: msg });
-    } finally {
-      setPwdLoading(false);
+    } else {
+      toast({ variant: "destructive", title: "Error", description: result.message });
     }
   };
 
