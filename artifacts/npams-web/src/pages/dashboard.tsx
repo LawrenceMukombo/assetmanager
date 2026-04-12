@@ -1,11 +1,12 @@
 import type { ComponentType } from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProvinceBranding } from "@/hooks/use-province-branding";
 import { useGetNationalDashboard, useGetProvincialDashboard, getGetNationalDashboardQueryKey, getGetProvincialDashboardQueryKey } from "@workspace/api-client-react";
+import type { ProvinceAssetSummary } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Box, AlertTriangle, Wrench, DollarSign, Map } from "lucide-react";
+import { Box, AlertTriangle, Wrench, DollarSign, Map, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -20,6 +21,7 @@ import {
 } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))'];
 
@@ -55,7 +57,48 @@ export default function Dashboard() {
   return <ProvincialDashboard />;
 }
 
+type SortKey = "province_name" | "total_assets" | "missing_assets" | "total_value";
+type SortDir = "asc" | "desc";
+
+function SortableHeader({
+  label,
+  col,
+  sortKey,
+  sortDir,
+  onSort,
+  right,
+}: {
+  label: string;
+  col: SortKey;
+  sortKey: SortKey;
+  sortDir: SortDir;
+  onSort: (k: SortKey) => void;
+  right?: boolean;
+}) {
+  const active = sortKey === col;
+  return (
+    <TableHead className={right ? "text-right" : ""}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className={`-ml-3 h-8 font-medium ${right ? "ml-auto flex-row-reverse" : ""}`}
+        onClick={() => onSort(col)}
+      >
+        {label}
+        {active ? (
+          sortDir === "asc" ? <ArrowUp className="ml-1 h-3 w-3" /> : <ArrowDown className="ml-1 h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="ml-1 h-3 w-3 opacity-40" />
+        )}
+      </Button>
+    </TableHead>
+  );
+}
+
 function NationalDashboard() {
+  const [sortKey, setSortKey] = useState<SortKey>("total_assets");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
   const { data, isLoading } = useGetNationalDashboard({
     query: {
       queryKey: getGetNationalDashboardQueryKey()
@@ -66,6 +109,30 @@ function NationalDashboard() {
 
   const dashData = data?.data;
 
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
+  const sortedProvinces = [...(dashData?.assets_by_province ?? [])].sort((a, b) => {
+    const mult = sortDir === "asc" ? 1 : -1;
+    if (sortKey === "province_name") {
+      return mult * (a.province_name ?? "").localeCompare(b.province_name ?? "");
+    }
+    if (sortKey === "total_value") {
+      return mult * ((parseFloat(a.total_value ?? "0") || 0) - (parseFloat(b.total_value ?? "0") || 0));
+    }
+    const aVal = (a[sortKey] ?? 0) as number;
+    const bVal = (b[sortKey] ?? 0) as number;
+    return mult * (aVal - bVal);
+  });
+
+  const totalMissing = dashData?.assets_by_province?.reduce((sum, p) => sum + (p.missing_assets ?? 0), 0) ?? 0;
+
   return (
     <div className="space-y-6">
       <div>
@@ -73,10 +140,11 @@ function NationalDashboard() {
         <p className="text-muted-foreground">High-level view of all public assets across Papua New Guinea.</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <StatCard title="Total Assets Nationally" value={dashData?.total_assets?.toLocaleString() || "0"} icon={Box} />
-        <StatCard title="Total Provinces" value={dashData?.provinces_count || "0"} icon={Map} />
-        <StatCard title="Total Asset Value" value={`K ${dashData?.total_value || "0"}`} icon={DollarSign} />
+      <div className="grid gap-4 md:grid-cols-4">
+        <StatCard title="Total Assets Nationally" value={dashData?.total_assets?.toLocaleString() ?? "0"} icon={Box} />
+        <StatCard title="Total Provinces" value={dashData?.provinces_count ?? "0"} icon={Map} />
+        <StatCard title="Missing Assets (All Provinces)" value={totalMissing.toLocaleString()} icon={AlertTriangle} />
+        <StatCard title="Total Asset Value" value={`K ${dashData?.total_value ?? "0"}`} icon={DollarSign} />
       </div>
 
       <Card>
@@ -88,27 +156,38 @@ function NationalDashboard() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Province</TableHead>
-                  <TableHead className="text-right">Total Assets</TableHead>
-                  <TableHead className="text-right">Missing Assets</TableHead>
-                  <TableHead className="text-right">Total Value</TableHead>
+                  <SortableHeader label="Province" col="province_name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortableHeader label="Total Assets" col="total_assets" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} right />
+                  <SortableHeader label="Missing" col="missing_assets" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} right />
+                  <SortableHeader label="Total Value (K)" col="total_value" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} right />
+                  <TableHead className="text-right">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {dashData?.assets_by_province?.map((p) => (
-                  <TableRow key={p.province_id}>
-                    <TableCell className="font-medium flex items-center gap-2">
-                      {p.flag_url && <img src={p.flag_url} alt="" className="w-6 h-4 object-cover rounded-sm" />}
-                      {p.province_name}
-                    </TableCell>
-                    <TableCell className="text-right">{p.total_assets?.toLocaleString()}</TableCell>
-                    <TableCell className="text-right text-destructive">{p.missing_assets?.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">K {p.total_value}</TableCell>
-                  </TableRow>
-                ))}
+                {sortedProvinces.map((p: ProvinceAssetSummary) => {
+                  const missingRate = p.total_assets ? ((p.missing_assets ?? 0) / p.total_assets) : 0;
+                  const statusLabel = missingRate > 0.05 ? "At Risk" : missingRate > 0 ? "Monitor" : "Good";
+                  const statusVariant = missingRate > 0.05 ? "destructive" : missingRate > 0 ? "secondary" : "outline";
+                  return (
+                    <TableRow key={p.province_id}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {p.flag_url && <img src={p.flag_url} alt="" className="w-6 h-4 object-cover rounded-sm" />}
+                          {p.province_name}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">{p.total_assets?.toLocaleString() ?? "—"}</TableCell>
+                      <TableCell className="text-right text-destructive">{p.missing_assets?.toLocaleString() ?? "0"}</TableCell>
+                      <TableCell className="text-right">K {p.total_value ?? "0"}</TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={statusVariant}>{statusLabel}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
                 {!dashData?.assets_by_province?.length && (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">No data available</TableCell>
+                    <TableCell colSpan={5} className="text-center py-4 text-muted-foreground">No data available</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -254,6 +333,7 @@ function ProvincialDashboard() {
                 <TableHead>Category</TableHead>
                 <TableHead>Condition</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Date Added</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -261,18 +341,21 @@ function ProvincialDashboard() {
                 <TableRow key={asset.id}>
                   <TableCell className="font-mono text-xs">{asset.assetTag}</TableCell>
                   <TableCell className="font-medium">{asset.assetName}</TableCell>
-                  <TableCell>{asset.categoryName}</TableCell>
+                  <TableCell>{asset.categoryName ?? "—"}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className="capitalize">{asset.condition}</Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge className="capitalize">{asset.status?.replace('_', ' ')}</Badge>
+                    <Badge className="capitalize">{asset.status?.replace(/_/g, ' ')}</Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {asset.createdAt ? new Date(asset.createdAt).toLocaleDateString("en-PG", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
                   </TableCell>
                 </TableRow>
               ))}
               {!dashData?.recent_assets?.length && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-4 text-muted-foreground">No recent assets</TableCell>
+                  <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">No recent assets</TableCell>
                 </TableRow>
               )}
             </TableBody>

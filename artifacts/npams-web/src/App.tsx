@@ -1,4 +1,4 @@
-import { ComponentType } from "react";
+import { ComponentType, ReactNode } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -22,23 +22,36 @@ import Settings from "@/pages/settings";
 
 const queryClient = new QueryClient();
 
+export const ADMIN_ROLES = [
+  "Super Admin",
+  "Provincial Admin",
+  "National Asset Controller",
+] as const;
+
+export const OFFICER_ROLES = [
+  "Super Admin",
+  "Provincial Admin",
+  "National Asset Controller",
+  "Provincial Asset Officer",
+] as const;
+
 interface ProtectedRouteProps {
   path: string;
   component: ComponentType;
-  adminOnly?: boolean;
+  requiredRoles?: readonly string[];
 }
 
-function ProtectedRoute({ path, component: Component, adminOnly }: ProtectedRouteProps) {
+function ProtectedRoute({ path, component: Component, requiredRoles }: ProtectedRouteProps) {
   return (
     <Route path={path}>
-      <AuthGuard adminOnly={adminOnly}>
+      <AuthGuard requiredRoles={requiredRoles}>
         <Component />
       </AuthGuard>
     </Route>
   );
 }
 
-function AuthGuard({ children, adminOnly }: { children: React.ReactNode; adminOnly?: boolean }) {
+function AuthGuard({ children, requiredRoles }: { children: ReactNode; requiredRoles?: readonly string[] }) {
   const { isAuthenticated, isLoading, user } = useAuth();
 
   if (isLoading) {
@@ -49,11 +62,8 @@ function AuthGuard({ children, adminOnly }: { children: React.ReactNode; adminOn
     return <Redirect to="/login" />;
   }
 
-  if (adminOnly) {
-    const isAdmin = user?.role === "Super Admin" || user?.role === "Provincial Admin" || user?.role === "National Asset Controller";
-    if (!isAdmin) {
-      return <Redirect to="/dashboard" />;
-    }
+  if (requiredRoles && user?.role && !requiredRoles.includes(user.role)) {
+    return <Redirect to="/dashboard" />;
   }
 
   return <AppShell>{children}</AppShell>;
@@ -69,13 +79,13 @@ function Router() {
 
       <ProtectedRoute path="/dashboard" component={Dashboard} />
       <ProtectedRoute path="/assets" component={Assets} />
-      <ProtectedRoute path="/assets/new" component={AssetForm} adminOnly />
+      <ProtectedRoute path="/assets/new" component={AssetForm} requiredRoles={OFFICER_ROLES} />
       <ProtectedRoute path="/assets/:id" component={AssetDetail} />
-      <ProtectedRoute path="/assets/:id/edit" component={AssetForm} adminOnly />
-      <ProtectedRoute path="/categories" component={Categories} adminOnly />
+      <ProtectedRoute path="/assets/:id/edit" component={AssetForm} requiredRoles={OFFICER_ROLES} />
+      <ProtectedRoute path="/categories" component={Categories} requiredRoles={ADMIN_ROLES} />
       <ProtectedRoute path="/reports" component={Reports} />
-      <ProtectedRoute path="/users" component={Users} adminOnly />
-      <ProtectedRoute path="/locations" component={Locations} adminOnly />
+      <ProtectedRoute path="/users" component={Users} requiredRoles={ADMIN_ROLES} />
+      <ProtectedRoute path="/locations" component={Locations} requiredRoles={ADMIN_ROLES} />
       <ProtectedRoute path="/notifications" component={Notifications} />
       <ProtectedRoute path="/settings" component={Settings} />
 

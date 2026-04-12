@@ -179,6 +179,52 @@ router.get("/v1/locations/districts/:id/facilities", requireAuth, async (req, re
   }
 });
 
+router.patch("/v1/locations/provinces/:id", requireAuth, async (req, res) => {
+  try {
+    const user = req.user!;
+    if (user.roleName !== "Super Admin") {
+      res.status(403).json({ success: false, message: "Only Super Admin can update province branding", data: null });
+      return;
+    }
+    const provinceId = String(req.params.id);
+    const { flagUrl, themeAccentColor, provinceName } = req.body as {
+      flagUrl?: string | null;
+      themeAccentColor?: string | null;
+      provinceName?: string;
+    };
+
+    if (flagUrl === undefined && themeAccentColor === undefined && provinceName === undefined) {
+      res.status(400).json({ success: false, message: "No fields to update", data: null });
+      return;
+    }
+
+    const existing = await db.select().from(provinces).where(eq(provinces.id, provinceId)).limit(1);
+    if (existing.length === 0) {
+      res.status(404).json({ success: false, message: "Province not found", data: null });
+      return;
+    }
+
+    const [updated] = await db
+      .update(provinces)
+      .set({
+        flagUrl: flagUrl !== undefined ? flagUrl : existing[0].flagUrl,
+        themeAccentColor: themeAccentColor !== undefined ? themeAccentColor : existing[0].themeAccentColor,
+        provinceName: provinceName !== undefined ? provinceName : existing[0].provinceName,
+      })
+      .where(eq(provinces.id, provinceId))
+      .returning();
+
+    if (!updated) {
+      res.status(404).json({ success: false, message: "Province not found", data: null });
+      return;
+    }
+    res.json({ success: true, message: "Province updated", data: updated });
+  } catch (err) {
+    req.log.error({ err }, "Update province error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
 router.get("/v1/locations/facilities/:id", requireAuth, async (req, res) => {
   try {
     const user = req.user!;

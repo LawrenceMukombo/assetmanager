@@ -72,6 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem("npams_token");
       localStorage.removeItem("npams_refresh");
       localStorage.removeItem("npams_user");
+      localStorage.removeItem("npams_province_branding");
       document.documentElement.style.removeProperty("--province-accent");
       setState({ isAuthenticated: false, user: null, isLoading: false });
       setLocation("/login");

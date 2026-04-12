@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useProvinceBranding } from "@/hooks/use-province-branding";
+import { ADMIN_ROLES, OFFICER_ROLES } from "@/App";
 import {
   Sidebar as SidebarComponent,
   SidebarContent,
@@ -36,7 +37,8 @@ export function Sidebar() {
   const [location] = useLocation();
 
   const isNational = user?.scope_level === "national";
-  const isAdmin = user?.role === "Super Admin" || user?.role === "Provincial Admin" || user?.role === "National Asset Controller";
+  const isAdmin = user?.role ? ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]) : false;
+  const isOfficer = user?.role ? OFFICER_ROLES.includes(user.role as typeof OFFICER_ROLES[number]) : false;
 
   const scopeLabel = isNational
     ? "National"

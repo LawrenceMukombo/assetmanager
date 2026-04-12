@@ -1,14 +1,32 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useGetProvinces, getGetProvincesQueryKey, useGetDistrictsByProvince, getGetDistrictsByProvinceQueryKey, useGetFacilitiesByDistrict, getGetFacilitiesByDistrictQueryKey } from "@workspace/api-client-react";
+import type { Province } from "@workspace/api-client-react";
+import { useAuth } from "@/hooks/use-auth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Pencil } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Locations() {
   const [selectedProvince, setSelectedProvince] = useState<string>("");
   const [selectedDistrict, setSelectedDistrict] = useState<string>("");
+  const [editProvince, setEditProvince] = useState<Province | null>(null);
+  const [editForm, setEditForm] = useState({ flagUrl: "", themeAccentColor: "" });
+  const [saving, setSaving] = useState(false);
+
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const isSuperAdmin = user?.role === "Super Admin";
 
   const { data: provincesData, isLoading: pLoading } = useGetProvinces({ query: { queryKey: getGetProvincesQueryKey() } });
   
@@ -19,6 +37,45 @@ export default function Locations() {
   const { data: facilitiesData, isLoading: fLoading } = useGetFacilitiesByDistrict(selectedDistrict, {
     query: { enabled: !!selectedDistrict, queryKey: getGetFacilitiesByDistrictQueryKey(selectedDistrict) }
   });
+
+  const openEdit = (p: Province) => {
+    setEditProvince(p);
+    setEditForm({
+      flagUrl: p.flagUrl ?? "",
+      themeAccentColor: p.themeAccentColor ?? "",
+    });
+  };
+
+  const handleSave = async () => {
+    if (!editProvince?.id) return;
+    setSaving(true);
+    try {
+      const token = localStorage.getItem("npams_token");
+      const resp = await fetch(`/api/v1/locations/provinces/${editProvince.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          flagUrl: editForm.flagUrl || null,
+          themeAccentColor: editForm.themeAccentColor || null,
+        }),
+      });
+      const body = await resp.json().catch(() => ({ message: "Unexpected error" }));
+      if (!resp.ok) {
+        throw new Error((body as { message?: string }).message ?? "Update failed");
+      }
+      toast({ title: "Province updated" });
+      setEditProvince(null);
+      queryClient.invalidateQueries({ queryKey: getGetProvincesQueryKey() });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Update failed";
+      toast({ variant: "destructive", title: "Error", description: msg });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -42,25 +99,39 @@ export default function Locations() {
                   <TableHead>Flag</TableHead>
                   <TableHead>Province Name</TableHead>
                   <TableHead>Theme Color</TableHead>
+                  {isSuperAdmin && <TableHead>Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pLoading ? <TableRow><TableCell colSpan={3} className="text-center py-4">Loading...</TableCell></TableRow> : 
+                {pLoading ? (
+                  <TableRow><TableCell colSpan={isSuperAdmin ? 4 : 3} className="text-center py-4"><Skeleton className="h-4 w-full" /></TableCell></TableRow>
+                ) : (
                   provincesData?.data?.map(p => (
                     <TableRow key={p.id}>
-                      <TableCell>{p.flagUrl ? <img src={p.flagUrl} alt="flag" className="h-6 w-10 object-cover border" /> : "-"}</TableCell>
+                      <TableCell>
+                        {p.flagUrl
+                          ? <img src={p.flagUrl} alt="flag" className="h-6 w-10 object-cover border rounded-sm" />
+                          : <span className="text-muted-foreground text-xs">—</span>}
+                      </TableCell>
                       <TableCell className="font-medium">{p.provinceName}</TableCell>
                       <TableCell>
                         {p.themeAccentColor ? (
                           <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded-full" style={{ backgroundColor: `hsl(${p.themeAccentColor})` }} />
+                            <div className="w-4 h-4 rounded-full border" style={{ backgroundColor: p.themeAccentColor }} />
                             <span className="text-xs text-muted-foreground">{p.themeAccentColor}</span>
                           </div>
-                        ) : "-"}
+                        ) : <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
+                      {isSuperAdmin && (
+                        <TableCell>
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(p)}>
+                            <Pencil className="w-3 h-3 mr-1" /> Edit Branding
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))
-                }
+                )}
               </TableBody>
             </Table>
           </Card>
@@ -90,7 +161,7 @@ export default function Locations() {
                 ) : districtsData?.data?.map(d => (
                     <TableRow key={d.id}>
                       <TableCell className="font-medium">{d.districtName}</TableCell>
-                      <TableCell>{d.districtCode || "-"}</TableCell>
+                      <TableCell>{d.districtCode ?? "—"}</TableCell>
                     </TableRow>
                   ))
                 }
@@ -132,8 +203,8 @@ export default function Locations() {
                 ) : facilitiesData?.data?.map(f => (
                     <TableRow key={f.id}>
                       <TableCell className="font-medium">{f.facilityName}</TableCell>
-                      <TableCell>{f.facilityType || "-"}</TableCell>
-                      <TableCell>{f.address || "-"}</TableCell>
+                      <TableCell>{f.facilityType ?? "—"}</TableCell>
+                      <TableCell>{f.address ?? "—"}</TableCell>
                     </TableRow>
                   ))
                 }
@@ -142,6 +213,50 @@ export default function Locations() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {isSuperAdmin && editProvince && (
+        <Dialog open={!!editProvince} onOpenChange={(open) => { if (!open) setEditProvince(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Branding — {editProvince.provinceName}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1">
+                <Label htmlFor="flagUrl">Flag URL</Label>
+                <Input
+                  id="flagUrl"
+                  placeholder="https://example.com/flag.png"
+                  value={editForm.flagUrl}
+                  onChange={(e) => setEditForm(f => ({ ...f, flagUrl: e.target.value }))}
+                />
+                {editForm.flagUrl && (
+                  <img src={editForm.flagUrl} alt="preview" className="h-8 w-12 object-cover border rounded-sm mt-1" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                )}
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="themeColor">Theme Accent Color (hex)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="themeColor"
+                    placeholder="#1a5276"
+                    value={editForm.themeAccentColor}
+                    onChange={(e) => setEditForm(f => ({ ...f, themeAccentColor: e.target.value }))}
+                  />
+                  {editForm.themeAccentColor && (
+                    <div className="w-8 h-8 rounded border shrink-0" style={{ backgroundColor: editForm.themeAccentColor }} />
+                  )}
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditProvince(null)}>Cancel</Button>
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
