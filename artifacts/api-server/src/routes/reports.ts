@@ -63,8 +63,14 @@ router.get("/v1/reports/assets", requireAuth, enforceScopeFilter, async (req, re
   }
 });
 
-router.get("/v1/reports/summary", requireAuth, async (req, res) => {
+router.get("/v1/reports/summary", requireAuth, enforceScopeFilter, async (req, res) => {
   try {
+    const scopedProvinceId = req.user?.scopedProvinceId || (req.query.province_id as string) || undefined;
+
+    const provinceConditions = scopedProvinceId
+      ? and(eq(provinces.active, true), eq(provinces.id, scopedProvinceId))
+      : eq(provinces.active, true);
+
     const summary = await db
       .select({
         province_name: provinces.provinceName,
@@ -76,11 +82,11 @@ router.get("/v1/reports/summary", requireAuth, async (req, res) => {
       })
       .from(provinces)
       .leftJoin(assets, and(eq(assets.provinceId, provinces.id), isNull(assets.deletedAt)))
-      .where(eq(provinces.active, true))
+      .where(provinceConditions)
       .groupBy(provinces.id, provinces.provinceName, provinces.flagUrl)
       .orderBy(provinces.provinceName);
 
-    res.json({ success: true, data: summary });
+    res.json({ success: true, message: "Report summary retrieved", data: summary });
   } catch (err) {
     req.log.error({ err }, "Reports summary error");
     res.status(500).json({ success: false, message: "Internal server error" });

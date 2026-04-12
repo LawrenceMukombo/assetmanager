@@ -5,8 +5,9 @@ import { db } from "@workspace/db";
 import { users, userRoles, roles, userScope } from "@workspace/db";
 import {
   signAccessToken,
-  signRefreshToken,
-  verifyRefreshToken,
+  issueRefreshToken,
+  consumeRefreshToken,
+  revokeAllRefreshTokens,
   requireAuth,
   type TokenPayload,
 } from "../lib/auth";
@@ -63,7 +64,7 @@ router.post("/v1/auth/login", async (req, res) => {
     };
 
     const accessToken = signAccessToken(payload);
-    const refreshToken = signRefreshToken(user.id);
+    const refreshToken = await issueRefreshToken(user.id);
 
     res.json({
       success: true,
@@ -99,7 +100,12 @@ router.post("/v1/auth/refresh", async (req, res) => {
     return;
   }
   try {
-    const { userId } = verifyRefreshToken(refresh_token);
+    const userId = await consumeRefreshToken(refresh_token);
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Invalid or expired refresh token" });
+      return;
+    }
+
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!user || !user.active) {
       res.status(401).json({ success: false, message: "User not found or inactive" });
@@ -130,21 +136,31 @@ router.post("/v1/auth/refresh", async (req, res) => {
       facilityId: scope?.facilityId ?? null,
     };
 
+    const newRefreshToken = await issueRefreshToken(user.id);
+
     res.json({
       success: true,
       message: "Token refreshed",
       data: {
         access_token: signAccessToken(payload),
+        refresh_token: newRefreshToken,
         expires_in: 28800,
       },
     });
-  } catch {
+  } catch (err) {
+    req.log.error({ err }, "Refresh token error");
     res.status(401).json({ success: false, message: "Invalid refresh token" });
   }
 });
 
-router.post("/v1/auth/logout", requireAuth, (_req, res) => {
-  res.json({ success: true, message: "Logged out successfully" });
+router.post("/v1/auth/logout", requireAuth, async (req, res) => {
+  try {
+    await revokeAllRefreshTokens(req.user!.userId);
+    res.json({ success: true, message: "Logged out successfully" });
+  } catch (err) {
+    req.log.error({ err }, "Logout error");
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
 });
 
 router.post("/v1/auth/forgot-password", (_req, res) => {

@@ -1,10 +1,28 @@
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import type { Request, Response, NextFunction } from "express";
+import { db, refreshTokens } from "@workspace/db";
+import { eq, and, isNull } from "drizzle-orm";
 
-const JWT_SECRET = process.env.JWT_SECRET ?? "npams-dev-secret-change-in-prod";
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = "8h";
-const REFRESH_SECRET = process.env.REFRESH_SECRET ?? "npams-refresh-dev-secret";
+const REFRESH_SECRET = process.env.REFRESH_SECRET;
 const REFRESH_EXPIRES_IN = "7d";
+const REFRESH_EXPIRES_MS = 7 * 24 * 60 * 60 * 1000;
+
+if (!JWT_SECRET) {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("JWT_SECRET environment variable is required in production");
+  }
+}
+if (!REFRESH_SECRET) {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("REFRESH_SECRET environment variable is required in production");
+  }
+}
+
+const jwtSecret = JWT_SECRET ?? "npams-dev-secret-do-not-use-in-prod";
+const refreshSecret = REFRESH_SECRET ?? "npams-refresh-dev-secret-do-not-use-in-prod";
 
 export interface TokenPayload {
   userId: string;
@@ -19,19 +37,45 @@ export interface TokenPayload {
 }
 
 export function signAccessToken(payload: TokenPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  return jwt.sign(payload, jwtSecret, { expiresIn: JWT_EXPIRES_IN });
 }
 
-export function signRefreshToken(userId: string): string {
-  return jwt.sign({ userId }, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRES_IN });
+export async function issueRefreshToken(userId: string): Promise<string> {
+  const rawToken = crypto.randomBytes(48).toString("hex");
+  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+  const expiresAt = new Date(Date.now() + REFRESH_EXPIRES_MS);
+
+  await db.insert(refreshTokens).values({ userId, tokenHash, expiresAt });
+  return rawToken;
+}
+
+export async function consumeRefreshToken(rawToken: string): Promise<string | null> {
+  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+  const [row] = await db
+    .select()
+    .from(refreshTokens)
+    .where(and(eq(refreshTokens.tokenHash, tokenHash), isNull(refreshTokens.revokedAt)))
+    .limit(1);
+
+  if (!row || row.expiresAt < new Date()) return null;
+
+  await db
+    .update(refreshTokens)
+    .set({ revokedAt: new Date() })
+    .where(eq(refreshTokens.id, row.id));
+
+  return row.userId;
+}
+
+export async function revokeAllRefreshTokens(userId: string): Promise<void> {
+  await db
+    .update(refreshTokens)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
 }
 
 export function verifyAccessToken(token: string): TokenPayload {
-  return jwt.verify(token, JWT_SECRET) as TokenPayload;
-}
-
-export function verifyRefreshToken(token: string): { userId: string } {
-  return jwt.verify(token, REFRESH_SECRET) as { userId: string };
+  return jwt.verify(token, jwtSecret) as TokenPayload;
 }
 
 declare global {
@@ -67,12 +111,28 @@ export function requireNational(req: Request, res: Response, next: NextFunction)
   });
 }
 
-export function requireAdminRole(req: Request, res: Response, next: NextFunction): void {
+export function requireUserAdmin(req: Request, res: Response, next: NextFunction): void {
   requireAuth(req, res, () => {
     if (!req.user) return;
-    const adminRoles = ["Super Admin", "National Asset Controller", "Provincial Admin"];
-    if (!adminRoles.includes(req.user.roleName)) {
-      res.status(403).json({ success: false, message: "Admin access required" });
+    const userAdminRoles = ["Super Admin", "Provincial Admin"];
+    if (!userAdminRoles.includes(req.user.roleName)) {
+      res.status(403).json({ success: false, message: "Insufficient privileges for user administration" });
+      return;
+    }
+    next();
+  });
+}
+
+export function requireAdminRole(req: Request, res: Response, next: NextFunction): void {
+  return requireAssetAdmin(req, res, next);
+}
+
+export function requireAssetAdmin(req: Request, res: Response, next: NextFunction): void {
+  requireAuth(req, res, () => {
+    if (!req.user) return;
+    const assetAdminRoles = ["Super Admin", "National Asset Controller", "Provincial Admin"];
+    if (!assetAdminRoles.includes(req.user.roleName)) {
+      res.status(403).json({ success: false, message: "Insufficient privileges" });
       return;
     }
     next();

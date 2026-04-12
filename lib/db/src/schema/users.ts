@@ -30,7 +30,17 @@ export const userScope = pgTable("user_scope", {
   facilityId: uuid("facility_id").references(() => facilities.id),
 });
 
+export const refreshTokens = pgTable("refresh_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type UserRole = typeof userRoles.$inferSelect;
 export type UserScope = typeof userScope.$inferSelect;
+export type RefreshToken = typeof refreshTokens.$inferSelect;

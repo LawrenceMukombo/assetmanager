@@ -2,11 +2,11 @@ import { Router } from "express";
 import { eq, and } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db, users, userRoles, roles, userScope, provinces } from "@workspace/db";
-import { requireAuth, requireAdminRole } from "../lib/auth";
+import { requireAuth, requireUserAdmin } from "../lib/auth";
 
 const router = Router();
 
-router.get("/v1/users", requireAuth, requireAdminRole, async (req, res) => {
+router.get("/v1/users", requireAuth, requireUserAdmin, async (req, res) => {
   if (!req.user) return;
 
   try {
@@ -43,14 +43,14 @@ router.get("/v1/users", requireAuth, requireAdminRole, async (req, res) => {
         ? allUsers
         : allUsers.filter((u) => u.scope?.provinceId === req.user!.provinceId);
 
-    res.json({ success: true, data: filtered });
+    res.json({ success: true, message: "Users retrieved", data: filtered });
   } catch (err) {
     req.log.error({ err }, "Get users error");
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
 
-router.post("/v1/users", requireAuth, requireAdminRole, async (req, res) => {
+router.post("/v1/users", requireAuth, requireUserAdmin, async (req, res) => {
   if (!req.user) return;
 
   const { full_name, email, password, phone_number, role_id, province_id, district_id, facility_id } = req.body;
@@ -65,7 +65,23 @@ router.post("/v1/users", requireAuth, requireAdminRole, async (req, res) => {
     return;
   }
 
+  if (req.user.scopeLevel !== "national" && !province_id && !req.user.provinceId) {
+    res.status(400).json({ success: false, message: "province_id is required for provincial admins" });
+    return;
+  }
+
   try {
+    const [targetRole] = await db.select().from(roles).where(eq(roles.id, role_id)).limit(1);
+    if (!targetRole) {
+      res.status(400).json({ success: false, message: "Role not found" });
+      return;
+    }
+
+    if (req.user.scopeLevel !== "national" && targetRole.scopeLevel === "national") {
+      res.status(403).json({ success: false, message: "Cannot assign national-level roles" });
+      return;
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
     const [user] = await db
       .insert(users)
@@ -75,7 +91,7 @@ router.post("/v1/users", requireAuth, requireAdminRole, async (req, res) => {
     await db.insert(userRoles).values({ userId: user.id, roleId: role_id });
     await db.insert(userScope).values({
       userId: user.id,
-      provinceId: province_id ?? null,
+      provinceId: province_id ?? req.user.provinceId ?? null,
       districtId: district_id ?? null,
       facilityId: facility_id ?? null,
     });
@@ -130,25 +146,42 @@ router.get("/v1/users/:id", requireAuth, async (req, res) => {
       return;
     }
 
-    res.json({ success: true, data: row });
+    res.json({ success: true, message: "User retrieved", data: row });
   } catch (err) {
     req.log.error({ err }, "Get user error");
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
 
-router.put("/v1/users/:id", requireAuth, requireAdminRole, async (req, res) => {
-  const { full_name, phone_number } = req.body;
+router.put("/v1/users/:id", requireAuth, requireUserAdmin, async (req, res) => {
+  if (!req.user) return;
+
   try {
+    const [targetUser] = await db
+      .select({ id: users.id })
+      .from(users)
+      .leftJoin(userScope, eq(userScope.userId, users.id))
+      .where(eq(users.id, req.params.id))
+      .limit(1);
+
+    if (!targetUser) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
+
+    const [targetScope] = await db.select().from(userScope).where(eq(userScope.userId, req.params.id)).limit(1);
+    if (req.user.scopeLevel !== "national" && targetScope?.provinceId !== req.user.provinceId) {
+      res.status(403).json({ success: false, message: "Cannot modify user outside your province" });
+      return;
+    }
+
+    const { full_name, phone_number } = req.body;
     const [updated] = await db
       .update(users)
       .set({ fullName: full_name, phoneNumber: phone_number, updatedAt: new Date() })
       .where(eq(users.id, req.params.id))
       .returning();
-    if (!updated) {
-      res.status(404).json({ success: false, message: "User not found" });
-      return;
-    }
+
     res.json({ success: true, message: "User updated", data: { id: updated.id, fullName: updated.fullName } });
   } catch (err) {
     req.log.error({ err }, "Update user error");
@@ -156,17 +189,27 @@ router.put("/v1/users/:id", requireAuth, requireAdminRole, async (req, res) => {
   }
 });
 
-router.patch("/v1/users/:id/deactivate", requireAuth, requireAdminRole, async (req, res) => {
+router.patch("/v1/users/:id/deactivate", requireAuth, requireUserAdmin, async (req, res) => {
+  if (!req.user) return;
+
   try {
+    const [targetScope] = await db.select().from(userScope).where(eq(userScope.userId, req.params.id)).limit(1);
+    if (req.user.scopeLevel !== "national" && targetScope?.provinceId !== req.user.provinceId) {
+      res.status(403).json({ success: false, message: "Cannot modify user outside your province" });
+      return;
+    }
+
     const [updated] = await db
       .update(users)
       .set({ active: false, updatedAt: new Date() })
       .where(eq(users.id, req.params.id))
       .returning();
+
     if (!updated) {
       res.status(404).json({ success: false, message: "User not found" });
       return;
     }
+
     res.json({ success: true, message: "User deactivated" });
   } catch (err) {
     req.log.error({ err }, "Deactivate user error");

@@ -279,6 +279,13 @@ router.put("/v1/assets/:id", requireAuth, async (req, res) => {
     }
 
     const body = req.body;
+
+    const targetProvinceId = body.province_id !== undefined ? body.province_id : existing.provinceId;
+    if (req.user.scopeLevel !== "national" && req.user.provinceId && targetProvinceId && targetProvinceId !== req.user.provinceId) {
+      res.status(403).json({ success: false, message: "Cannot reassign asset to a different province" });
+      return;
+    }
+
     const [updated] = await db
       .update(assets)
       .set({
@@ -294,7 +301,7 @@ router.put("/v1/assets/:id", requireAuth, async (req, res) => {
         usefulLifeYears: body.useful_life_years ?? null,
         status: body.status,
         condition: body.condition,
-        provinceId: body.province_id ?? null,
+        provinceId: targetProvinceId,
         districtId: body.district_id ?? null,
         facilityId: body.facility_id ?? null,
         assignedToUser: body.assigned_to_user ?? null,
@@ -367,6 +374,7 @@ router.get("/v1/assets/:id/qr-data", requireAuth, async (req, res) => {
         assetName: assets.assetName,
         serialNumber: assets.serialNumber,
         status: assets.status,
+        provinceId: assets.provinceId,
         provinceName: provinces.provinceName,
         facilityName: facilities.facilityName,
       })
@@ -381,8 +389,14 @@ router.get("/v1/assets/:id/qr-data", requireAuth, async (req, res) => {
       return;
     }
 
+    if (req.user!.scopeLevel !== "national" && req.user!.provinceId && row.provinceId !== req.user!.provinceId) {
+      res.status(403).json({ success: false, message: "Access denied" });
+      return;
+    }
+
     res.json({
       success: true,
+      message: "QR data retrieved",
       data: {
         qr_value: `NPAMS:${row.assetTag}:${row.id}`,
         asset_tag: row.assetTag,

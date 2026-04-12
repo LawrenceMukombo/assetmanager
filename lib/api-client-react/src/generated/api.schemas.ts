@@ -134,28 +134,28 @@ export interface AssetLocationInfo {
   provinceName?: string;
   flagUrl?: string | null;
   themeAccentColor?: string | null;
-} | null
+}
 
 export interface AssetDistrictInfo {
   id?: string;
   districtName?: string;
-} | null
+}
 
 export interface AssetFacilityInfo {
   id?: string;
   facilityName?: string;
-} | null
+}
 
 export interface AssetCategoryInfo {
   id?: string;
   categoryName?: string;
-} | null
+}
 
 export interface AssetUserInfo {
   id?: string;
   fullName?: string;
   email?: string;
-} | null
+}
 
 export type AssetListItemStatus = typeof AssetListItemStatus[keyof typeof AssetListItemStatus];
 
@@ -341,7 +341,7 @@ export interface ProvinceInfo {
   provinceName?: string;
   flagUrl?: string | null;
   themeAccentColor?: string | null;
-} | null
+}
 
 export interface ProvincialDashboard {
   province?: ProvinceInfo | null;
