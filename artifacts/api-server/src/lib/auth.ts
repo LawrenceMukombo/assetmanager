@@ -157,14 +157,14 @@ function checkRole(
 ): void {
   if (req.user) {
     if (!check(req.user)) {
-      res.status(403).json({ success: false, message });
+      res.status(403).json({ success: false, message, data: null });
       return;
     }
     next();
   } else {
     requireAuth(req, res, () => {
       if (!req.user || !check(req.user)) {
-        res.status(403).json({ success: false, message });
+        res.status(403).json({ success: false, message, data: null });
         return;
       }
       next();

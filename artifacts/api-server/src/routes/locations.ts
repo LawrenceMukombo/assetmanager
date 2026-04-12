@@ -206,12 +206,18 @@ router.get("/v1/locations/facilities/:id", requireAuth, async (req, res) => {
         .from(districts)
         .where(eq(districts.id, row.districtId))
         .limit(1);
+
       if (districtRow) {
         const allowedProvinceId = await resolveUserProvinceId(user);
         if (allowedProvinceId !== null && districtRow.provinceId !== allowedProvinceId) {
           res.status(403).json({ success: false, message: "Access denied: outside your geographic scope", data: null });
           return;
         }
+      }
+
+      if (user.districtId && row.districtId !== user.districtId) {
+        res.status(403).json({ success: false, message: "Access denied: outside your district scope", data: null });
+        return;
       }
     }
 

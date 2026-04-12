@@ -108,7 +108,7 @@ router.post("/v1/users", requireAuth, requireUserAdmin, async (req, res) => {
       facilityId: facility_id ?? null,
     });
 
-    res.status(201).json({ success: true, message: "User created", data: { id: user.id, email: user.email, fullName: user.fullName, data: null } });
+    res.status(201).json({ success: true, message: "User created", data: { id: user.id, email: user.email, fullName: user.fullName } });
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "23505") {
       res.status(409).json({ success: false, message: "Email already exists", data: null });
@@ -153,9 +153,21 @@ router.get("/v1/users/:id", requireAuth, async (req, res) => {
       return;
     }
 
-    if (req.user!.scopeLevel !== "national" && req.user!.userId !== req.params.id && row.scope?.provinceId !== req.user!.provinceId) {
-      res.status(403).json({ success: false, message: "Access denied", data: null });
-      return;
+    if (req.user!.scopeLevel !== "national" && req.user!.userId !== (req.params.id as string)) {
+      const viewer = req.user!;
+      const targetScope = row.scope;
+      let allowed = false;
+      if (viewer.facilityId) {
+        allowed = targetScope?.facilityId === viewer.facilityId;
+      } else if (viewer.districtId) {
+        allowed = targetScope?.districtId === viewer.districtId;
+      } else if (viewer.provinceId) {
+        allowed = targetScope?.provinceId === viewer.provinceId;
+      }
+      if (!allowed) {
+        res.status(403).json({ success: false, message: "Access denied", data: null });
+        return;
+      }
     }
 
     res.json({ success: true, message: "User retrieved", data: row });
@@ -194,7 +206,7 @@ router.put("/v1/users/:id", requireAuth, requireUserAdmin, async (req, res) => {
       .where(eq(users.id, req.params.id as string))
       .returning();
 
-    res.json({ success: true, message: "User updated", data: { id: updated.id, fullName: updated.fullName, data: null } });
+    res.json({ success: true, message: "User updated", data: { id: updated.id, fullName: updated.fullName } });
   } catch (err) {
     req.log.error({ err }, "Update user error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
