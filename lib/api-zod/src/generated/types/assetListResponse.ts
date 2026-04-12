@@ -5,7 +5,9 @@
  * National Public Asset Management System (NPAMS) API
  * OpenAPI spec version: 1.0.0
  */
+import type { AssetListResponseData } from "./assetListResponseData";
 
-export interface HealthStatus {
-  status: string;
+export interface AssetListResponse {
+  success?: boolean;
+  data?: AssetListResponseData;
 }

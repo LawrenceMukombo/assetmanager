@@ -5,7 +5,9 @@
  * National Public Asset Management System (NPAMS) API
  * OpenAPI spec version: 1.0.0
  */
+import type { QrData } from "./qrData";
 
-export interface HealthStatus {
-  status: string;
-}
+export type GetAssetQrData200 = {
+  success?: boolean;
+  data?: QrData;
+};

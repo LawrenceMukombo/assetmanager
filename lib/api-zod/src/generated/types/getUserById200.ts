@@ -5,7 +5,9 @@
  * National Public Asset Management System (NPAMS) API
  * OpenAPI spec version: 1.0.0
  */
+import type { UserWithRole } from "./userWithRole";
 
-export interface HealthStatus {
-  status: string;
-}
+export type GetUserById200 = {
+  success?: boolean;
+  data?: UserWithRole;
+};

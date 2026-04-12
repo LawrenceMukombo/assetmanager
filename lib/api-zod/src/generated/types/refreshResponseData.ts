@@ -6,6 +6,7 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export interface HealthStatus {
-  status: string;
-}
+export type RefreshResponseData = {
+  access_token?: string;
+  expires_in?: number;
+};

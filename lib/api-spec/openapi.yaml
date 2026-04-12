@@ -2,21 +2,37 @@ openapi: 3.1.0
 info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
-  description: API specification
+  version: 1.0.0
+  description: National Public Asset Management System (NPAMS) API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: users
+    description: User management
+  - name: locations
+    description: Geographic locations
+  - name: categories
+    description: Asset categories
+  - name: assets
+    description: Asset management
+  - name: dashboard
+    description: Dashboard analytics
+  - name: reports
+    description: Reporting and exports
+  - name: notifications
+    description: User notifications
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +40,1446 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /v1/auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/auth/refresh:
+    post:
+      operationId: refreshToken
+      tags: [auth]
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+              required: [refresh_token]
+      responses:
+        "200":
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshResponse"
+
+  /v1/auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /v1/auth/forgot-password:
+    post:
+      operationId: forgotPassword
+      tags: [auth]
+      summary: Request password reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+              required: [email]
+      responses:
+        "200":
+          description: Reset link sent if email exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /v1/users:
+    get:
+      operationId: getUsers
+      tags: [users]
+      summary: List users (scoped)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/UserWithRole"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /v1/users/{id}:
+    get:
+      operationId: getUserById
+      tags: [users]
+      summary: Get user by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/UserWithRole"
+    put:
+      operationId: updateUser
+      tags: [users]
+      summary: Update user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name:
+                  type: string
+                phone_number:
+                  type: string
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /v1/users/{id}/deactivate:
+    patch:
+      operationId: deactivateUser
+      tags: [users]
+      summary: Deactivate user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /v1/locations/provinces:
+    get:
+      operationId: getProvinces
+      tags: [locations]
+      summary: List all provinces
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of provinces
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Province"
+
+  /v1/locations/provinces/{id}:
+    get:
+      operationId: getProvinceById
+      tags: [locations]
+      summary: Get province by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Province details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Province"
+
+  /v1/locations/provinces/{id}/districts:
+    get:
+      operationId: getDistrictsByProvince
+      tags: [locations]
+      summary: Get districts by province
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of districts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/District"
+
+  /v1/locations/districts/{id}/facilities:
+    get:
+      operationId: getFacilitiesByDistrict
+      tags: [locations]
+      summary: Get facilities by district
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of facilities
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Facility"
+
+  /v1/locations/facilities/{id}:
+    get:
+      operationId: getFacilityById
+      tags: [locations]
+      summary: Get facility by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Facility details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Facility"
+
+  /v1/categories:
+    get:
+      operationId: getCategories
+      tags: [categories]
+      summary: List asset categories
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AssetCategory"
+    post:
+      operationId: createCategory
+      tags: [categories]
+      summary: Create asset category
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                category_name:
+                  type: string
+                description:
+                  type: string
+              required: [category_name]
+      responses:
+        "201":
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /v1/categories/{id}:
+    put:
+      operationId: updateCategory
+      tags: [categories]
+      summary: Update category
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                category_name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        "200":
+          description: Category updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: deleteCategory
+      tags: [categories]
+      summary: Delete category
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Category deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /v1/assets:
+    get:
+      operationId: getAssets
+      tags: [assets]
+      summary: List assets (scoped, paginated)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: province_id
+          in: query
+          schema:
+            type: string
+        - name: district_id
+          in: query
+          schema:
+            type: string
+        - name: facility_id
+          in: query
+          schema:
+            type: string
+        - name: category_id
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, disposed, missing, under_maintenance]
+        - name: condition
+          in: query
+          schema:
+            type: string
+            enum: [excellent, good, fair, poor]
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paginated asset list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetListResponse"
+    post:
+      operationId: createAsset
+      tags: [assets]
+      summary: Create asset
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAssetRequest"
+      responses:
+        "201":
+          description: Asset created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /v1/assets/{id}:
+    get:
+      operationId: getAssetById
+      tags: [assets]
+      summary: Get asset by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Asset details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/AssetDetail"
+    put:
+      operationId: updateAsset
+      tags: [assets]
+      summary: Update asset
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAssetRequest"
+      responses:
+        "200":
+          description: Asset updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: deleteAsset
+      tags: [assets]
+      summary: Delete asset (soft delete)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Asset deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /v1/assets/{id}/qr-data:
+    get:
+      operationId: getAssetQrData
+      tags: [assets]
+      summary: Get QR code data for asset
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: QR data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/QrData"
+
+  /v1/dashboard/provincial:
+    get:
+      operationId: getProvincialDashboard
+      tags: [dashboard]
+      summary: Provincial dashboard summary
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: province_id
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Provincial dashboard data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/ProvincialDashboard"
+
+  /v1/dashboard/national:
+    get:
+      operationId: getNationalDashboard
+      tags: [dashboard]
+      summary: National dashboard summary (national roles only)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: National dashboard data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/NationalDashboard"
+
+  /v1/reports/assets:
+    get:
+      operationId: getAssetsReport
+      tags: [reports]
+      summary: Full asset list for export (scoped)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: province_id
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: category_id
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Asset report data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AssetReportRow"
+                  total:
+                    type: integer
+
+  /v1/reports/summary:
+    get:
+      operationId: getReportSummary
+      tags: [reports]
+      summary: Province-level summary for export
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Summary report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ProvinceSummaryRow"
+
+  /v1/notifications:
+    get:
+      operationId: getNotifications
+      tags: [notifications]
+      summary: List notifications for current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Notifications list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Notification"
+
+  /v1/notifications/{id}/read:
+    patch:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark notification as read
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Marked as read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     HealthStatus:
       type: object
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required: [success, message]
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required: [success, message]
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required: [email, password]
+
+    UserScope:
+      type: object
+      properties:
+        province_id:
+          type: string
+          nullable: true
+        district_id:
+          type: string
+          nullable: true
+        facility_id:
+          type: string
+          nullable: true
+
+    LoginUser:
+      type: object
+      properties:
+        id:
+          type: string
+        full_name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        scope_level:
+          type: string
+        scope:
+          $ref: "#/components/schemas/UserScope"
+
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            access_token:
+              type: string
+            refresh_token:
+              type: string
+            expires_in:
+              type: integer
+            user:
+              $ref: "#/components/schemas/LoginUser"
+
+    RefreshResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            access_token:
+              type: string
+            expires_in:
+              type: integer
+
+    Province:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        provinceName:
+          type: string
+        provinceCode:
+          type: string
+        flagUrl:
+          type: string
+          nullable: true
+        logoUrl:
+          type: string
+          nullable: true
+        themeAccentColor:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    District:
+      type: object
+      properties:
+        id:
+          type: string
+        provinceId:
+          type: string
+        districtName:
+          type: string
+        districtCode:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+
+    Facility:
+      type: object
+      properties:
+        id:
+          type: string
+        districtId:
+          type: string
+        facilityName:
+          type: string
+        facilityType:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+
+    RoleInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        roleName:
+          type: string
+        scopeLevel:
+          type: string
+
+    UserWithRole:
+      type: object
+      properties:
+        id:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+        phoneNumber:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+        lastLogin:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        role:
+          $ref: "#/components/schemas/RoleInfo"
+        scope:
+          $ref: "#/components/schemas/UserScope"
+        provinceName:
+          type: string
+          nullable: true
+
+    CreateUserRequest:
+      type: object
+      properties:
+        full_name:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        phone_number:
+          type: string
+        role_id:
+          type: string
+        province_id:
+          type: string
+        district_id:
+          type: string
+        facility_id:
+          type: string
+      required: [full_name, email, password, role_id]
+
+    AssetCategory:
+      type: object
+      properties:
+        id:
+          type: string
+        categoryName:
+          type: string
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    AssetLocationInfo:
+      type: object
+      nullable: true
+      properties:
+        id:
+          type: string
+        provinceName:
+          type: string
+        flagUrl:
+          type: string
+          nullable: true
+        themeAccentColor:
+          type: string
+          nullable: true
+
+    AssetDistrictInfo:
+      type: object
+      nullable: true
+      properties:
+        id:
+          type: string
+        districtName:
+          type: string
+
+    AssetFacilityInfo:
+      type: object
+      nullable: true
+      properties:
+        id:
+          type: string
+        facilityName:
+          type: string
+
+    AssetCategoryInfo:
+      type: object
+      nullable: true
+      properties:
+        id:
+          type: string
+        categoryName:
+          type: string
+
+    AssetUserInfo:
+      type: object
+      nullable: true
+      properties:
+        id:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+
+    AssetListItem:
+      type: object
+      properties:
+        id:
+          type: string
+        assetTag:
+          type: string
+        assetName:
+          type: string
+        serialNumber:
+          type: string
+          nullable: true
+        brand:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, disposed, missing, under_maintenance]
+        condition:
+          type: string
+          enum: [excellent, good, fair, poor]
+        purchaseDate:
+          type: string
+          nullable: true
+        purchaseCost:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        category:
+          $ref: "#/components/schemas/AssetCategoryInfo"
+        province:
+          $ref: "#/components/schemas/AssetLocationInfo"
+        district:
+          $ref: "#/components/schemas/AssetDistrictInfo"
+        facility:
+          $ref: "#/components/schemas/AssetFacilityInfo"
+        assignedUser:
+          $ref: "#/components/schemas/AssetUserInfo"
+
+    AssetDetail:
+      allOf:
+        - $ref: "#/components/schemas/AssetListItem"
+        - type: object
+          properties:
+            supplier:
+              type: string
+              nullable: true
+            warrantyExpiry:
+              type: string
+              nullable: true
+            usefulLifeYears:
+              type: integer
+              nullable: true
+            updatedAt:
+              type: string
+              format: date-time
+            activity_logs:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  actionType:
+                    type: string
+                  description:
+                    type: string
+                  createdAt:
+                    type: string
+                    format: date-time
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+
+    AssetListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/AssetListItem"
+            pagination:
+              $ref: "#/components/schemas/Pagination"
+
+    CreateAssetRequest:
+      type: object
+      properties:
+        asset_name:
+          type: string
+        asset_tag:
+          type: string
+        category_id:
+          type: string
+        serial_number:
+          type: string
+        brand:
+          type: string
+        model:
+          type: string
+        purchase_date:
+          type: string
+        purchase_cost:
+          type: number
+        supplier:
+          type: string
+        warranty_expiry:
+          type: string
+        useful_life_years:
+          type: integer
+        status:
+          type: string
+          enum: [active, disposed, missing, under_maintenance]
+        condition:
+          type: string
+          enum: [excellent, good, fair, poor]
+        province_id:
+          type: string
+        district_id:
+          type: string
+        facility_id:
+          type: string
+        assigned_to_user:
+          type: string
+      required: [asset_name, asset_tag]
+
+    UpdateAssetRequest:
+      type: object
+      properties:
+        asset_name:
+          type: string
+        category_id:
+          type: string
+        serial_number:
+          type: string
+        brand:
+          type: string
+        model:
+          type: string
+        purchase_date:
+          type: string
+        purchase_cost:
+          type: number
+        supplier:
+          type: string
+        warranty_expiry:
+          type: string
+        useful_life_years:
+          type: integer
+        status:
+          type: string
+          enum: [active, disposed, missing, under_maintenance]
+        condition:
+          type: string
+          enum: [excellent, good, fair, poor]
+        province_id:
+          type: string
+        district_id:
+          type: string
+        facility_id:
+          type: string
+        assigned_to_user:
+          type: string
+
+    QrData:
+      type: object
+      properties:
+        qr_value:
+          type: string
+        asset_tag:
+          type: string
+        asset_name:
+          type: string
+        serial_number:
+          type: string
+          nullable: true
+        location:
+          type: string
+        status:
+          type: string
+
+    CategoryCount:
+      type: object
+      properties:
+        category_name:
+          type: string
+          nullable: true
+        count:
+          type: integer
+
+    ConditionCount:
+      type: object
+      properties:
+        condition:
+          type: string
+          nullable: true
+        count:
+          type: integer
+
+    RecentAsset:
+      type: object
+      properties:
+        id:
+          type: string
+        assetTag:
+          type: string
+        assetName:
+          type: string
+        status:
+          type: string
+        condition:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        categoryName:
+          type: string
+          nullable: true
+        facilityName:
+          type: string
+          nullable: true
+
+    ProvinceInfo:
+      type: object
+      nullable: true
+      properties:
+        provinceName:
+          type: string
+        flagUrl:
+          type: string
+          nullable: true
+        themeAccentColor:
+          type: string
+          nullable: true
+
+    ProvincialDashboard:
+      type: object
+      properties:
+        province:
+          $ref: "#/components/schemas/ProvinceInfo"
+        total_assets:
+          type: integer
+        active_assets:
+          type: integer
+        missing_assets:
+          type: integer
+        total_value:
+          type: string
+        assets_by_category:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryCount"
+        assets_by_condition:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConditionCount"
+        recent_assets:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecentAsset"
+
+    ProvinceAssetSummary:
+      type: object
+      properties:
+        province_id:
+          type: string
+        province_name:
+          type: string
+        province_code:
+          type: string
+        flag_url:
+          type: string
+          nullable: true
+        theme_accent_color:
+          type: string
+          nullable: true
+        total_assets:
+          type: integer
+        total_value:
+          type: string
+        missing_assets:
+          type: integer
+
+    NationalDashboard:
+      type: object
+      properties:
+        total_assets:
+          type: integer
+        total_value:
+          type: string
+        provinces_count:
+          type: integer
+        assets_by_province:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProvinceAssetSummary"
+        top_categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryCount"
+
+    AssetReportRow:
+      type: object
+      properties:
+        asset_tag:
+          type: string
+        asset_name:
+          type: string
+        serial_number:
+          type: string
+          nullable: true
+        brand:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        status:
+          type: string
+        condition:
+          type: string
+        purchase_date:
+          type: string
+          nullable: true
+        purchase_cost:
+          type: string
+          nullable: true
+        supplier:
+          type: string
+          nullable: true
+        category_name:
+          type: string
+          nullable: true
+        province_name:
+          type: string
+          nullable: true
+        district_name:
+          type: string
+          nullable: true
+        facility_name:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ProvinceSummaryRow:
+      type: object
+      properties:
+        province_name:
+          type: string
+        flag_url:
+          type: string
+          nullable: true
+        total_assets:
+          type: integer
+        active_assets:
+          type: integer
+        missing_assets:
+          type: integer
+        total_value:
+          type: string
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        title:
+          type: string
+        message:
+          type: string
+        readStatus:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time

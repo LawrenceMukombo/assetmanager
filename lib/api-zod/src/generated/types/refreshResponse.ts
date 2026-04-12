@@ -5,7 +5,9 @@
  * National Public Asset Management System (NPAMS) API
  * OpenAPI spec version: 1.0.0
  */
+import type { RefreshResponseData } from "./refreshResponseData";
 
-export interface HealthStatus {
-  status: string;
+export interface RefreshResponse {
+  success?: boolean;
+  data?: RefreshResponseData;
 }

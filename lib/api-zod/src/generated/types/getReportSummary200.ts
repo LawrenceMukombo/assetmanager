@@ -5,7 +5,9 @@
  * National Public Asset Management System (NPAMS) API
  * OpenAPI spec version: 1.0.0
  */
+import type { ProvinceSummaryRow } from "./provinceSummaryRow";
 
-export interface HealthStatus {
-  status: string;
-}
+export type GetReportSummary200 = {
+  success?: boolean;
+  data?: ProvinceSummaryRow[];
+};

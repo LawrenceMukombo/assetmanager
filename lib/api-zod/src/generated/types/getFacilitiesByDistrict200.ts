@@ -5,7 +5,9 @@
  * National Public Asset Management System (NPAMS) API
  * OpenAPI spec version: 1.0.0
  */
+import type { Facility } from "./facility";
 
-export interface HealthStatus {
-  status: string;
-}
+export type GetFacilitiesByDistrict200 = {
+  success?: boolean;
+  data?: Facility[];
+};

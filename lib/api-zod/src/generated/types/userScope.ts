@@ -6,6 +6,8 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export interface HealthStatus {
-  status: string;
+export interface UserScope {
+  province_id?: string | null;
+  district_id?: string | null;
+  facility_id?: string | null;
 }

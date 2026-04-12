@@ -6,6 +6,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export interface HealthStatus {
-  status: string;
+export interface AssetCategory {
+  id?: string;
+  categoryName?: string;
+  description?: string | null;
+  createdAt?: Date;
 }

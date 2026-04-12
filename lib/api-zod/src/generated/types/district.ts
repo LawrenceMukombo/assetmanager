@@ -6,6 +6,10 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export interface HealthStatus {
-  status: string;
+export interface District {
+  id?: string;
+  provinceId?: string;
+  districtName?: string;
+  districtCode?: string | null;
+  active?: boolean;
 }

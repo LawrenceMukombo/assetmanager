@@ -5,7 +5,9 @@
  * National Public Asset Management System (NPAMS) API
  * OpenAPI spec version: 1.0.0
  */
+import type { Notification } from "./notification";
 
-export interface HealthStatus {
-  status: string;
-}
+export type GetNotifications200 = {
+  success?: boolean;
+  data?: Notification[];
+};

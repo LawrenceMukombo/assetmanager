@@ -5,7 +5,10 @@
  * National Public Asset Management System (NPAMS) API
  * OpenAPI spec version: 1.0.0
  */
+import type { AssetReportRow } from "./assetReportRow";
 
-export interface HealthStatus {
-  status: string;
-}
+export type GetAssetsReport200 = {
+  success?: boolean;
+  data?: AssetReportRow[];
+  total?: number;
+};

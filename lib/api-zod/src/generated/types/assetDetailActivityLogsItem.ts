@@ -6,6 +6,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export interface HealthStatus {
-  status: string;
-}
+export type AssetDetailActivityLogsItem = {
+  id?: string;
+  actionType?: string;
+  description?: string;
+  createdAt?: Date;
+};
