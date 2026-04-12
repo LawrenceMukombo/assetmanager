@@ -1,5 +1,15 @@
-import { useGetUsers, useCreateUser, useDeactivateUser, getGetUsersQueryKey, useGetProvinces, getGetProvincesQueryKey } from "@workspace/api-client-react";
+import {
+  useGetUsers,
+  useCreateUser,
+  useDeactivateUser,
+  getGetUsersQueryKey,
+  useGetProvinces,
+  useGetDistrictsByProvince,
+  getGetProvincesQueryKey,
+  getGetDistrictsByProvinceQueryKey,
+} from "@workspace/api-client-react";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { Redirect } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -14,26 +24,34 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, UserX, UserCheck } from "lucide-react";
+import { Plus } from "lucide-react";
 
-// For demo purposes, we map standard role names to IDs here.
-// In a real app, these would come from an API endpoint.
-const ROLE_MAP: Record<string, string> = {
-  "Super Admin": "role_super_admin",
-  "National Asset Controller": "role_national_controller",
-  "Provincial Admin": "role_provincial_admin",
-  "Provincial Asset Officer": "role_provincial_officer",
-  "Provincial Viewer": "role_provincial_viewer",
-  "Facility Officer": "role_facility_officer"
-};
+interface RoleItem {
+  id: string;
+  roleName: string;
+  scopeLevel: string;
+}
+
+const NATIONAL_SCOPES = ["national"];
+
+async function fetchRoles(token: string | null): Promise<RoleItem[]> {
+  const res = await fetch("/api/v1/roles", {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  const json = await res.json();
+  return json.data ?? [];
+}
 
 const userSchema = z.object({
   full_name: z.string().min(1, "Full name is required"),
-  email: z.string().email(),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  email: z.string().email("Valid email required"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
   role_id: z.string().min(1, "Role is required"),
   province_id: z.string().optional(),
+  district_id: z.string().optional(),
 });
+
+type UserFormValues = z.infer<typeof userSchema>;
 
 export default function Users() {
   const { user } = useAuth();
@@ -41,9 +59,28 @@ export default function Users() {
   const { toast } = useToast();
 
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [selectedProvinceId, setSelectedProvinceId] = useState("");
+  const [selectedRoleScope, setSelectedRoleScope] = useState("");
 
-  const { data, isLoading, refetch } = useGetUsers({ query: { queryKey: getGetUsersQueryKey() } });
-  const { data: provincesData } = useGetProvinces({ query: { queryKey: getGetProvincesQueryKey() } });
+  const token = localStorage.getItem("npams_token");
+
+  const { data, isLoading, refetch } = useGetUsers({
+    query: { queryKey: getGetUsersQueryKey() },
+  });
+  const { data: provincesData } = useGetProvinces({
+    query: { queryKey: getGetProvincesQueryKey() },
+  });
+  const { data: districtsData } = useGetDistrictsByProvince(selectedProvinceId, {
+    query: {
+      queryKey: getGetDistrictsByProvinceQueryKey(selectedProvinceId),
+      enabled: !!selectedProvinceId,
+    },
+  });
+  const { data: rolesData } = useQuery<RoleItem[]>({
+    queryKey: ["/api/v1/roles"],
+    queryFn: () => fetchRoles(token),
+    enabled: isAdmin,
+  });
 
   const createMutation = useCreateUser({
     mutation: {
@@ -51,8 +88,12 @@ export default function Users() {
         toast({ title: "User created successfully" });
         refetch();
         setIsAddOpen(false);
-      }
-    }
+        form.reset();
+      },
+      onError: (err: Error) => {
+        toast({ variant: "destructive", title: "Failed to create user", description: err.message });
+      },
+    },
   });
 
   const deactivateMutation = useDeactivateUser({
@@ -60,24 +101,33 @@ export default function Users() {
       onSuccess: () => {
         toast({ title: "User status updated" });
         refetch();
-      }
-    }
+      },
+      onError: (err: Error) => {
+        toast({ variant: "destructive", title: "Failed to update user", description: err.message });
+      },
+    },
   });
 
-  const form = useForm<z.infer<typeof userSchema>>({
+  const form = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),
-    defaultValues: { full_name: "", email: "", password: "", role_id: "", province_id: "" }
+    defaultValues: { full_name: "", email: "", password: "", role_id: "", province_id: "", district_id: "" },
   });
 
   if (!isAdmin) return <Redirect to="/dashboard" />;
 
-  const onSubmit = (values: z.infer<typeof userSchema>) => {
-    createMutation.mutate({ data: values });
+  const onSubmit = (values: UserFormValues) => {
+    const payload: Record<string, string | undefined> = {
+      full_name: values.full_name,
+      email: values.email,
+      password: values.password,
+      role_id: values.role_id,
+    };
+    if (values.province_id) payload.province_id = values.province_id;
+    if (values.district_id) payload.district_id = values.district_id;
+    createMutation.mutate({ data: payload as UserFormValues });
   };
 
-  const toggleStatus = (userId: string) => {
-    deactivateMutation.mutate({ id: userId });
-  };
+  const isNationalRole = NATIONAL_SCOPES.includes(selectedRoleScope);
 
   return (
     <div className="space-y-6">
@@ -86,7 +136,9 @@ export default function Users() {
           <h2 className="text-3xl font-bold tracking-tight">User Management</h2>
           <p className="text-muted-foreground">Manage system access and roles.</p>
         </div>
-        <Button onClick={() => setIsAddOpen(true)}><Plus className="w-4 h-4 mr-2" /> Add User</Button>
+        <Button onClick={() => { setIsAddOpen(true); setSelectedProvinceId(""); setSelectedRoleScope(""); }}>
+          <Plus className="w-4 h-4 mr-2" /> Add User
+        </Button>
       </div>
 
       <div className="bg-card border rounded-lg overflow-hidden">
@@ -96,29 +148,37 @@ export default function Users() {
               <TableHead>Full Name</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
-              <TableHead>Scope</TableHead>
+              <TableHead>Scope Level</TableHead>
+              <TableHead>Province</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Active</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8">Loading...</TableCell></TableRow>
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading users...</TableCell>
+              </TableRow>
+            ) : data?.data?.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No users found.</TableCell>
+              </TableRow>
             ) : data?.data?.map((u) => (
               <TableRow key={u.id}>
                 <TableCell className="font-medium">{u.fullName}</TableCell>
-                <TableCell>{u.email}</TableCell>
+                <TableCell className="text-sm">{u.email}</TableCell>
                 <TableCell><Badge variant="outline">{u.role?.roleName}</Badge></TableCell>
+                <TableCell className="capitalize text-sm">{u.role?.scopeLevel ?? "N/A"}</TableCell>
                 <TableCell>{u.provinceName || "National"}</TableCell>
                 <TableCell>
-                  <Badge className={u.active ? "bg-green-500 hover:bg-green-600" : "bg-gray-500 hover:bg-gray-600"}>
+                  <Badge className={u.active ? "bg-green-600 hover:bg-green-700" : "bg-gray-500 hover:bg-gray-600"}>
                     {u.active ? "Active" : "Inactive"}
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <Switch 
-                    checked={u.active} 
-                    onCheckedChange={() => toggleStatus(u.id!)}
+                  <Switch
+                    checked={!!u.active}
+                    onCheckedChange={() => deactivateMutation.mutate({ id: u.id! })}
                     disabled={deactivateMutation.isPending || u.id === user?.id}
                   />
                 </TableCell>
@@ -129,7 +189,7 @@ export default function Users() {
       </div>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Add New User</DialogTitle>
           </DialogHeader>
@@ -151,8 +211,8 @@ export default function Users() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl><Input type="email" {...field} /></FormControl>
+                    <FormLabel>Email Address</FormLabel>
+                    <FormControl><Input type="email" autoComplete="off" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -163,7 +223,7 @@ export default function Users() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Temporary Password</FormLabel>
-                    <FormControl><Input type="password" {...field} /></FormControl>
+                    <FormControl><Input type="password" autoComplete="new-password" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -174,11 +234,27 @@ export default function Users() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Role</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger></FormControl>
+                    <Select
+                      onValueChange={(val) => {
+                        field.onChange(val);
+                        const role = rolesData?.find((r) => r.id === val);
+                        setSelectedRoleScope(role?.scopeLevel ?? "");
+                        if (role?.scopeLevel === "national") {
+                          form.setValue("province_id", "");
+                          form.setValue("district_id", "");
+                          setSelectedProvinceId("");
+                        }
+                      }}
+                      value={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+                      </FormControl>
                       <SelectContent>
-                        {Object.entries(ROLE_MAP).map(([name, id]) => (
-                          <SelectItem key={id} value={id}>{name}</SelectItem>
+                        {rolesData?.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.roleName}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -186,27 +262,62 @@ export default function Users() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="province_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Province Scope (Optional for National)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Select province" /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        {provincesData?.data?.map(p => (
-                          <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {!isNationalRole && (
+                <FormField
+                  control={form.control}
+                  name="province_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Province Scope</FormLabel>
+                      <Select
+                        onValueChange={(val) => {
+                          field.onChange(val);
+                          setSelectedProvinceId(val);
+                          form.setValue("district_id", "");
+                        }}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger><SelectValue placeholder="Select province" /></SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {provincesData?.data?.map((p) => (
+                            <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+              {!isNationalRole && selectedProvinceId && (
+                <FormField
+                  control={form.control}
+                  name="district_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>District Scope (optional)</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger><SelectValue placeholder="Select district (optional)" /></SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {districtsData?.data?.map((d) => (
+                            <SelectItem key={d.id} value={d.id!}>{d.districtName}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
-                <Button type="submit" disabled={createMutation.isPending}>Create User</Button>
+                <Button type="submit" disabled={createMutation.isPending}>
+                  {createMutation.isPending ? "Creating..." : "Create User"}
+                </Button>
               </DialogFooter>
             </form>
           </Form>

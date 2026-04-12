@@ -345,4 +345,17 @@ router.patch("/v1/users/:id/deactivate", requireAuth, requireUserAdmin, async (r
   }
 });
 
+router.get("/v1/roles", requireAuth, requireUserAdmin, async (req, res) => {
+  try {
+    const rows = await db
+      .select({ id: roles.id, roleName: roles.roleName, scopeLevel: roles.scopeLevel })
+      .from(roles)
+      .orderBy(roles.roleName);
+    res.json({ success: true, message: "Roles retrieved", data: rows });
+  } catch (err) {
+    req.log.error({ err }, "Get roles error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
 export default router;

@@ -133,6 +133,7 @@ export interface AssetCategory {
   categoryName?: string;
   description?: string | null;
   createdAt?: string;
+  assetCount?: number;
 }
 
 export interface AssetLocationInfo {

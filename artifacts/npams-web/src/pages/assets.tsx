@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { useGetAssets, getGetAssetsQueryKey, useDeleteAsset } from "@workspace/api-client-react";
+import {
+  useGetAssets,
+  getGetAssetsQueryKey,
+  useDeleteAsset,
+  useGetCategories,
+  useGetProvinces,
+  GetAssetsStatus,
+  GetAssetsCondition,
+} from "@workspace/api-client-react";
+import type { GetAssetsParams } from "@workspace/api-client-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -13,6 +22,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,21 +47,41 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, MoreHorizontal, Eye, Edit, Trash } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Eye, Edit, Trash, X } from "lucide-react";
+
+const ALL = "__all__";
 
 export default function Assets() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
-  
+
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [provinceId, setProvinceId] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [status, setStatus] = useState<GetAssetsParams["status"] | "">("");
+  const [condition, setCondition] = useState<GetAssetsParams["condition"] | "">("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { data, isLoading, refetch } = useGetAssets(
-    { page, limit: 10, search },
-    { query: { queryKey: getGetAssetsQueryKey({ page, limit: 10, search }) } }
-  );
+  const isNational = user?.scope_level === "national";
+
+  const filters: GetAssetsParams = {
+    page,
+    limit: 10,
+    ...(search ? { search } : {}),
+    ...(provinceId ? { province_id: provinceId } : {}),
+    ...(categoryId ? { category_id: categoryId } : {}),
+    ...(status ? { status: status as GetAssetsParams["status"] } : {}),
+    ...(condition ? { condition: condition as GetAssetsParams["condition"] } : {}),
+  };
+
+  const { data, isLoading, refetch } = useGetAssets(filters, {
+    query: { queryKey: getGetAssetsQueryKey(filters) },
+  });
+
+  const { data: categoriesData } = useGetCategories();
+  const { data: provincesData } = useGetProvinces();
 
   const deleteMutation = useDeleteAsset({
     mutation: {
@@ -54,15 +90,25 @@ export default function Assets() {
         refetch();
         setDeleteId(null);
       },
-      onError: (error: any) => {
+      onError: (error: Error) => {
         toast({ variant: "destructive", title: "Failed to delete asset", description: error.message });
         setDeleteId(null);
-      }
-    }
+      },
+    },
   });
 
   const assets = data?.data?.items || [];
   const pagination = data?.data?.pagination;
+
+  const hasActiveFilters = !!(provinceId || categoryId || status || condition);
+
+  const clearFilters = () => {
+    setProvinceId("");
+    setCategoryId("");
+    setStatus("");
+    setCondition("");
+    setPage(1);
+  };
 
   return (
     <div className="space-y-6">
@@ -77,15 +123,88 @@ export default function Assets() {
         </Button>
       </div>
 
-      <div className="flex items-center gap-4 bg-card p-4 rounded-lg border">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search assets..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
+      <div className="bg-card p-4 rounded-lg border space-y-3">
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, tag, serial..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              className="pl-9"
+            />
+          </div>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <X className="w-4 h-4 mr-1" /> Clear filters
+            </Button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          {isNational && (
+            <Select
+              value={provinceId || ALL}
+              onValueChange={(v) => { setProvinceId(v === ALL ? "" : v); setPage(1); }}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="All Provinces" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All Provinces</SelectItem>
+                {provincesData?.data?.map((p) => (
+                  <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          <Select
+            value={categoryId || ALL}
+            onValueChange={(v) => { setCategoryId(v === ALL ? "" : v); setPage(1); }}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="All Categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All Categories</SelectItem>
+              {categoriesData?.data?.map((c) => (
+                <SelectItem key={c.id} value={c.id!}>{c.categoryName}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={status || ALL}
+            onValueChange={(v) => { setStatus(v === ALL ? "" : v as GetAssetsParams["status"]); setPage(1); }}
+          >
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="All Statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All Statuses</SelectItem>
+              <SelectItem value={GetAssetsStatus.active}>Active</SelectItem>
+              <SelectItem value={GetAssetsStatus.disposed}>Disposed</SelectItem>
+              <SelectItem value={GetAssetsStatus.missing}>Missing</SelectItem>
+              <SelectItem value={GetAssetsStatus.under_maintenance}>Under Maintenance</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={condition || ALL}
+            onValueChange={(v) => { setCondition(v === ALL ? "" : v as GetAssetsParams["condition"]); setPage(1); }}
+          >
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="All Conditions" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All Conditions</SelectItem>
+              <SelectItem value={GetAssetsCondition.excellent}>Excellent</SelectItem>
+              <SelectItem value={GetAssetsCondition.good}>Good</SelectItem>
+              <SelectItem value={GetAssetsCondition.fair}>Fair</SelectItem>
+              <SelectItem value={GetAssetsCondition.poor}>Poor</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -100,6 +219,7 @@ export default function Assets() {
                 <TableHead>Condition</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Province</TableHead>
+                <TableHead>Facility</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -107,18 +227,14 @@ export default function Assets() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
-                    <TableCell><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-8 w-8 rounded-md" /></TableCell>
+                    {Array.from({ length: 8 }).map((__, j) => (
+                      <TableCell key={j}><Skeleton className="h-4 w-20" /></TableCell>
+                    ))}
                   </TableRow>
                 ))
               ) : assets.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     No assets found.
                   </TableCell>
                 </TableRow>
@@ -132,9 +248,10 @@ export default function Assets() {
                       <Badge variant="outline" className="capitalize">{asset.condition}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge className="capitalize">{asset.status?.replace('_', ' ')}</Badge>
+                      <Badge className="capitalize">{asset.status?.replace("_", " ")}</Badge>
                     </TableCell>
                     <TableCell>{asset.province?.provinceName || "N/A"}</TableCell>
+                    <TableCell>{asset.facility?.facilityName || "N/A"}</TableCell>
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -151,7 +268,7 @@ export default function Assets() {
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
-                          <DropdownMenuItem 
+                          <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
                             onClick={() => setDeleteId(asset.id!)}
                           >
@@ -167,26 +284,21 @@ export default function Assets() {
             </TableBody>
           </Table>
         </div>
-        
+
         {pagination && pagination.total_pages && pagination.total_pages > 1 && (
           <div className="flex items-center justify-between p-4 border-t">
             <div className="text-sm text-muted-foreground">
-              Showing page {pagination.page} of {pagination.total_pages}
+              Showing page {pagination.page} of {pagination.total_pages} ({pagination.total} total)
             </div>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page === 1}
-                onClick={() => setPage(p => p - 1)}
-              >
+              <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
                 Previous
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 disabled={page === pagination.total_pages}
-                onClick={() => setPage(p => p + 1)}
+                onClick={() => setPage((p) => p + 1)}
               >
                 Next
               </Button>

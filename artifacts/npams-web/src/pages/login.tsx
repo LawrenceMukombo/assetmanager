@@ -44,11 +44,11 @@ export default function Login() {
         title: "Login successful",
         description: "Welcome to NPAMS.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         variant: "destructive",
         title: "Login failed",
-        description: error.message || "Please check your credentials and try again.",
+        description: error instanceof Error ? error.message : "Please check your credentials and try again.",
       });
     } finally {
       setIsLoading(false);

@@ -9,6 +9,7 @@ import {
   useDeleteCategory,
   getGetCategoriesQueryKey
 } from "@workspace/api-client-react";
+import type { AssetCategory } from "@workspace/api-client-react";
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from "@/components/ui/table";
@@ -96,9 +97,9 @@ export default function Categories() {
     setIsModalOpen(true);
   };
 
-  const openEdit = (category: any) => {
-    form.reset({ category_name: category.categoryName, description: category.description || "" });
-    setEditingId(category.id);
+  const openEdit = (category: AssetCategory) => {
+    form.reset({ category_name: category.categoryName ?? "", description: category.description ?? "" });
+    setEditingId(category.id ?? null);
     setIsModalOpen(true);
   };
 
@@ -126,6 +127,7 @@ export default function Categories() {
             <TableRow>
               <TableHead>Category Name</TableHead>
               <TableHead>Description</TableHead>
+              <TableHead className="w-[120px] text-right">Asset Count</TableHead>
               <TableHead className="w-[100px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -135,13 +137,19 @@ export default function Categories() {
                 <TableRow key={i}>
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-64" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-12" /></TableCell>
                   <TableCell><Skeleton className="h-8 w-16" /></TableCell>
                 </TableRow>
               ))
+            ) : data?.data?.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No categories found.</TableCell>
+              </TableRow>
             ) : data?.data?.map((cat) => (
               <TableRow key={cat.id}>
                 <TableCell className="font-medium">{cat.categoryName}</TableCell>
                 <TableCell className="text-muted-foreground">{cat.description || "-"}</TableCell>
+                <TableCell className="text-right font-mono text-sm">{cat.assetCount ?? 0}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <Button variant="ghost" size="icon" onClick={() => openEdit(cat)}>

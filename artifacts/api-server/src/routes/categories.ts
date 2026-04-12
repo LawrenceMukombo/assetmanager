@@ -14,8 +14,11 @@ router.get("/v1/categories", requireAuth, async (req, res) => {
         categoryName: assetCategories.categoryName,
         description: assetCategories.description,
         createdAt: assetCategories.createdAt,
+        assetCount: count(assets.id),
       })
       .from(assetCategories)
+      .leftJoin(assets, eq(assets.categoryId, assetCategories.id))
+      .groupBy(assetCategories.id)
       .orderBy(assetCategories.categoryName);
     res.json({ success: true, message: "Categories retrieved", data: rows });
   } catch (err) {

@@ -1,3 +1,4 @@
+import type { ComponentType } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useGetNationalDashboard, useGetProvincialDashboard, getGetNationalDashboardQueryKey, getGetProvincialDashboardQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +21,14 @@ import { Badge } from "@/components/ui/badge";
 
 const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))'];
 
-function StatCard({ title, value, icon: Icon, description }: any) {
+interface StatCardProps {
+  title: string;
+  value: string | number;
+  icon: ComponentType<{ className?: string }>;
+  description?: string;
+}
+
+function StatCard({ title, value, icon: Icon, description }: StatCardProps) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -140,10 +148,10 @@ function ProvincialDashboard() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Assets" value={dashData?.total_assets?.toLocaleString() || "0"} icon={Box} />
-        <StatCard title="Missing Assets" value={dashData?.missing_assets?.toLocaleString() || "0"} icon={AlertTriangle} />
-        <StatCard title="Under Maintenance" value={(dashData as any)?.under_maintenance?.toLocaleString() || "0"} icon={Wrench} />
-        <StatCard title="Total Value" value={`K ${dashData?.total_value || "0"}`} icon={DollarSign} />
+        <StatCard title="Total Assets" value={dashData?.total_assets?.toLocaleString() ?? "0"} icon={Box} />
+        <StatCard title="Active Assets" value={dashData?.active_assets?.toLocaleString() ?? "0"} icon={Wrench} />
+        <StatCard title="Missing Assets" value={dashData?.missing_assets?.toLocaleString() ?? "0"} icon={AlertTriangle} />
+        <StatCard title="Total Value" value={`K ${dashData?.total_value ?? "0"}`} icon={DollarSign} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">

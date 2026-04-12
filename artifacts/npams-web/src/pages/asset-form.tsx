@@ -17,8 +17,11 @@ import {
   getGetProvincesQueryKey,
   getGetDistrictsByProvinceQueryKey,
   getGetFacilitiesByDistrictQueryKey,
-  getGetUsersQueryKey
+  getGetUsersQueryKey,
+  CreateAssetRequestCondition,
+  CreateAssetRequestStatus,
 } from "@workspace/api-client-react";
+import type { CreateAssetRequest, UpdateAssetRequest } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -79,17 +82,17 @@ export default function AssetForm() {
         toast({ title: "Asset created successfully" });
         setLocation("/assets");
       },
-      onError: (err: any) => toast({ variant: "destructive", title: "Error", description: err.message })
+      onError: (err: Error) => toast({ variant: "destructive", title: "Error", description: err.message })
     }
   });
 
   const updateMutation = useUpdateAsset({
     mutation: {
-      onSuccess: (data: any) => {
+      onSuccess: () => {
         toast({ title: "Asset updated successfully" });
         setLocation(`/assets/${id}`);
       },
-      onError: (err: any) => toast({ variant: "destructive", title: "Error", description: err.message })
+      onError: (err: Error) => toast({ variant: "destructive", title: "Error", description: err.message })
     }
   });
 
@@ -143,8 +146,8 @@ export default function AssetForm() {
         serial_number: asset.serialNumber || "",
         brand: asset.brand || "",
         model: asset.model || "",
-        condition: (asset.condition as any) || "good",
-        status: (asset.status as any) || "active",
+        condition: (asset.condition as AssetFormValues["condition"]) ?? "good",
+        status: (asset.status as AssetFormValues["status"]) ?? "active",
         purchase_date: asset.purchaseDate ? new Date(asset.purchaseDate).toISOString().split('T')[0] : "",
         purchase_cost: asset.purchaseCost ? Number(asset.purchaseCost) : undefined,
         supplier: asset.supplier || "",
@@ -160,17 +163,55 @@ export default function AssetForm() {
 
   const onSubmit = (values: AssetFormValues) => {
     if (isEdit) {
-      updateMutation.mutate({ id: id!, data: values as any });
+      const updateData: UpdateAssetRequest = {
+        asset_name: values.asset_name,
+        category_id: values.category_id,
+        serial_number: values.serial_number,
+        brand: values.brand,
+        model: values.model,
+        condition: values.condition as UpdateAssetRequest["condition"],
+        status: values.status as UpdateAssetRequest["status"],
+        purchase_date: values.purchase_date,
+        purchase_cost: values.purchase_cost,
+        supplier: values.supplier,
+        warranty_expiry: values.warranty_expiry,
+        useful_life_years: values.useful_life_years,
+        province_id: values.province_id,
+        district_id: values.district_id,
+        facility_id: values.facility_id,
+        assigned_to_user: values.assigned_to_user,
+      };
+      updateMutation.mutate({ id: id!, data: updateData });
     } else {
-      createMutation.mutate({ data: values as any });
+      const createData: CreateAssetRequest = {
+        asset_name: values.asset_name,
+        asset_tag: values.asset_tag,
+        category_id: values.category_id,
+        serial_number: values.serial_number,
+        brand: values.brand,
+        model: values.model,
+        condition: values.condition as CreateAssetRequestCondition,
+        status: values.status as CreateAssetRequestStatus,
+        purchase_date: values.purchase_date,
+        purchase_cost: values.purchase_cost,
+        supplier: values.supplier,
+        warranty_expiry: values.warranty_expiry,
+        useful_life_years: values.useful_life_years,
+        province_id: values.province_id,
+        district_id: values.district_id,
+        facility_id: values.facility_id,
+        assigned_to_user: values.assigned_to_user,
+      };
+      createMutation.mutate({ data: createData });
     }
   };
 
   const nextStep = async () => {
-    let fieldsToValidate: any[] = [];
-    if (step === 1) fieldsToValidate = ["asset_name", "asset_tag", "category_id", "condition", "status"];
-    if (step === 2) fieldsToValidate = ["purchase_cost", "useful_life_years"];
-    if (step === 3) fieldsToValidate = ["province_id"];
+    const fieldsToValidate: (keyof AssetFormValues)[] =
+      step === 1 ? ["asset_name", "asset_tag", "category_id", "condition", "status"] :
+      step === 2 ? ["purchase_cost", "useful_life_years"] :
+      step === 3 ? ["province_id"] :
+      [];
 
     const isStepValid = await form.trigger(fieldsToValidate);
     if (isStepValid) setStep(s => s + 1);
