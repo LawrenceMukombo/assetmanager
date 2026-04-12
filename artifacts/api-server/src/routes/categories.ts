@@ -20,14 +20,14 @@ router.get("/v1/categories", requireAuth, async (req, res) => {
     res.json({ success: true, message: "Categories retrieved", data: rows });
   } catch (err) {
     req.log.error({ err }, "Get categories error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
 router.post("/v1/categories", requireAdminRole, async (req, res) => {
   const { category_name, description } = req.body;
   if (!category_name) {
-    res.status(400).json({ success: false, message: "category_name is required" });
+    res.status(400).json({ success: false, message: "category_name is required", data: null });
     return;
   }
   try {
@@ -38,11 +38,11 @@ router.post("/v1/categories", requireAdminRole, async (req, res) => {
     res.status(201).json({ success: true, message: "Category created", data: row });
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "23505") {
-      res.status(409).json({ success: false, message: "Category name already exists" });
+      res.status(409).json({ success: false, message: "Category name already exists", data: null });
       return;
     }
     req.log.error({ err }, "Create category error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
@@ -58,13 +58,13 @@ router.put("/v1/categories/:id", requireAdminRole, async (req, res) => {
       .where(eq(assetCategories.id, req.params.id as string))
       .returning();
     if (!row) {
-      res.status(404).json({ success: false, message: "Category not found" });
+      res.status(404).json({ success: false, message: "Category not found", data: null });
       return;
     }
     res.json({ success: true, message: "Category updated", data: row });
   } catch (err) {
     req.log.error({ err }, "Update category error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
@@ -75,13 +75,13 @@ router.delete("/v1/categories/:id", requireAdminRole, async (req, res) => {
       .where(eq(assetCategories.id, req.params.id as string))
       .returning();
     if (!row) {
-      res.status(404).json({ success: false, message: "Category not found" });
+      res.status(404).json({ success: false, message: "Category not found", data: null });
       return;
     }
-    res.json({ success: true, message: "Category deleted" });
+    res.json({ success: true, message: "Category deleted", data: null });
   } catch (err) {
     req.log.error({ err }, "Delete category error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 

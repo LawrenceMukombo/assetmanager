@@ -120,7 +120,7 @@ router.get("/v1/assets", requireAuth, enforceScopeFilter, async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Get assets error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
@@ -133,12 +133,12 @@ router.post("/v1/assets", requireAuth, requireAssetAdmin, async (req, res) => {
   const body = req.body;
 
   if (!body.asset_name || !body.asset_tag) {
-    res.status(400).json({ success: false, message: "asset_name and asset_tag are required" });
+    res.status(400).json({ success: false, message: "asset_name and asset_tag are required", data: null });
     return;
   }
 
   if (scopeLevel !== "national" && userProvinceId && body.province_id && body.province_id !== userProvinceId) {
-    res.status(403).json({ success: false, message: "Cannot create asset outside your province" });
+    res.status(403).json({ success: false, message: "Cannot create asset outside your province", data: null });
     return;
   }
 
@@ -178,11 +178,11 @@ router.post("/v1/assets", requireAuth, requireAssetAdmin, async (req, res) => {
     res.status(201).json({ success: true, message: "Asset created", data: row });
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "23505") {
-      res.status(409).json({ success: false, message: "Asset tag already exists" });
+      res.status(409).json({ success: false, message: "Asset tag already exists", data: null });
       return;
     }
     req.log.error({ err }, "Create asset error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
@@ -239,12 +239,12 @@ router.get("/v1/assets/:id", requireAuth, async (req, res) => {
       .limit(1);
 
     if (!row) {
-      res.status(404).json({ success: false, message: "Asset not found" });
+      res.status(404).json({ success: false, message: "Asset not found", data: null });
       return;
     }
 
     if (req.user!.scopeLevel !== "national" && req.user!.provinceId && row.province?.id !== req.user!.provinceId) {
-      res.status(403).json({ success: false, message: "Access denied" });
+      res.status(403).json({ success: false, message: "Access denied", data: null });
       return;
     }
 
@@ -255,10 +255,10 @@ router.get("/v1/assets/:id", requireAuth, async (req, res) => {
       .orderBy(desc(activityLogs.createdAt))
       .limit(20);
 
-    res.json({ success: true, message: "Asset retrieved", data: { ...row, activity_logs: logs } });
+    res.json({ success: true, message: "Asset retrieved", data: { ...row, activity_logs: logs, data: null } });
   } catch (err) {
     req.log.error({ err }, "Get asset error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
@@ -273,12 +273,12 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
       .limit(1);
 
     if (!existing) {
-      res.status(404).json({ success: false, message: "Asset not found" });
+      res.status(404).json({ success: false, message: "Asset not found", data: null });
       return;
     }
 
     if (req.user.scopeLevel !== "national" && req.user.provinceId && existing.provinceId !== req.user.provinceId) {
-      res.status(403).json({ success: false, message: "Access denied" });
+      res.status(403).json({ success: false, message: "Access denied", data: null });
       return;
     }
 
@@ -286,7 +286,7 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
 
     const targetProvinceId = body.province_id !== undefined ? body.province_id : existing.provinceId;
     if (req.user.scopeLevel !== "national" && req.user.provinceId && targetProvinceId && targetProvinceId !== req.user.provinceId) {
-      res.status(403).json({ success: false, message: "Cannot reassign asset to a different province" });
+      res.status(403).json({ success: false, message: "Cannot reassign asset to a different province", data: null });
       return;
     }
 
@@ -325,7 +325,7 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
     res.json({ success: true, message: "Asset updated", data: updated });
   } catch (err) {
     req.log.error({ err }, "Update asset error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
@@ -340,12 +340,12 @@ router.delete("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res)
       .limit(1);
 
     if (!existing) {
-      res.status(404).json({ success: false, message: "Asset not found" });
+      res.status(404).json({ success: false, message: "Asset not found", data: null });
       return;
     }
 
     if (req.user.scopeLevel !== "national" && req.user.provinceId && existing.provinceId !== req.user.provinceId) {
-      res.status(403).json({ success: false, message: "Access denied" });
+      res.status(403).json({ success: false, message: "Access denied", data: null });
       return;
     }
 
@@ -362,10 +362,10 @@ router.delete("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res)
       description: `Deleted asset ${existing.assetTag}`,
     });
 
-    res.json({ success: true, message: "Asset deleted" });
+    res.json({ success: true, message: "Asset deleted", data: null });
   } catch (err) {
     req.log.error({ err }, "Delete asset error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
@@ -389,12 +389,12 @@ router.get("/v1/assets/:id/qr-data", requireAuth, async (req, res) => {
       .limit(1);
 
     if (!row) {
-      res.status(404).json({ success: false, message: "Asset not found" });
+      res.status(404).json({ success: false, message: "Asset not found", data: null });
       return;
     }
 
     if (req.user!.scopeLevel !== "national" && req.user!.provinceId && row.provinceId !== req.user!.provinceId) {
-      res.status(403).json({ success: false, message: "Access denied" });
+      res.status(403).json({ success: false, message: "Access denied", data: null });
       return;
     }
 
@@ -412,7 +412,7 @@ router.get("/v1/assets/:id/qr-data", requireAuth, async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "QR data error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 

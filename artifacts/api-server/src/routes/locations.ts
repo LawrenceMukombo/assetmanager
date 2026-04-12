@@ -30,7 +30,7 @@ router.get("/v1/locations/provinces", requireAuth, async (req, res) => {
     }
   } catch (err) {
     req.log.error({ err }, "Get provinces error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
@@ -40,7 +40,7 @@ router.get("/v1/locations/provinces/:id", requireAuth, async (req, res) => {
     const provinceId = req.params.id as string;
 
     if (user.scopeLevel !== "national" && user.provinceId && user.provinceId !== provinceId) {
-      res.status(403).json({ success: false, message: "Access denied: outside your geographic scope" });
+      res.status(403).json({ success: false, message: "Access denied: outside your geographic scope", data: null });
       return;
     }
 
@@ -50,13 +50,13 @@ router.get("/v1/locations/provinces/:id", requireAuth, async (req, res) => {
       .where(eq(provinces.id, provinceId))
       .limit(1);
     if (!row) {
-      res.status(404).json({ success: false, message: "Province not found" });
+      res.status(404).json({ success: false, message: "Province not found", data: null });
       return;
     }
     res.json({ success: true, message: "Province retrieved", data: row });
   } catch (err) {
     req.log.error({ err }, "Get province error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
@@ -66,7 +66,7 @@ router.get("/v1/locations/provinces/:id/districts", requireAuth, async (req, res
     const provinceId = req.params.id as string;
 
     if (user.scopeLevel !== "national" && user.provinceId && user.provinceId !== provinceId) {
-      res.status(403).json({ success: false, message: "Access denied: outside your geographic scope" });
+      res.status(403).json({ success: false, message: "Access denied: outside your geographic scope", data: null });
       return;
     }
 
@@ -83,7 +83,7 @@ router.get("/v1/locations/provinces/:id/districts", requireAuth, async (req, res
     res.json({ success: true, message: "Districts retrieved", data: rows });
   } catch (err) {
     req.log.error({ err }, "Get districts error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
@@ -93,7 +93,7 @@ router.get("/v1/locations/districts/:id/facilities", requireAuth, async (req, re
     const districtId = req.params.id as string;
 
     if (user.scopeLevel !== "national" && user.districtId && user.districtId !== districtId) {
-      res.status(403).json({ success: false, message: "Access denied: outside your district scope" });
+      res.status(403).json({ success: false, message: "Access denied: outside your district scope", data: null });
       return;
     }
 
@@ -104,7 +104,7 @@ router.get("/v1/locations/districts/:id/facilities", requireAuth, async (req, re
         .where(eq(districts.id, districtId))
         .limit(1);
       if (districtRow && districtRow.provinceId !== user.provinceId) {
-        res.status(403).json({ success: false, message: "Access denied: outside your geographic scope" });
+        res.status(403).json({ success: false, message: "Access denied: outside your geographic scope", data: null });
         return;
       }
     }
@@ -122,7 +122,7 @@ router.get("/v1/locations/districts/:id/facilities", requireAuth, async (req, re
     res.json({ success: true, message: "Facilities retrieved", data: rows });
   } catch (err) {
     req.log.error({ err }, "Get facilities error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
@@ -132,7 +132,7 @@ router.get("/v1/locations/facilities/:id", requireAuth, async (req, res) => {
     const facilityId = req.params.id as string;
 
     if (user.scopeLevel !== "national" && user.facilityId && user.facilityId !== facilityId) {
-      res.status(403).json({ success: false, message: "Access denied: outside your facility scope" });
+      res.status(403).json({ success: false, message: "Access denied: outside your facility scope", data: null });
       return;
     }
 
@@ -143,7 +143,7 @@ router.get("/v1/locations/facilities/:id", requireAuth, async (req, res) => {
       .limit(1);
 
     if (!row) {
-      res.status(404).json({ success: false, message: "Facility not found" });
+      res.status(404).json({ success: false, message: "Facility not found", data: null });
       return;
     }
 
@@ -154,7 +154,7 @@ router.get("/v1/locations/facilities/:id", requireAuth, async (req, res) => {
         .where(eq(districts.id, row.districtId))
         .limit(1);
       if (districtRow && districtRow.provinceId !== user.provinceId) {
-        res.status(403).json({ success: false, message: "Access denied: outside your geographic scope" });
+        res.status(403).json({ success: false, message: "Access denied: outside your geographic scope", data: null });
         return;
       }
     }
@@ -162,7 +162,7 @@ router.get("/v1/locations/facilities/:id", requireAuth, async (req, res) => {
     res.json({ success: true, message: "Facility retrieved", data: row });
   } catch (err) {
     req.log.error({ err }, "Get facility error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 

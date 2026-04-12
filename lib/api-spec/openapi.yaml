@@ -802,27 +802,42 @@ components:
   schemas:
     HealthStatus:
       type: object
-      properties:
-        status:
-          type: string
-      required: [status]
-
-    SuccessResponse:
-      type: object
+      description: Standard response envelope for health check
       properties:
         success:
           type: boolean
         message:
           type: string
+        data:
+          type: object
+          nullable: true
+          properties:
+            status:
+              type: string
+      required: [success, message]
+
+    SuccessResponse:
+      type: object
+      description: Standard API response envelope
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          nullable: true
       required: [success, message]
 
     ErrorResponse:
       type: object
+      description: Standard API error response envelope
       properties:
         success:
           type: boolean
         message:
           type: string
+        data:
+          nullable: true
       required: [success, message]
 
     LoginRequest:

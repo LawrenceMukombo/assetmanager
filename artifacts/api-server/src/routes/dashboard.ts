@@ -13,7 +13,7 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
     : req.user.provinceId;
 
   if (!provinceId) {
-    res.status(400).json({ success: false, message: "province_id required for national users" });
+    res.status(400).json({ success: false, message: "province_id required for national users", data: null });
     return;
   }
 
@@ -91,7 +91,7 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Provincial dashboard error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
@@ -152,7 +152,7 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "National dashboard error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 

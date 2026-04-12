@@ -61,7 +61,7 @@ router.get("/v1/reports/assets", requireAuth, enforceScopeFilter, async (req, re
     res.json({ success: true, message: "Report generated", data: rows, total: rows.length });
   } catch (err) {
     req.log.error({ err }, "Reports assets error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
@@ -91,7 +91,7 @@ router.get("/v1/reports/summary", requireAuth, enforceScopeFilter, async (req, r
     res.json({ success: true, message: "Report summary retrieved", data: summary });
   } catch (err) {
     req.log.error({ err }, "Reports summary error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 

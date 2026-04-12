@@ -6,17 +6,21 @@
  * OpenAPI spec version: 1.0.0
  */
 export interface HealthStatus {
-  status: string;
+  success: boolean;
+  message: string;
+  data?: { status: string } | null;
 }
 
 export interface SuccessResponse {
   success: boolean;
   message: string;
+  data?: unknown | null;
 }
 
 export interface ErrorResponse {
   success: boolean;
   message: string;
+  data?: unknown | null;
 }
 
 export interface LoginRequest {

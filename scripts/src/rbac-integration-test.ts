@@ -143,9 +143,21 @@ async function runTests() {
 
   const nacUserList = await getJson(`${API_BASE}/api/v1/users`, nationalToken);
   assert(
-    "National Asset Controller cannot list users → 403",
-    nacUserList.status === 403,
+    "National Asset Controller can list users (scoped read) → 200",
+    nacUserList.status === 200,
     `Status: ${nacUserList.status}, Msg: ${(nacUserList.body as { message?: string }).message}`
+  );
+
+  const nacCreateUser = await postJson(`${API_BASE}/api/v1/users`, nationalToken, {
+    full_name: "Unauthorized",
+    email: "unauth@test.pg",
+    password: "Admin1234!",
+    role_id: "non-existent-role",
+  });
+  assert(
+    "National Asset Controller cannot create users → 403",
+    nacCreateUser.status === 403,
+    `Status: ${nacCreateUser.status}, Msg: ${(nacCreateUser.body as { message?: string }).message}`
   );
 
   console.log("\n--- Section 3: Province Reassignment Protection ---");

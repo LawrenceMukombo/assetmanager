@@ -17,20 +17,20 @@ const router = Router();
 router.post("/v1/auth/login", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
-    res.status(400).json({ success: false, message: "Email and password required" });
+    res.status(400).json({ success: false, message: "Email and password required", data: null });
     return;
   }
 
   try {
     const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
     if (!user || !user.active) {
-      res.status(401).json({ success: false, message: "Invalid credentials" });
+      res.status(401).json({ success: false, message: "Invalid credentials", data: null });
       return;
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
-      res.status(401).json({ success: false, message: "Invalid credentials" });
+      res.status(401).json({ success: false, message: "Invalid credentials", data: null });
       return;
     }
 
@@ -89,26 +89,26 @@ router.post("/v1/auth/login", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Login error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
 router.post("/v1/auth/refresh", async (req, res) => {
   const { refresh_token } = req.body;
   if (!refresh_token) {
-    res.status(400).json({ success: false, message: "Refresh token required" });
+    res.status(400).json({ success: false, message: "Refresh token required", data: null });
     return;
   }
   try {
     const userId = await consumeRefreshToken(refresh_token);
     if (!userId) {
-      res.status(401).json({ success: false, message: "Invalid or expired refresh token" });
+      res.status(401).json({ success: false, message: "Invalid or expired refresh token", data: null });
       return;
     }
 
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!user || !user.active) {
-      res.status(401).json({ success: false, message: "User not found or inactive" });
+      res.status(401).json({ success: false, message: "User not found or inactive", data: null });
       return;
     }
 
@@ -149,17 +149,17 @@ router.post("/v1/auth/refresh", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Refresh token error");
-    res.status(401).json({ success: false, message: "Invalid refresh token" });
+    res.status(401).json({ success: false, message: "Invalid refresh token", data: null });
   }
 });
 
 router.post("/v1/auth/logout", requireAuth, async (req, res) => {
   try {
     await revokeAllRefreshTokens(req.user!.userId);
-    res.json({ success: true, message: "Logged out successfully" });
+    res.json({ success: true, message: "Logged out successfully", data: null });
   } catch (err) {
     req.log.error({ err }, "Logout error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
@@ -167,6 +167,7 @@ router.post("/v1/auth/forgot-password", (_req, res) => {
   res.json({
     success: true,
     message: "If that email exists, a reset link will be sent",
+    data: null,
   });
 });
 

@@ -182,7 +182,7 @@ export function requireUserAdmin(req: Request, res: Response, next: NextFunction
 }
 
 export function requireAssetAdmin(req: Request, res: Response, next: NextFunction): void {
-  const assetAdminRoles = ["Super Admin", "National Asset Controller", "Provincial Admin"];
+  const assetAdminRoles = ["Super Admin", "National Asset Controller", "Provincial Admin", "Provincial Asset Officer"];
   checkRole(req, res, next, (u) => assetAdminRoles.includes(u.roleName), "Insufficient privileges");
 }
 

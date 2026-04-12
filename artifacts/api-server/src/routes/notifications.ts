@@ -17,7 +17,7 @@ router.get("/v1/notifications", requireAuth, async (req, res) => {
     res.json({ success: true, message: "Notifications retrieved", data: rows });
   } catch (err) {
     req.log.error({ err }, "Get notifications error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
@@ -30,13 +30,13 @@ router.patch("/v1/notifications/:id/read", requireAuth, async (req, res) => {
       .where(and(eq(notifications.id, req.params.id as string), eq(notifications.userId, req.user.userId)))
       .returning();
     if (!updated) {
-      res.status(404).json({ success: false, message: "Notification not found" });
+      res.status(404).json({ success: false, message: "Notification not found", data: null });
       return;
     }
-    res.json({ success: true, message: "Marked as read" });
+    res.json({ success: true, message: "Marked as read", data: null });
   } catch (err) {
     req.log.error({ err }, "Mark notification read error");
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
 
