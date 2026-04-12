@@ -1,4 +1,5 @@
 import { useAuth } from "@/hooks/use-auth";
+import { useProvinceBranding } from "@/hooks/use-province-branding";
 import { useUpdateUser } from "@workspace/api-client-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -14,6 +15,7 @@ import { useState } from "react";
 
 const profileSchema = z.object({
   full_name: z.string().min(1, "Name is required"),
+  phone: z.string().optional(),
 });
 
 const passwordSchema = z
@@ -29,14 +31,17 @@ const passwordSchema = z
 
 export default function Settings() {
   const { user } = useAuth();
+  const { branding } = useProvinceBranding();
   const { toast } = useToast();
   const [pwdLoading, setPwdLoading] = useState(false);
 
   const isSuperAdmin = user?.role === "Super Admin";
+  const isProvincialAdmin = user?.role === "Provincial Admin";
+  const isNational = user?.scope_level === "national";
 
   const profileForm = useForm<z.infer<typeof profileSchema>>({
     resolver: zodResolver(profileSchema),
-    defaultValues: { full_name: user?.full_name || "" },
+    defaultValues: { full_name: user?.full_name || "", phone: "" },
   });
 
   const passwordForm = useForm<z.infer<typeof passwordSchema>>({
@@ -123,6 +128,17 @@ export default function Settings() {
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={profileForm.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone Number</FormLabel>
+                        <FormControl><Input placeholder="+675 xxx xxxx" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <div className="pt-2">
                     <Button type="submit" disabled={updateProfileMutation.isPending}>
                       {updateProfileMutation.isPending ? "Saving..." : "Save Changes"}
@@ -187,6 +203,42 @@ export default function Settings() {
           </Card>
         </div>
       </div>
+
+      {!isNational && isProvincialAdmin && branding.provinceName && (
+        <div className="space-y-4">
+          <Separator />
+          <div>
+            <h3 className="text-lg font-semibold">Provincial Branding</h3>
+            <p className="text-sm text-muted-foreground">Your province identity as configured by the system.</p>
+          </div>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                {branding.flagUrl && (
+                  <img
+                    src={branding.flagUrl}
+                    alt={`${branding.provinceName} flag`}
+                    className="h-12 w-18 object-cover rounded border"
+                  />
+                )}
+                <div>
+                  <p className="font-semibold text-lg">{branding.provinceName}</p>
+                  <p className="text-sm text-muted-foreground">Province</p>
+                </div>
+                {branding.themeAccentColor && (
+                  <div className="ml-auto flex items-center gap-2">
+                    <div
+                      className="w-6 h-6 rounded-full border"
+                      style={{ backgroundColor: branding.themeAccentColor }}
+                    />
+                    <span className="text-xs text-muted-foreground">Accent colour</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {isSuperAdmin && (
         <div className="space-y-4">

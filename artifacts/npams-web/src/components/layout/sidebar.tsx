@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useProvinceBranding } from "@/hooks/use-province-branding";
 import {
   Sidebar as SidebarComponent,
   SidebarContent,
@@ -31,21 +32,34 @@ import { ChevronDown } from "lucide-react";
 
 export function Sidebar() {
   const { user, logout } = useAuth();
+  const { branding } = useProvinceBranding();
   const [location] = useLocation();
 
   const isNational = user?.scope_level === "national";
-  const isAdmin = user?.role === "Super Admin" || user?.role === "Provincial Admin";
+  const isAdmin = user?.role === "Super Admin" || user?.role === "Provincial Admin" || user?.role === "National Asset Controller";
+
+  const scopeLabel = isNational
+    ? "National"
+    : branding.provinceName ?? "Provincial";
 
   return (
     <SidebarComponent>
-      <SidebarHeader className="border-b border-[var(--province-accent,hsl(var(--border)))] border-t-4 border-t-[var(--province-accent,hsl(var(--primary)))] p-4">
+      <SidebarHeader className="border-b p-4" style={{ borderTopWidth: 4, borderTopStyle: "solid", borderTopColor: "var(--province-accent, hsl(var(--primary)))" }}>
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center text-primary-foreground font-bold">
-            NP
-          </div>
+          {!isNational && branding.flagUrl ? (
+            <img
+              src={branding.flagUrl}
+              alt={`${branding.provinceName ?? "Province"} flag`}
+              className="w-8 h-6 object-cover rounded-sm border"
+            />
+          ) : (
+            <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center text-primary-foreground font-bold text-xs">
+              NP
+            </div>
+          )}
           <div className="flex flex-col">
             <span className="font-semibold text-sm">NPAMS</span>
-            <span className="text-xs text-muted-foreground truncate">{user?.scope_level === "national" ? "National" : "Provincial"}</span>
+            <span className="text-xs text-muted-foreground truncate">{scopeLabel}</span>
           </div>
         </div>
       </SidebarHeader>

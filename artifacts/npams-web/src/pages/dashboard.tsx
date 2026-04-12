@@ -1,5 +1,7 @@
 import type { ComponentType } from "react";
+import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useProvinceBranding } from "@/hooks/use-province-branding";
 import { useGetNationalDashboard, useGetProvincialDashboard, getGetNationalDashboardQueryKey, getGetProvincialDashboardQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -119,15 +121,26 @@ function NationalDashboard() {
 }
 
 function ProvincialDashboard() {
+  const { applyBranding } = useProvinceBranding();
   const { data, isLoading } = useGetProvincialDashboard(undefined, {
     query: {
       queryKey: getGetProvincialDashboardQueryKey()
     }
   });
 
-  if (isLoading) return <DashboardSkeleton />;
-
   const dashData = data?.data;
+
+  useEffect(() => {
+    if (dashData?.province) {
+      applyBranding({
+        provinceName: dashData.province.provinceName ?? null,
+        flagUrl: dashData.province.flagUrl ?? null,
+        themeAccentColor: dashData.province.themeAccentColor ?? null,
+      });
+    }
+  }, [dashData?.province, applyBranding]);
+
+  if (isLoading) return <DashboardSkeleton />;
   
   // Format data for charts
   const conditionData = dashData?.assets_by_condition?.map(c => ({
@@ -140,11 +153,24 @@ function ProvincialDashboard() {
     value: c.count
   })) || [];
 
+  const provinceName = dashData?.province?.provinceName;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-        <p className="text-muted-foreground">Overview of assets in your jurisdiction.</p>
+      <div className="flex items-center gap-3">
+        {dashData?.province?.flagUrl && (
+          <img
+            src={dashData.province.flagUrl}
+            alt={`${provinceName ?? "Province"} flag`}
+            className="h-8 w-12 object-cover rounded-sm border"
+          />
+        )}
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">
+            {provinceName ? `${provinceName} Dashboard` : "Provincial Dashboard"}
+          </h2>
+          <p className="text-muted-foreground">Overview of assets in your jurisdiction.</p>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -152,6 +178,18 @@ function ProvincialDashboard() {
         <StatCard title="Active Assets" value={dashData?.active_assets?.toLocaleString() ?? "0"} icon={Wrench} />
         <StatCard title="Missing Assets" value={dashData?.missing_assets?.toLocaleString() ?? "0"} icon={AlertTriangle} />
         <StatCard title="Total Value" value={`K ${dashData?.total_value ?? "0"}`} icon={DollarSign} />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <Card className="border-dashed border-muted-foreground/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Assets Due for Service</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-muted-foreground">—</div>
+            <p className="text-xs text-muted-foreground mt-1">Maintenance scheduling coming soon</p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">

@@ -78,9 +78,14 @@ export default function AssetForm() {
   // Mutations
   const createMutation = useCreateAsset({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (response) => {
         toast({ title: "Asset created successfully" });
-        setLocation("/assets");
+        const newAsset = response.data as { id?: string } | null;
+        if (newAsset?.id) {
+          setLocation(`/assets/${newAsset.id}`);
+        } else {
+          setLocation("/assets");
+        }
       },
       onError: (err: Error) => toast({ variant: "destructive", title: "Error", description: err.message })
     }

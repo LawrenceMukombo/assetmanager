@@ -5,6 +5,8 @@ import {
   useDeleteAsset,
   useGetCategories,
   useGetProvinces,
+  useGetDistrictsByProvince,
+  getGetDistrictsByProvinceQueryKey,
   GetAssetsStatus,
   GetAssetsCondition,
 } from "@workspace/api-client-react";
@@ -59,6 +61,7 @@ export default function Assets() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [provinceId, setProvinceId] = useState("");
+  const [districtId, setDistrictId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [status, setStatus] = useState<GetAssetsParams["status"] | "">("");
   const [condition, setCondition] = useState<GetAssetsParams["condition"] | "">("");
@@ -71,6 +74,7 @@ export default function Assets() {
     limit: 10,
     ...(search ? { search } : {}),
     ...(provinceId ? { province_id: provinceId } : {}),
+    ...(districtId ? { district_id: districtId } : {}),
     ...(categoryId ? { category_id: categoryId } : {}),
     ...(status ? { status: status as GetAssetsParams["status"] } : {}),
     ...(condition ? { condition: condition as GetAssetsParams["condition"] } : {}),
@@ -82,6 +86,9 @@ export default function Assets() {
 
   const { data: categoriesData } = useGetCategories();
   const { data: provincesData } = useGetProvinces();
+  const { data: districtsData } = useGetDistrictsByProvince(provinceId, {
+    query: { enabled: !!provinceId, queryKey: getGetDistrictsByProvinceQueryKey(provinceId) },
+  });
 
   const deleteMutation = useDeleteAsset({
     mutation: {
@@ -100,10 +107,11 @@ export default function Assets() {
   const assets = data?.data?.items || [];
   const pagination = data?.data?.pagination;
 
-  const hasActiveFilters = !!(provinceId || categoryId || status || condition);
+  const hasActiveFilters = !!(provinceId || districtId || categoryId || status || condition);
 
   const clearFilters = () => {
     setProvinceId("");
+    setDistrictId("");
     setCategoryId("");
     setStatus("");
     setCondition("");
@@ -145,7 +153,12 @@ export default function Assets() {
           {isNational && (
             <Select
               value={provinceId || ALL}
-              onValueChange={(v) => { setProvinceId(v === ALL ? "" : v); setPage(1); }}
+              onValueChange={(v) => {
+                const newVal = v === ALL ? "" : v;
+                setProvinceId(newVal);
+                setDistrictId("");
+                setPage(1);
+              }}
             >
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="All Provinces" />
@@ -154,6 +167,23 @@ export default function Assets() {
                 <SelectItem value={ALL}>All Provinces</SelectItem>
                 {provincesData?.data?.map((p) => (
                   <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {provinceId && (
+            <Select
+              value={districtId || ALL}
+              onValueChange={(v) => { setDistrictId(v === ALL ? "" : v); setPage(1); }}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="All Districts" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All Districts</SelectItem>
+                {districtsData?.data?.map((d) => (
+                  <SelectItem key={d.id} value={d.id!}>{d.districtName}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
