@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, assetCategories, assets } from "@workspace/db";
-import { requireAuth, requireUserAdmin } from "../lib/auth";
+import { requireAuth, requireAssetAdmin } from "../lib/auth";
 import { count } from "drizzle-orm";
 
 const router = Router();
@@ -24,7 +24,7 @@ router.get("/v1/categories", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/v1/categories", requireUserAdmin, async (req, res) => {
+router.post("/v1/categories", requireAuth, requireAssetAdmin, async (req, res) => {
   const { category_name, description } = req.body;
   if (!category_name) {
     res.status(400).json({ success: false, message: "category_name is required", data: null });
@@ -46,7 +46,7 @@ router.post("/v1/categories", requireUserAdmin, async (req, res) => {
   }
 });
 
-router.put("/v1/categories/:id", requireUserAdmin, async (req, res) => {
+router.put("/v1/categories/:id", requireAuth, requireAssetAdmin, async (req, res) => {
   const { category_name, description } = req.body;
   try {
     const [row] = await db
@@ -68,7 +68,7 @@ router.put("/v1/categories/:id", requireUserAdmin, async (req, res) => {
   }
 });
 
-router.delete("/v1/categories/:id", requireUserAdmin, async (req, res) => {
+router.delete("/v1/categories/:id", requireAuth, requireAssetAdmin, async (req, res) => {
   try {
     const [row] = await db
       .delete(assetCategories)

@@ -1,10 +1,54 @@
 import { Router } from "express";
 import { eq, and } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import { db, users, userRoles, roles, userScope, provinces } from "@workspace/db";
+import { db, users, userRoles, roles, userScope, provinces, districts, facilities } from "@workspace/db";
 import { requireAuth, requireUserAdmin } from "../lib/auth";
 
 const router = Router();
+
+async function validateGeoIntegrity(
+  provinceId: string | null | undefined,
+  districtId: string | null | undefined,
+  facilityId: string | null | undefined,
+): Promise<{ valid: boolean; message: string }> {
+  if (facilityId) {
+    const [fac] = await db
+      .select({ districtId: facilities.districtId })
+      .from(facilities)
+      .where(eq(facilities.id, facilityId))
+      .limit(1);
+    if (!fac) return { valid: false, message: "Facility not found" };
+    if (districtId && fac.districtId !== districtId) {
+      return { valid: false, message: "Facility does not belong to specified district" };
+    }
+    if (provinceId) {
+      const [dist] = await db
+        .select({ provinceId: districts.provinceId })
+        .from(districts)
+        .where(eq(districts.id, fac.districtId))
+        .limit(1);
+      if (!dist || dist.provinceId !== provinceId) {
+        return { valid: false, message: "Facility does not belong to specified province" };
+      }
+    }
+    return { valid: true, message: "" };
+  }
+
+  if (districtId) {
+    const [dist] = await db
+      .select({ provinceId: districts.provinceId })
+      .from(districts)
+      .where(eq(districts.id, districtId))
+      .limit(1);
+    if (!dist) return { valid: false, message: "District not found" };
+    if (provinceId && dist.provinceId !== provinceId) {
+      return { valid: false, message: "District does not belong to specified province" };
+    }
+    return { valid: true, message: "" };
+  }
+
+  return { valid: true, message: "" };
+}
 
 router.get("/v1/users", requireAuth, async (req, res) => {
   if (!req.user) return;
@@ -72,13 +116,21 @@ router.post("/v1/users", requireAuth, requireUserAdmin, async (req, res) => {
     return;
   }
 
+  const effectiveProvinceId: string | null = province_id ?? req.user.provinceId ?? null;
+
   if (req.user.scopeLevel !== "national" && req.user.provinceId && province_id && province_id !== req.user.provinceId) {
     res.status(403).json({ success: false, message: "Cannot create user outside your province", data: null });
     return;
   }
 
-  if (req.user.scopeLevel !== "national" && !province_id && !req.user.provinceId) {
+  if (req.user.scopeLevel !== "national" && !effectiveProvinceId) {
     res.status(400).json({ success: false, message: "province_id is required for provincial admins", data: null });
+    return;
+  }
+
+  const geoCheck = await validateGeoIntegrity(effectiveProvinceId, district_id, facility_id);
+  if (!geoCheck.valid) {
+    res.status(400).json({ success: false, message: geoCheck.message, data: null });
     return;
   }
 
@@ -103,7 +155,7 @@ router.post("/v1/users", requireAuth, requireUserAdmin, async (req, res) => {
     await db.insert(userRoles).values({ userId: user.id, roleId: role_id });
     await db.insert(userScope).values({
       userId: user.id,
-      provinceId: province_id ?? req.user.provinceId ?? null,
+      provinceId: effectiveProvinceId,
       districtId: district_id ?? null,
       facilityId: facility_id ?? null,
     });
@@ -180,31 +232,83 @@ router.get("/v1/users/:id", requireAuth, async (req, res) => {
 router.put("/v1/users/:id", requireAuth, requireUserAdmin, async (req, res) => {
   if (!req.user) return;
 
+  const targetId = req.params.id as string;
+
   try {
-    const [targetUser] = await db
+    const [existingUser] = await db
       .select({ id: users.id })
       .from(users)
-      .leftJoin(userScope, eq(userScope.userId, users.id))
-      .where(eq(users.id, req.params.id as string))
+      .where(eq(users.id, targetId))
       .limit(1);
 
-    if (!targetUser) {
+    if (!existingUser) {
       res.status(404).json({ success: false, message: "User not found", data: null });
       return;
     }
 
-    const [targetScope] = await db.select().from(userScope).where(eq(userScope.userId, req.params.id as string)).limit(1);
-    if (req.user.scopeLevel !== "national" && targetScope?.provinceId !== req.user.provinceId) {
+    const [existingScope] = await db.select().from(userScope).where(eq(userScope.userId, targetId)).limit(1);
+
+    if (req.user.scopeLevel !== "national" && existingScope?.provinceId !== req.user.provinceId) {
       res.status(403).json({ success: false, message: "Cannot modify user outside your province", data: null });
       return;
     }
 
-    const { full_name, phone_number } = req.body;
+    const { full_name, phone_number, role_id, province_id, district_id, facility_id } = req.body;
+
+    const newProvinceId: string | null | undefined = province_id !== undefined ? (province_id as string | null) : existingScope?.provinceId;
+    const newDistrictId: string | null | undefined = district_id !== undefined ? (district_id as string | null) : existingScope?.districtId;
+    const newFacilityId: string | null | undefined = facility_id !== undefined ? (facility_id as string | null) : existingScope?.facilityId;
+
+    if (req.user.scopeLevel !== "national" && province_id && province_id !== req.user.provinceId) {
+      res.status(403).json({ success: false, message: "Cannot reassign user to a different province", data: null });
+      return;
+    }
+
+    if (province_id !== undefined || district_id !== undefined || facility_id !== undefined) {
+      const geoCheck = await validateGeoIntegrity(newProvinceId, newDistrictId, newFacilityId);
+      if (!geoCheck.valid) {
+        res.status(400).json({ success: false, message: geoCheck.message, data: null });
+        return;
+      }
+    }
+
+    if (role_id) {
+      const [targetRole] = await db.select().from(roles).where(eq(roles.id, role_id as string)).limit(1);
+      if (!targetRole) {
+        res.status(400).json({ success: false, message: "Role not found", data: null });
+        return;
+      }
+      if (req.user.scopeLevel !== "national" && targetRole.scopeLevel === "national") {
+        res.status(403).json({ success: false, message: "Cannot assign national-level roles", data: null });
+        return;
+      }
+    }
+
     const [updated] = await db
       .update(users)
-      .set({ fullName: full_name, phoneNumber: phone_number, updatedAt: new Date() })
-      .where(eq(users.id, req.params.id as string))
+      .set({
+        ...(full_name !== undefined && { fullName: full_name as string }),
+        ...(phone_number !== undefined && { phoneNumber: phone_number as string }),
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, targetId))
       .returning();
+
+    if (role_id) {
+      await db.delete(userRoles).where(eq(userRoles.userId, targetId));
+      await db.insert(userRoles).values({ userId: targetId, roleId: role_id as string });
+    }
+
+    if (province_id !== undefined || district_id !== undefined || facility_id !== undefined) {
+      await db
+        .update(userScope)
+        .set({
+          ...(province_id !== undefined && { provinceId: province_id as string | null }),
+          ...(district_id !== undefined && { districtId: district_id as string | null }),
+          ...(facility_id !== undefined && { facilityId: facility_id as string | null }),
+        })
+        .where(eq(userScope.userId, targetId));
+    }
 
     res.json({ success: true, message: "User updated", data: { id: updated.id, fullName: updated.fullName } });
   } catch (err) {
