@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { eq, and, isNull, ilike, or, sql, desc } from "drizzle-orm";
 import { db, assets, assetCategories, provinces, districts, facilities, users, activityLogs } from "@workspace/db";
-import { requireAuth, enforceScopeFilter, requireAssetAdmin } from "../lib/auth";
+import { requireAuth, enforceScopeFilter, requireAssetAdmin, isWithinAssetScope } from "../lib/auth";
 
 const router = Router();
 
@@ -137,9 +137,15 @@ router.post("/v1/assets", requireAuth, requireAssetAdmin, async (req, res) => {
     return;
   }
 
-  if (scopeLevel !== "national" && userProvinceId && body.province_id && body.province_id !== userProvinceId) {
-    res.status(403).json({ success: false, message: "Cannot create asset outside your province", data: null });
-    return;
+  if (scopeLevel !== "national" && body.province_id) {
+    if (!isWithinAssetScope(req.user, {
+      provinceId: body.province_id as string,
+      districtId: body.district_id as string | undefined,
+      facilityId: body.facility_id as string | undefined,
+    })) {
+      res.status(403).json({ success: false, message: "Cannot create asset outside your geographic scope", data: null });
+      return;
+    }
   }
 
   try {
@@ -243,7 +249,11 @@ router.get("/v1/assets/:id", requireAuth, async (req, res) => {
       return;
     }
 
-    if (req.user!.scopeLevel !== "national" && req.user!.provinceId && row.province?.id !== req.user!.provinceId) {
+    if (!isWithinAssetScope(req.user!, {
+      provinceId: row.province?.id ?? "",
+      districtId: row.district?.id,
+      facilityId: row.facility?.id,
+    })) {
       res.status(403).json({ success: false, message: "Access denied", data: null });
       return;
     }
@@ -255,7 +265,7 @@ router.get("/v1/assets/:id", requireAuth, async (req, res) => {
       .orderBy(desc(activityLogs.createdAt))
       .limit(20);
 
-    res.json({ success: true, message: "Asset retrieved", data: { ...row, activity_logs: logs, data: null } });
+    res.json({ success: true, message: "Asset retrieved", data: { ...row, activity_logs: logs } });
   } catch (err) {
     req.log.error({ err }, "Get asset error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
@@ -267,7 +277,7 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
 
   try {
     const [existing] = await db
-      .select({ id: assets.id, provinceId: assets.provinceId })
+      .select({ id: assets.id, provinceId: assets.provinceId, districtId: assets.districtId, facilityId: assets.facilityId, assetTag: assets.assetTag })
       .from(assets)
       .where(and(eq(assets.id, req.params.id as string), isNull(assets.deletedAt)))
       .limit(1);
@@ -277,7 +287,11 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
       return;
     }
 
-    if (req.user.scopeLevel !== "national" && req.user.provinceId && existing.provinceId !== req.user.provinceId) {
+    if (!isWithinAssetScope(req.user, {
+      provinceId: existing.provinceId,
+      districtId: existing.districtId,
+      facilityId: existing.facilityId,
+    })) {
       res.status(403).json({ success: false, message: "Access denied", data: null });
       return;
     }
@@ -285,7 +299,7 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
     const body = req.body;
 
     const targetProvinceId = body.province_id !== undefined ? body.province_id : existing.provinceId;
-    if (req.user.scopeLevel !== "national" && req.user.provinceId && targetProvinceId && targetProvinceId !== req.user.provinceId) {
+    if (req.user.scopeLevel !== "national" && targetProvinceId && targetProvinceId !== existing.provinceId) {
       res.status(403).json({ success: false, message: "Cannot reassign asset to a different province", data: null });
       return;
     }
@@ -334,7 +348,7 @@ router.delete("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res)
 
   try {
     const [existing] = await db
-      .select({ id: assets.id, provinceId: assets.provinceId, assetTag: assets.assetTag })
+      .select({ id: assets.id, provinceId: assets.provinceId, districtId: assets.districtId, facilityId: assets.facilityId, assetTag: assets.assetTag })
       .from(assets)
       .where(and(eq(assets.id, req.params.id as string), isNull(assets.deletedAt)))
       .limit(1);
@@ -344,7 +358,11 @@ router.delete("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res)
       return;
     }
 
-    if (req.user.scopeLevel !== "national" && req.user.provinceId && existing.provinceId !== req.user.provinceId) {
+    if (!isWithinAssetScope(req.user, {
+      provinceId: existing.provinceId,
+      districtId: existing.districtId,
+      facilityId: existing.facilityId,
+    })) {
       res.status(403).json({ success: false, message: "Access denied", data: null });
       return;
     }
@@ -379,6 +397,8 @@ router.get("/v1/assets/:id/qr-data", requireAuth, async (req, res) => {
         serialNumber: assets.serialNumber,
         status: assets.status,
         provinceId: assets.provinceId,
+        districtId: assets.districtId,
+        facilityId: assets.facilityId,
         provinceName: provinces.provinceName,
         facilityName: facilities.facilityName,
       })
@@ -393,7 +413,11 @@ router.get("/v1/assets/:id/qr-data", requireAuth, async (req, res) => {
       return;
     }
 
-    if (req.user!.scopeLevel !== "national" && req.user!.provinceId && row.provinceId !== req.user!.provinceId) {
+    if (!isWithinAssetScope(req.user!, {
+      provinceId: row.provinceId,
+      districtId: row.districtId,
+      facilityId: row.facilityId,
+    })) {
       res.status(403).json({ success: false, message: "Access denied", data: null });
       return;
     }

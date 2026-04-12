@@ -542,12 +542,16 @@ category_id?: string;
 
 export type GetAssetsReport200 = {
   success?: boolean;
-  data?: AssetReportRow[];
-  total?: number;
+  message?: string;
+  data?: {
+    items: AssetReportRow[];
+    total: number;
+  };
 };
 
 export type GetReportSummary200 = {
   success?: boolean;
+  message?: string;
   data?: ProvinceSummaryRow[];
 };
 

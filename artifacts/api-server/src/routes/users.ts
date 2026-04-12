@@ -47,7 +47,7 @@ router.get("/v1/users", requireAuth, async (req, res) => {
               return u.scope?.facilityId === user.facilityId;
             }
             if (user.districtId) {
-              return u.scope?.districtId === user.districtId || u.scope?.facilityId != null;
+              return u.scope?.districtId === user.districtId;
             }
             if (user.provinceId) {
               return u.scope?.provinceId === user.provinceId;

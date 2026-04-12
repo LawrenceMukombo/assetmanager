@@ -119,7 +119,7 @@ async function loadDbScope(userId: string): Promise<TokenPayload | null> {
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({ success: false, message: "Authentication required" });
+    res.status(401).json({ success: false, message: "Authentication required", data: null });
     return;
   }
   const token = authHeader.slice(7);
@@ -128,21 +128,21 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   try {
     tokenPayload = verifyAccessToken(token);
   } catch {
-    res.status(401).json({ success: false, message: "Invalid or expired token" });
+    res.status(401).json({ success: false, message: "Invalid or expired token", data: null });
     return;
   }
 
   loadDbScope(tokenPayload.userId)
     .then((dbUser) => {
       if (!dbUser) {
-        res.status(401).json({ success: false, message: "User account inactive or not found" });
+        res.status(401).json({ success: false, message: "User account inactive or not found", data: null });
         return;
       }
       req.user = { ...dbUser, email: tokenPayload.email };
       next();
     })
     .catch(() => {
-      res.status(500).json({ success: false, message: "Authentication error" });
+      res.status(500).json({ success: false, message: "Authentication error", data: null });
     });
 }
 
@@ -202,6 +202,30 @@ export function resolveEffectiveScope(user: TokenPayload): EffectiveScope {
     districtId: user.scopedDistrictId ?? null,
     facilityId: user.scopedFacilityId ?? null,
   };
+}
+
+export interface AssetScopeCheckFields {
+  provinceId: string;
+  districtId?: string | null;
+  facilityId?: string | null;
+}
+
+export function isWithinAssetScope(user: TokenPayload, asset: AssetScopeCheckFields): boolean {
+  if (user.scopeLevel === "national") return true;
+
+  if (user.facilityId) {
+    return asset.facilityId === user.facilityId;
+  }
+
+  if (user.districtId) {
+    return asset.districtId === user.districtId;
+  }
+
+  if (user.provinceId) {
+    return asset.provinceId === user.provinceId;
+  }
+
+  return false;
 }
 
 export function enforceScopeFilter(

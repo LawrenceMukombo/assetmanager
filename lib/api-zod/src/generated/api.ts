@@ -742,28 +742,33 @@ export const GetAssetsReportQueryParams = zod.object({
 
 export const GetAssetsReportResponse = zod.object({
   success: zod.boolean().optional(),
+  message: zod.string().optional(),
   data: zod
-    .array(
-      zod.object({
-        asset_tag: zod.string().optional(),
-        asset_name: zod.string().optional(),
-        serial_number: zod.string().nullish(),
-        brand: zod.string().nullish(),
-        model: zod.string().nullish(),
-        status: zod.string().optional(),
-        condition: zod.string().optional(),
-        purchase_date: zod.string().nullish(),
-        purchase_cost: zod.string().nullish(),
-        supplier: zod.string().nullish(),
-        category_name: zod.string().nullish(),
-        province_name: zod.string().nullish(),
-        district_name: zod.string().nullish(),
-        facility_name: zod.string().nullish(),
-        created_at: zod.coerce.date().optional(),
-      }),
-    )
+    .object({
+      items: zod
+        .array(
+          zod.object({
+            asset_tag: zod.string().optional(),
+            asset_name: zod.string().optional(),
+            serial_number: zod.string().nullish(),
+            brand: zod.string().nullish(),
+            model: zod.string().nullish(),
+            status: zod.string().optional(),
+            condition: zod.string().optional(),
+            purchase_date: zod.string().nullish(),
+            purchase_cost: zod.string().nullish(),
+            supplier: zod.string().nullish(),
+            category_name: zod.string().nullish(),
+            province_name: zod.string().nullish(),
+            district_name: zod.string().nullish(),
+            facility_name: zod.string().nullish(),
+            created_at: zod.coerce.date().optional(),
+          }),
+        )
+        .optional(),
+      total: zod.number().optional(),
+    })
     .optional(),
-  total: zod.number().optional(),
 });
 
 /**
@@ -771,6 +776,7 @@ export const GetAssetsReportResponse = zod.object({
  */
 export const GetReportSummaryResponse = zod.object({
   success: zod.boolean().optional(),
+  message: zod.string().optional(),
   data: zod
     .array(
       zod.object({

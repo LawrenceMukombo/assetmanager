@@ -720,12 +720,17 @@ paths:
                 properties:
                   success:
                     type: boolean
+                  message:
+                    type: string
                   data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/AssetReportRow"
-                  total:
-                    type: integer
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AssetReportRow"
+                      total:
+                        type: integer
 
   /v1/reports/summary:
     get:
@@ -744,6 +749,8 @@ paths:
                 properties:
                   success:
                     type: boolean
+                  message:
+                    type: string
                   data:
                     type: array
                     items:
