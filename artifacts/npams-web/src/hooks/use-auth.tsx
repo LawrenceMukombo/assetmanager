@@ -56,6 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (refresh_token) localStorage.setItem("npams_refresh", refresh_token);
       if (user) localStorage.setItem("npams_user", JSON.stringify(user));
 
+      if (user?.scope_level === "national") {
+        localStorage.removeItem("npams_province_branding");
+        document.documentElement.style.removeProperty("--province-accent");
+      }
+
       setState({ isAuthenticated: true, user: user ?? null, isLoading: false });
       setLocation("/dashboard");
     } else {

@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Shield } from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -57,50 +56,60 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
-      <div className="w-full max-w-md bg-card border rounded-xl shadow-lg p-8">
-        <div className="flex flex-col items-center justify-center text-center mb-8">
-          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4 text-primary">
-            <Shield className="w-8 h-8" />
+      <div className="w-full max-w-md bg-card border rounded-xl shadow-lg overflow-hidden">
+        <div className="bg-primary px-8 py-6 flex flex-col items-center text-center">
+          <div className="w-16 h-16 bg-white/15 rounded-full flex items-center justify-center mb-3 border-2 border-white/30">
+            <svg viewBox="0 0 48 48" className="w-9 h-9 fill-white" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M24 4L6 14v10c0 10.5 7.7 20.3 18 22.9C35.3 44.3 43 34.5 43 24V14L24 4zm0 4.2l15 8.6v7.2c0 8.7-6.3 16.9-15 19.3-8.7-2.4-15-10.6-15-19.3v-7.2L24 8.2z"/>
+              <path d="M24 15a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 2.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z"/>
+              <circle cx="24" cy="24" r="3"/>
+            </svg>
           </div>
-          <h1 className="text-2xl font-bold text-foreground">NPAMS</h1>
-          <p className="text-muted-foreground mt-2">National Public Asset Management System</p>
+          <h1 className="text-xl font-bold text-white tracking-wide">NPAMS</h1>
+          <p className="text-white/80 text-sm mt-1">National Public Asset Management System</p>
+          <p className="text-white/60 text-xs mt-0.5">Independent State of Papua New Guinea</p>
         </div>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email Address</FormLabel>
-                  <FormControl>
-                    <Input placeholder="name@gov.pg" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+        <div className="px-8 py-8">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email Address</FormLabel>
+                    <FormControl>
+                      <Input placeholder="name@gov.pg" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Password</FormLabel>
-                  <FormControl>
-                    <Input type="password" placeholder="••••••••" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="••••••••" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Signing in..." : "Sign In"}
-            </Button>
-          </form>
-        </Form>
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? "Signing in..." : "Sign In"}
+              </Button>
+            </form>
+          </Form>
+          <p className="text-center text-xs text-muted-foreground mt-6">
+            For authorised government personnel only
+          </p>
+        </div>
       </div>
     </div>
   );

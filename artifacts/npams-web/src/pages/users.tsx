@@ -11,6 +11,7 @@ import {
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { ADMIN_ROLES } from "@/App";
 import { Redirect } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -55,7 +56,7 @@ type UserFormValues = z.infer<typeof userSchema>;
 
 export default function Users() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "Super Admin" || user?.role === "Provincial Admin";
+  const isAdmin = ADMIN_ROLES.includes(user?.role as typeof ADMIN_ROLES[number]);
   const { toast } = useToast();
 
   const [isAddOpen, setIsAddOpen] = useState(false);
