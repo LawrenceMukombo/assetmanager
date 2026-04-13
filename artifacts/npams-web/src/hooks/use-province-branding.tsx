@@ -4,6 +4,7 @@ interface ProvinceBranding {
   provinceName: string | null;
   flagUrl: string | null;
   themeAccentColor: string | null;
+  flagColors: string[];
 }
 
 interface ProvinceBrandingContextType {
@@ -17,18 +18,28 @@ const STORAGE_KEY = "npams_province_branding";
 function loadFromStorage(): ProvinceBranding {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as ProvinceBranding;
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<ProvinceBranding>;
+      return {
+        provinceName: parsed.provinceName ?? null,
+        flagUrl: parsed.flagUrl ?? null,
+        themeAccentColor: parsed.themeAccentColor ?? null,
+        flagColors: Array.isArray(parsed.flagColors) ? parsed.flagColors : [],
+      };
+    }
   } catch {
     // ignore
   }
-  return { provinceName: null, flagUrl: null, themeAccentColor: null };
+  return { provinceName: null, flagUrl: null, themeAccentColor: null, flagColors: [] };
 }
 
-function applyAccentCss(color: string | null) {
-  if (color) {
-    document.documentElement.style.setProperty("--province-accent", color);
+function applyAccentCss(colors: string[], singleColor: string | null) {
+  const root = document.documentElement;
+  const primary = colors[0] ?? singleColor;
+  if (primary) {
+    root.style.setProperty("--province-accent", primary);
   } else {
-    document.documentElement.style.removeProperty("--province-accent");
+    root.style.removeProperty("--province-accent");
   }
 }
 
@@ -38,12 +49,12 @@ export function ProvinceBrandingProvider({ children }: { children: ReactNode }) 
   const [branding, setBranding] = useState<ProvinceBranding>(loadFromStorage);
 
   useEffect(() => {
-    applyAccentCss(branding.themeAccentColor);
+    applyAccentCss(branding.flagColors, branding.themeAccentColor);
   }, []);
 
   const applyBranding = useCallback((b: ProvinceBranding) => {
     setBranding(b);
-    applyAccentCss(b.themeAccentColor);
+    applyAccentCss(b.flagColors, b.themeAccentColor);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(b));
     } catch {
@@ -52,9 +63,9 @@ export function ProvinceBrandingProvider({ children }: { children: ReactNode }) 
   }, []);
 
   const clearBranding = useCallback(() => {
-    const empty: ProvinceBranding = { provinceName: null, flagUrl: null, themeAccentColor: null };
+    const empty: ProvinceBranding = { provinceName: null, flagUrl: null, themeAccentColor: null, flagColors: [] };
     setBranding(empty);
-    applyAccentCss(null);
+    applyAccentCss([], null);
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {

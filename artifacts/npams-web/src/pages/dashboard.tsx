@@ -220,10 +220,12 @@ function ProvincialDashboard() {
 
   useEffect(() => {
     if (dashData?.province) {
+      const province = dashData.province as typeof dashData.province & { flagColors?: string[] };
       applyBranding({
-        provinceName: dashData.province.provinceName ?? null,
-        flagUrl: dashData.province.flagUrl ?? null,
-        themeAccentColor: dashData.province.themeAccentColor ?? null,
+        provinceName: province.provinceName ?? null,
+        flagUrl: province.flagUrl ?? null,
+        themeAccentColor: province.themeAccentColor ?? null,
+        flagColors: Array.isArray(province.flagColors) ? province.flagColors : [],
       });
     }
   }, [dashData?.province, applyBranding]);

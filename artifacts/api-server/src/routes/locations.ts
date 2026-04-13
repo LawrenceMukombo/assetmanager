@@ -187,13 +187,14 @@ router.patch("/v1/locations/provinces/:id", requireAuth, async (req, res) => {
       return;
     }
     const provinceId = String(req.params.id);
-    const { flagUrl, themeAccentColor, provinceName } = req.body as {
+    const { flagUrl, themeAccentColor, flagColors, provinceName } = req.body as {
       flagUrl?: string | null;
       themeAccentColor?: string | null;
+      flagColors?: string[] | null;
       provinceName?: string;
     };
 
-    if (flagUrl === undefined && themeAccentColor === undefined && provinceName === undefined) {
+    if (flagUrl === undefined && themeAccentColor === undefined && provinceName === undefined && flagColors === undefined) {
       res.status(400).json({ success: false, message: "No fields to update", data: null });
       return;
     }
@@ -204,11 +205,16 @@ router.patch("/v1/locations/provinces/:id", requireAuth, async (req, res) => {
       return;
     }
 
+    const validatedColors = Array.isArray(flagColors)
+      ? flagColors.filter((c) => typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c)).slice(0, 8)
+      : flagColors === null ? [] : undefined;
+
     const [updated] = await db
       .update(provinces)
       .set({
         flagUrl: flagUrl !== undefined ? flagUrl : existing[0].flagUrl,
         themeAccentColor: themeAccentColor !== undefined ? themeAccentColor : existing[0].themeAccentColor,
+        flagColors: validatedColors !== undefined ? validatedColors : (existing[0].flagColors ?? []),
         provinceName: provinceName !== undefined ? provinceName : existing[0].provinceName,
       })
       .where(eq(provinces.id, provinceId))

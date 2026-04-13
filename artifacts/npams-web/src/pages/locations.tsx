@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetchJson } from "@/lib/api-fetch";
 
@@ -34,7 +34,7 @@ export default function Locations() {
   const [selectedDistrict, setSelectedDistrict] = useState<string>("");
 
   const [editProvince, setEditProvince] = useState<Province | null>(null);
-  const [editProvinceForm, setEditProvinceForm] = useState({ flagUrl: "", themeAccentColor: "" });
+  const [editProvinceForm, setEditProvinceForm] = useState({ flagUrl: "", themeAccentColor: "", flagColors: [] as string[] });
 
   const [editDistrict, setEditDistrict] = useState<District | null>(null);
   const [editDistrictForm, setEditDistrictForm] = useState({ districtName: "", districtCode: "" });
@@ -67,7 +67,10 @@ export default function Locations() {
 
   const openEditProvince = (p: Province) => {
     setEditProvince(p);
-    setEditProvinceForm({ flagUrl: p.flagUrl ?? "", themeAccentColor: p.themeAccentColor ?? "" });
+    const existingColors = Array.isArray((p as unknown as { flagColors?: string[] }).flagColors)
+      ? (p as unknown as { flagColors: string[] }).flagColors
+      : [];
+    setEditProvinceForm({ flagUrl: p.flagUrl ?? "", themeAccentColor: p.themeAccentColor ?? "", flagColors: existingColors });
   };
 
   const handleSaveProvince = async () => {
@@ -77,7 +80,8 @@ export default function Locations() {
       method: "PATCH",
       body: JSON.stringify({
         flagUrl: editProvinceForm.flagUrl || null,
-        themeAccentColor: editProvinceForm.themeAccentColor || null,
+        themeAccentColor: editProvinceForm.flagColors[0] || editProvinceForm.themeAccentColor || null,
+        flagColors: editProvinceForm.flagColors,
       }),
     });
     setSaving(false);
@@ -200,7 +204,7 @@ export default function Locations() {
                 <TableRow>
                   <TableHead>Flag</TableHead>
                   <TableHead>Province Name</TableHead>
-                  <TableHead>Theme Color</TableHead>
+                  <TableHead>Flag Colors</TableHead>
                   {isSuperAdmin && <TableHead>Actions</TableHead>}
                 </TableRow>
               </TableHeader>
@@ -208,35 +212,44 @@ export default function Locations() {
                 {pLoading ? (
                   <TableRow><TableCell colSpan={isSuperAdmin ? 4 : 3} className="text-center py-4"><Skeleton className="h-4 w-full" /></TableCell></TableRow>
                 ) : (
-                  provincesData?.data?.map(p => (
-                    <TableRow
-                      key={p.id}
-                      className={isSuperAdmin ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}
-                      onClick={() => isSuperAdmin && openEditProvince(p)}
-                    >
-                      <TableCell>
-                        {p.flagUrl
-                          ? <img src={p.flagUrl} alt="flag" className="h-6 w-12 object-contain border rounded-sm bg-muted" />
-                          : <span className="text-muted-foreground text-xs">—</span>}
-                      </TableCell>
-                      <TableCell className="font-medium">{p.provinceName}</TableCell>
-                      <TableCell>
-                        {p.themeAccentColor ? (
-                          <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded-full border" style={{ backgroundColor: p.themeAccentColor }} />
-                            <span className="text-xs text-muted-foreground">{p.themeAccentColor}</span>
-                          </div>
-                        ) : <span className="text-muted-foreground text-xs">—</span>}
-                      </TableCell>
-                      {isSuperAdmin && (
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <Button variant="ghost" size="sm" onClick={() => openEditProvince(p)}>
-                            <Pencil className="w-3 h-3 mr-1" /> Edit Branding
-                          </Button>
+                  provincesData?.data?.map(p => {
+                    const colors: string[] = Array.isArray((p as unknown as { flagColors?: string[] }).flagColors)
+                      ? (p as unknown as { flagColors: string[] }).flagColors
+                      : p.themeAccentColor ? [p.themeAccentColor] : [];
+                    return (
+                      <TableRow
+                        key={p.id}
+                        className={isSuperAdmin ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}
+                        onClick={() => isSuperAdmin && openEditProvince(p)}
+                      >
+                        <TableCell>
+                          {p.flagUrl
+                            ? <img src={p.flagUrl} alt="flag" className="h-6 w-12 object-contain border rounded-sm bg-muted" />
+                            : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
-                      )}
-                    </TableRow>
-                  ))
+                        <TableCell className="font-medium">{p.provinceName}</TableCell>
+                        <TableCell>
+                          {colors.length > 0 ? (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {colors.map((c, i) => (
+                                <div key={i} className="flex items-center gap-1">
+                                  <div className="w-5 h-5 rounded-sm border shadow-sm" style={{ backgroundColor: c }} title={c} />
+                                  <span className="text-xs text-muted-foreground font-mono hidden sm:inline">{c}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : <span className="text-muted-foreground text-xs">—</span>}
+                        </TableCell>
+                        {isSuperAdmin && (
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="sm" onClick={() => openEditProvince(p)}>
+                              <Pencil className="w-3 h-3 mr-1" /> Edit Branding
+                            </Button>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -362,13 +375,13 @@ export default function Locations() {
 
       {isSuperAdmin && editProvince && (
         <Dialog open={!!editProvince} onOpenChange={(open) => { if (!open) setEditProvince(null); }}>
-          <DialogContent>
+          <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>Edit Branding — {editProvince.provinceName}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-2">
+            <div className="space-y-5 py-2">
               <div className="space-y-1">
-                <Label htmlFor="flagUrl">Flag URL</Label>
+                <Label htmlFor="flagUrl">Flag Image URL</Label>
                 <Input
                   id="flagUrl"
                   placeholder="https://example.com/flag.png"
@@ -379,19 +392,82 @@ export default function Locations() {
                   <img src={editProvinceForm.flagUrl} alt="preview" className="h-8 w-14 object-contain border rounded-sm mt-1 bg-muted" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                 )}
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="themeColor">Theme Accent Color (hex)</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="themeColor"
-                    placeholder="#1a5276"
-                    value={editProvinceForm.themeAccentColor}
-                    onChange={(e) => setEditProvinceForm(f => ({ ...f, themeAccentColor: e.target.value }))}
-                  />
-                  {editProvinceForm.themeAccentColor && (
-                    <div className="w-8 h-8 rounded border shrink-0" style={{ backgroundColor: editProvinceForm.themeAccentColor }} />
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Flag Colors</Label>
+                  {editProvinceForm.flagColors.length < 8 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => setEditProvinceForm(f => ({ ...f, flagColors: [...f.flagColors, "#000000"] }))}
+                    >
+                      <Plus className="w-3 h-3 mr-1" /> Add Color
+                    </Button>
                   )}
                 </div>
+                <p className="text-xs text-muted-foreground">Add all colors that appear on the provincial flag. Up to 8 colors.</p>
+
+                {editProvinceForm.flagColors.length === 0 ? (
+                  <div className="border border-dashed rounded-lg p-4 text-center text-sm text-muted-foreground">
+                    No colors set. Click "Add Color" to begin.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {editProvinceForm.flagColors.map((color, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={color}
+                          onChange={(e) => {
+                            const updated = [...editProvinceForm.flagColors];
+                            updated[i] = e.target.value;
+                            setEditProvinceForm(f => ({ ...f, flagColors: updated }));
+                          }}
+                          className="h-9 w-12 rounded border cursor-pointer bg-transparent p-0.5"
+                        />
+                        <Input
+                          value={color}
+                          placeholder="#000000"
+                          maxLength={7}
+                          className="font-mono text-sm flex-1"
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const updated = [...editProvinceForm.flagColors];
+                            updated[i] = val;
+                            setEditProvinceForm(f => ({ ...f, flagColors: updated }));
+                          }}
+                        />
+                        <div className="w-8 h-8 rounded border shrink-0 shadow-sm" style={{ backgroundColor: color }} />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive shrink-0"
+                          onClick={() => {
+                            const updated = editProvinceForm.flagColors.filter((_, idx) => idx !== i);
+                            setEditProvinceForm(f => ({ ...f, flagColors: updated }));
+                          }}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {editProvinceForm.flagColors.length > 0 && (
+                  <div className="flex items-center gap-1 pt-1">
+                    <span className="text-xs text-muted-foreground mr-1">Preview:</span>
+                    <div className="flex rounded overflow-hidden border h-6 flex-1">
+                      {editProvinceForm.flagColors.map((c, i) => (
+                        <div key={i} className="flex-1" style={{ backgroundColor: c }} />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <DialogFooter>

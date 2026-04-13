@@ -47,14 +47,30 @@ export function Header() {
     ? `${branding.provinceName} Asset Management`
     : "Provincial Asset Management";
 
-  const accentStyle = isNational
-    ? { borderBottomColor: "#CE1126", borderBottomWidth: "3px" }
-    : !isNational && branding.themeAccentColor
-    ? { borderBottomColor: branding.themeAccentColor, borderBottomWidth: "3px" }
-    : {};
+  const nationalColors = ["#CE1126", "#000000", "#FCD116"];
+
+  const provinceColors = branding.flagColors?.length
+    ? branding.flagColors
+    : branding.themeAccentColor
+    ? [branding.themeAccentColor]
+    : [];
+
+  const accentColors = isNational ? nationalColors : provinceColors;
+
+  const accentBarStyle =
+    accentColors.length > 1
+      ? {
+          background: `linear-gradient(to right, ${accentColors.map((c, i) => `${c} ${(i / accentColors.length) * 100}%, ${c} ${((i + 1) / accentColors.length) * 100}%`).join(", ")})`,
+          height: "3px",
+        }
+      : accentColors.length === 1
+      ? { background: accentColors[0], height: "3px" }
+      : null;
 
   return (
-    <header className="h-16 border-b flex items-center justify-between px-4 bg-card shrink-0" style={accentStyle}>
+    <header className="border-b flex flex-col bg-card shrink-0" style={{ height: accentBarStyle ? "67px" : "64px" }}>
+      {accentBarStyle && <div style={accentBarStyle} className="w-full shrink-0" />}
+      <div className="flex items-center justify-between px-4 flex-1">
       <div className="flex items-center gap-4">
         <SidebarTrigger />
         <div className="flex items-center gap-3">
@@ -147,6 +163,7 @@ export function Header() {
           </div>
           <span className="text-sm font-medium hidden md:block">{user?.full_name}</span>
         </div>
+      </div>
       </div>
     </header>
   );

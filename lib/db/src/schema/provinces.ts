@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, text, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 
 export const provinces = pgTable("provinces", {
@@ -9,6 +9,7 @@ export const provinces = pgTable("provinces", {
   flagUrl: text("flag_url"),
   logoUrl: text("logo_url"),
   themeAccentColor: varchar("theme_accent_color", { length: 7 }),
+  flagColors: jsonb("flag_colors").$type<string[]>().default([]),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
