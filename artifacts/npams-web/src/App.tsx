@@ -19,6 +19,7 @@ import Users from "@/pages/users";
 import Locations from "@/pages/locations";
 import Notifications from "@/pages/notifications";
 import Settings from "@/pages/settings";
+import GIS from "@/pages/gis";
 
 const queryClient = new QueryClient();
 
@@ -86,6 +87,7 @@ function Router() {
       <ProtectedRoute path="/reports" component={Reports} />
       <ProtectedRoute path="/users" component={Users} requiredRoles={ADMIN_ROLES} />
       <ProtectedRoute path="/locations" component={Locations} requiredRoles={ADMIN_ROLES} />
+      <ProtectedRoute path="/gis" component={GIS} />
       <ProtectedRoute path="/notifications" component={Notifications} />
       <ProtectedRoute path="/settings" component={Settings} />
 

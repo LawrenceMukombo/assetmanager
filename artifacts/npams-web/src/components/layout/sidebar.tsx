@@ -28,6 +28,7 @@ import {
   Settings,
   LogOut,
   Bell,
+  Globe,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
@@ -132,6 +133,15 @@ export function Sidebar() {
                   <Link href="/reports">
                     <FileBarChart />
                     <span>Reports</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location === "/gis"}>
+                  <Link href="/gis">
+                    <Globe />
+                    <span>GIS Map</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
