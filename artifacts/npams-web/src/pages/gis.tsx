@@ -142,11 +142,13 @@ export default function GISPage() {
 
       circle.on("mouseover", function (this: L.CircleMarker) {
         const dimmed = selectedRegionRef.current && selectedRegionRef.current !== prov.region;
-        this.setStyle({ weight: dimmed ? 3 : 4, fillOpacity: dimmed ? 0.45 : 1 });
+        if (dimmed) return;
+        this.setStyle({ weight: 4, fillOpacity: 1 });
       });
       circle.on("mouseout", function (this: L.CircleMarker) {
         const dimmed = selectedRegionRef.current && selectedRegionRef.current !== prov.region;
-        this.setStyle({ weight: 2.5, fillOpacity: dimmed ? 0.12 : 0.82 });
+        if (dimmed) return;
+        this.setStyle({ weight: 2.5, fillOpacity: 0.82 });
       });
 
       circle.addTo(map);
@@ -179,9 +181,9 @@ export default function GISPage() {
       if (!prov) return;
       const dimmed = selectedRegion !== null && prov.region !== selectedRegion;
       circle.setStyle({
-        fillOpacity: dimmed ? 0.12 : 0.82,
-        weight: dimmed ? 1.5 : 2.5,
-        opacity: dimmed ? 0.4 : 1,
+        fillOpacity: dimmed ? 0 : 0.82,
+        weight: dimmed ? 0 : 2.5,
+        opacity: dimmed ? 0 : 1,
       });
     });
   }, [selectedRegion]);
