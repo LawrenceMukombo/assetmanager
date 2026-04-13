@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetchJson } from "@/lib/api-fetch";
+import { FlagColorPicker } from "@/components/flag-color-picker";
 
 interface District {
   id?: string;
@@ -375,11 +376,11 @@ export default function Locations() {
 
       {isSuperAdmin && editProvince && (
         <Dialog open={!!editProvince} onOpenChange={(open) => { if (!open) setEditProvince(null); }}>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>Edit Branding — {editProvince.provinceName}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-5 py-2">
+            <div className="space-y-5 py-2 overflow-y-auto pr-1">
               <div className="space-y-1">
                 <Label htmlFor="flagUrl">Flag Image URL</Label>
                 <Input
@@ -388,10 +389,20 @@ export default function Locations() {
                   value={editProvinceForm.flagUrl}
                   onChange={(e) => setEditProvinceForm(f => ({ ...f, flagUrl: e.target.value }))}
                 />
-                {editProvinceForm.flagUrl && (
-                  <img src={editProvinceForm.flagUrl} alt="preview" className="h-8 w-14 object-contain border rounded-sm mt-1 bg-muted" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                )}
               </div>
+
+              {editProvinceForm.flagUrl && (
+                <FlagColorPicker
+                  flagUrl={editProvinceForm.flagUrl}
+                  currentCount={editProvinceForm.flagColors.length}
+                  maxColors={8}
+                  onColorPicked={(hex) => {
+                    if (editProvinceForm.flagColors.length < 8) {
+                      setEditProvinceForm(f => ({ ...f, flagColors: [...f.flagColors, hex] }));
+                    }
+                  }}
+                />
+              )}
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -408,7 +419,7 @@ export default function Locations() {
                     </Button>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">Add all colors that appear on the provincial flag. Up to 8 colors.</p>
+                <p className="text-xs text-muted-foreground">Click the flag image above to sample colors, or add and adjust them manually below. Up to 8 colors.</p>
 
                 {editProvinceForm.flagColors.length === 0 ? (
                   <div className="border border-dashed rounded-lg p-4 text-center text-sm text-muted-foreground">
