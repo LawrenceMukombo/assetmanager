@@ -209,7 +209,11 @@ export default function Locations() {
                   <TableRow><TableCell colSpan={isSuperAdmin ? 4 : 3} className="text-center py-4"><Skeleton className="h-4 w-full" /></TableCell></TableRow>
                 ) : (
                   provincesData?.data?.map(p => (
-                    <TableRow key={p.id}>
+                    <TableRow
+                      key={p.id}
+                      className={isSuperAdmin ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}
+                      onClick={() => isSuperAdmin && openEditProvince(p)}
+                    >
                       <TableCell>
                         {p.flagUrl
                           ? <img src={p.flagUrl} alt="flag" className="h-6 w-12 object-contain border rounded-sm bg-muted" />
@@ -225,7 +229,7 @@ export default function Locations() {
                         ) : <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
                       {isSuperAdmin && (
-                        <TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <Button variant="ghost" size="sm" onClick={() => openEditProvince(p)}>
                             <Pencil className="w-3 h-3 mr-1" /> Edit Branding
                           </Button>
@@ -263,11 +267,15 @@ export default function Locations() {
                   <TableRow><TableCell colSpan={isSuperAdmin ? 3 : 2} className="text-center py-4">Loading...</TableCell></TableRow>
                 ) : (
                   districtsData?.data?.map(d => (
-                    <TableRow key={d.id}>
+                    <TableRow
+                      key={d.id}
+                      className={isSuperAdmin ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}
+                      onClick={() => isSuperAdmin && openEditDistrict(d as District)}
+                    >
                       <TableCell className="font-medium">{d.districtName}</TableCell>
                       <TableCell>{d.districtCode ?? "—"}</TableCell>
                       {isSuperAdmin && (
-                        <TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <Button variant="ghost" size="sm" onClick={() => openEditDistrict(d as District)}>
                             <Pencil className="w-3 h-3 mr-1" /> Edit
                           </Button>
@@ -323,12 +331,16 @@ export default function Locations() {
                   <TableRow><TableCell colSpan={isSuperAdmin ? 4 : 3} className="text-center py-8 text-muted-foreground">No facilities found in this district.</TableCell></TableRow>
                 ) : (
                   facilitiesData?.data?.map(f => (
-                    <TableRow key={f.id}>
+                    <TableRow
+                      key={f.id}
+                      className={isSuperAdmin ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}
+                      onClick={() => isSuperAdmin && openEditFacility(f as Facility)}
+                    >
                       <TableCell className="font-medium">{f.facilityName}</TableCell>
                       <TableCell>{f.facilityType ?? "—"}</TableCell>
                       <TableCell>{f.address ?? "—"}</TableCell>
                       {isSuperAdmin && (
-                        <TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
                             <Button variant="ghost" size="sm" onClick={() => openEditFacility(f as Facility)}>
                               <Pencil className="w-3 h-3 mr-1" /> Edit

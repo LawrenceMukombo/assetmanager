@@ -147,11 +147,15 @@ export default function Categories() {
                 <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No categories found.</TableCell>
               </TableRow>
             ) : data?.data?.map((cat) => (
-              <TableRow key={cat.id}>
+              <TableRow
+                key={cat.id}
+                className="cursor-pointer hover:bg-muted/50 transition-colors"
+                onClick={() => openEdit(cat)}
+              >
                 <TableCell className="font-medium">{cat.categoryName}</TableCell>
                 <TableCell className="text-muted-foreground">{cat.description || "-"}</TableCell>
                 <TableCell className="text-right font-mono text-sm">{cat.assetCount ?? 0}</TableCell>
-                <TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-2">
                     <Button variant="ghost" size="icon" onClick={() => openEdit(cat)}>
                       <Edit className="w-4 h-4" />

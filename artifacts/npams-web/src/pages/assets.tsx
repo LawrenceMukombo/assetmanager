@@ -275,7 +275,11 @@ export default function Assets() {
                 </TableRow>
               ) : (
                 assets.map((asset) => (
-                  <TableRow key={asset.id}>
+                  <TableRow
+                    key={asset.id}
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => setLocation(`/assets/${asset.id}`)}
+                  >
                     <TableCell className="font-mono text-xs">{asset.assetTag}</TableCell>
                     <TableCell className="font-medium">{asset.assetName}</TableCell>
                     <TableCell>{asset.category?.categoryName || "N/A"}</TableCell>
@@ -287,7 +291,7 @@ export default function Assets() {
                     </TableCell>
                     <TableCell>{asset.province?.provinceName || "N/A"}</TableCell>
                     <TableCell>{asset.facility?.facilityName || "N/A"}</TableCell>
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -299,17 +303,21 @@ export default function Assets() {
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setLocation(`/assets/${asset.id}/edit`)}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => setDeleteId(asset.id!)}
-                          >
-                            <Trash className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
+                          {canCreateAsset && (
+                            <DropdownMenuItem onClick={() => setLocation(`/assets/${asset.id}/edit`)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                          )}
+                          {user?.role === "Super Admin" && (
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setDeleteId(asset.id!)}
+                            >
+                              <Trash className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>

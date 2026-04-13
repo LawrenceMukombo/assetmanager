@@ -306,7 +306,11 @@ export default function Users() {
                     <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No users found.</TableCell>
                   </TableRow>
                 ) : (data?.data as UserRow[])?.map((u) => (
-                  <TableRow key={u.id}>
+                  <TableRow
+                    key={u.id}
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => openEditUser(u)}
+                  >
                     <TableCell className="font-medium">{u.fullName}</TableCell>
                     <TableCell className="text-sm">{u.email}</TableCell>
                     <TableCell><Badge variant="outline">{u.role?.roleName}</Badge></TableCell>
@@ -317,7 +321,7 @@ export default function Users() {
                         {u.active ? "Active" : "Inactive"}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <Switch
                         checked={!!u.active}
                         onCheckedChange={() => {
@@ -330,7 +334,7 @@ export default function Users() {
                         disabled={deactivateMutation.isPending || u.id === user?.id}
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <Button variant="ghost" size="sm" onClick={() => openEditUser(u)}>
                         <Pencil className="w-3 h-3 mr-1" /> Edit Role
                       </Button>
