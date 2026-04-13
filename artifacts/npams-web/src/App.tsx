@@ -1,4 +1,4 @@
-import { ComponentType, ReactNode } from "react";
+import { ComponentType, ReactNode, lazy, Suspense } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -19,7 +19,7 @@ import Users from "@/pages/users";
 import Locations from "@/pages/locations";
 import Notifications from "@/pages/notifications";
 import Settings from "@/pages/settings";
-import GIS from "@/pages/gis";
+const GIS = lazy(() => import("@/pages/gis"));
 
 const queryClient = new QueryClient();
 
@@ -87,7 +87,13 @@ function Router() {
       <ProtectedRoute path="/reports" component={Reports} />
       <ProtectedRoute path="/users" component={Users} requiredRoles={ADMIN_ROLES} />
       <ProtectedRoute path="/locations" component={Locations} requiredRoles={ADMIN_ROLES} />
-      <ProtectedRoute path="/gis" component={GIS} />
+      <Route path="/gis">
+        <AuthGuard>
+          <Suspense fallback={<div className="flex items-center justify-center h-full p-12 text-muted-foreground">Loading map...</div>}>
+            <GIS />
+          </Suspense>
+        </AuthGuard>
+      </Route>
       <ProtectedRoute path="/notifications" component={Notifications} />
       <ProtectedRoute path="/settings" component={Settings} />
 
