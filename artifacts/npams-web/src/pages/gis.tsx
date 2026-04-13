@@ -56,6 +56,8 @@ export default function GISPage() {
   const [selectedProvince, setSelectedProvince] = useState<ProvinceProfile | null>(null);
   const [showDistricts, setShowDistricts] = useState(true);
   const [mapStyle, setMapStyle] = useState<"osm" | "satellite" | "topo">("osm");
+  const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
+  const selectedRegionRef = useRef<string | null>(null);
   const baseLayers = useRef<Record<string, L.TileLayer>>({});
   const currentLayer = useRef<L.TileLayer | null>(null);
 
@@ -139,10 +141,12 @@ export default function GISPage() {
       });
 
       circle.on("mouseover", function (this: L.CircleMarker) {
-        this.setStyle({ weight: 4, fillOpacity: 1 });
+        const dimmed = selectedRegionRef.current && selectedRegionRef.current !== prov.region;
+        this.setStyle({ weight: dimmed ? 3 : 4, fillOpacity: dimmed ? 0.45 : 1 });
       });
       circle.on("mouseout", function (this: L.CircleMarker) {
-        this.setStyle({ weight: 2.5, fillOpacity: 0.82 });
+        const dimmed = selectedRegionRef.current && selectedRegionRef.current !== prov.region;
+        this.setStyle({ weight: 2.5, fillOpacity: dimmed ? 0.12 : 0.82 });
       });
 
       circle.addTo(map);
@@ -167,6 +171,24 @@ export default function GISPage() {
       mapRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    selectedRegionRef.current = selectedRegion;
+    circlesRef.current.forEach((circle, provId) => {
+      const prov = PNG_PROVINCES.find((p) => p.id === provId);
+      if (!prov) return;
+      const dimmed = selectedRegion !== null && prov.region !== selectedRegion;
+      circle.setStyle({
+        fillOpacity: dimmed ? 0.12 : 0.82,
+        weight: dimmed ? 1.5 : 2.5,
+        opacity: dimmed ? 0.4 : 1,
+      });
+    });
+  }, [selectedRegion]);
+
+  const toggleRegionFilter = (region: string) => {
+    setSelectedRegion((prev) => (prev === region ? null : region));
+  };
 
   function updateDistrictMarkers(prov: ProvinceProfile, group: L.LayerGroup) {
     group.clearLayers();
@@ -276,23 +298,71 @@ export default function GISPage() {
         <div className="flex-1 relative">
           <div ref={mapContainerRef} className="w-full h-full" />
 
-          <div className="absolute bottom-10 left-3 z-[1000] bg-background/90 backdrop-blur rounded-lg p-2 border text-xs space-y-1 shadow">
-            <p className="font-semibold text-xs mb-1.5">Regions</p>
-            {Object.entries(regionColors).map(([r, c]) => (
-              <div key={r} className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-full border border-white/50" style={{ background: c }} />
-                <span>{r}</span>
-              </div>
-            ))}
-            <div className="flex items-center gap-1.5 mt-1 pt-1 border-t">
-              <div className="w-3 h-3 rounded-full border border-black" style={{ background: "#FCD116" }} />
-              <span>District capitals</span>
+          <div className="absolute bottom-10 left-3 z-[1000] bg-background/90 backdrop-blur rounded-lg p-2 border text-xs shadow">
+            <div className="flex items-center justify-between mb-1.5 gap-3">
+              <p className="font-semibold text-xs">Regions</p>
+              {selectedRegion && (
+                <button
+                  onClick={() => setSelectedRegion(null)}
+                  className="text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="space-y-0.5">
+              {Object.entries(regionColors).map(([r, c]) => {
+                const count = PNG_PROVINCES.filter((p) => p.region === r).length;
+                const active = selectedRegion === r;
+                const dimmed = selectedRegion !== null && !active;
+                return (
+                  <button
+                    key={r}
+                    onClick={() => toggleRegionFilter(r)}
+                    className={`flex items-center gap-1.5 w-full px-1.5 py-1 rounded transition-all text-left ${
+                      active
+                        ? "bg-foreground/10 font-semibold"
+                        : dimmed
+                        ? "opacity-40"
+                        : "hover:bg-foreground/5"
+                    }`}
+                  >
+                    <div
+                      className="w-3 h-3 rounded-full shrink-0 transition-all"
+                      style={{
+                        background: c,
+                        outline: active ? `2px solid ${c}` : "none",
+                        outlineOffset: "1px",
+                        border: "1.5px solid rgba(255,255,255,0.5)",
+                      }}
+                    />
+                    <span className="flex-1">{r}</span>
+                    <span className={`text-[10px] ${active ? "text-foreground" : "text-muted-foreground"}`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t px-1.5">
+              <div className="w-3 h-3 rounded-full border border-black shrink-0" style={{ background: "#FCD116" }} />
+              <span className="text-muted-foreground">District capitals</span>
             </div>
           </div>
 
           {user?.scope_level === "national" && (
             <div className="absolute top-3 left-3 z-[1000] bg-background/90 backdrop-blur rounded-lg px-3 py-2 border shadow text-xs text-muted-foreground">
-              {PNG_PROVINCES.length} provinces · {PNG_PROVINCES.reduce((a, p) => a + p.num_districts, 0)} districts
+              {selectedRegion ? (
+                <>
+                  <span className="font-semibold" style={{ color: regionColors[selectedRegion] }}>{selectedRegion} Region</span>
+                  {" · "}
+                  {PNG_PROVINCES.filter((p) => p.region === selectedRegion).length} provinces
+                  {" · "}
+                  {PNG_PROVINCES.filter((p) => p.region === selectedRegion).reduce((a, p) => a + p.num_districts, 0)} districts
+                </>
+              ) : (
+                <>{PNG_PROVINCES.length} provinces · {PNG_PROVINCES.reduce((a, p) => a + p.num_districts, 0)} districts</>
+              )}
             </div>
           )}
         </div>
@@ -300,9 +370,19 @@ export default function GISPage() {
         <div className="w-[360px] border-l flex flex-col overflow-hidden bg-background shrink-0">
           {user?.scope_level === "national" && (
             <div className="border-b px-3 py-2 bg-muted/30">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">All Provinces</p>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  {selectedRegion ? `${selectedRegion} Region` : "All Provinces"}
+                </p>
+                <span className="text-[10px] text-muted-foreground">
+                  {selectedRegion
+                    ? PNG_PROVINCES.filter((p) => p.region === selectedRegion).length
+                    : PNG_PROVINCES.length}{" "}
+                  provinces
+                </span>
+              </div>
               <div className="space-y-0.5 max-h-40 overflow-y-auto pr-1">
-                {PNG_PROVINCES.map((p) => (
+                {PNG_PROVINCES.filter((p) => !selectedRegion || p.region === selectedRegion).map((p) => (
                   <button
                     key={p.id}
                     onClick={() => handleProvinceClick(p)}
