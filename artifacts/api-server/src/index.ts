@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { runWarrantyCheck } from "./routes/assets";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,10 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  runWarrantyCheck()
+    .then((count) => {
+      if (count > 0) logger.info({ count }, "Warranty check: notifications created");
+    })
+    .catch((err) => logger.error({ err }, "Warranty check failed"));
 });

@@ -18,6 +18,12 @@ export const assetConditionEnum = pgEnum("asset_condition", [
   "poor",
 ]);
 
+export const depreciationMethodEnum = pgEnum("depreciation_method", [
+  "none",
+  "straight_line",
+  "declining_balance",
+]);
+
 export const assetCategories = pgTable("asset_categories", {
   id: uuid("id").primaryKey().defaultRandom(),
   categoryName: varchar("category_name", { length: 255 }).notNull().unique(),
@@ -40,6 +46,10 @@ export const assets = pgTable(
     supplier: varchar("supplier", { length: 255 }),
     warrantyExpiry: date("warranty_expiry"),
     usefulLifeYears: integer("useful_life_years"),
+    depreciationMethod: depreciationMethodEnum("depreciation_method").notNull().default("none"),
+    salvageValue: numeric("salvage_value", { precision: 15, scale: 2 }),
+    photoUrl: varchar("photo_url", { length: 1024 }),
+    notes: text("notes"),
     status: assetStatusEnum("status").notNull().default("active"),
     condition: assetConditionEnum("condition").notNull().default("good"),
     provinceId: uuid("province_id").notNull().references(() => provinces.id),
@@ -61,7 +71,23 @@ export const assets = pgTable(
   ],
 );
 
+export const assetTransfers = pgTable("asset_transfers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  assetId: uuid("asset_id").notNull().references(() => assets.id),
+  fromProvinceId: uuid("from_province_id").references(() => provinces.id),
+  fromDistrictId: uuid("from_district_id").references(() => districts.id),
+  fromFacilityId: uuid("from_facility_id").references(() => facilities.id),
+  toProvinceId: uuid("to_province_id").notNull().references(() => provinces.id),
+  toDistrictId: uuid("to_district_id").references(() => districts.id),
+  toFacilityId: uuid("to_facility_id").references(() => facilities.id),
+  transferredBy: uuid("transferred_by").references(() => users.id),
+  reason: text("reason"),
+  transferredAt: timestamp("transferred_at").notNull().defaultNow(),
+});
+
 export type AssetCategory = typeof assetCategories.$inferSelect;
 export type InsertAssetCategory = typeof assetCategories.$inferInsert;
 export type Asset = typeof assets.$inferSelect;
 export type InsertAsset = typeof assets.$inferInsert;
+export type AssetTransfer = typeof assetTransfers.$inferSelect;
+export type InsertAssetTransfer = typeof assetTransfers.$inferInsert;

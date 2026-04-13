@@ -76,6 +76,8 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.7",
     "papaparse": "^5.5.3",
     "react-qr-code": "^2.0.18"
   }

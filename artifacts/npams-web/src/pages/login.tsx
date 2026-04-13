@@ -14,6 +14,13 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -26,6 +33,7 @@ export default function Login() {
   const { login } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [showForgotDialog, setShowForgotDialog] = useState(false);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -106,11 +114,48 @@ export default function Login() {
               </Button>
             </form>
           </Form>
-          <p className="text-center text-xs text-muted-foreground mt-6">
+
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => setShowForgotDialog(true)}
+              className="text-sm text-primary hover:underline focus:outline-none"
+            >
+              Forgot your password?
+            </button>
+          </div>
+
+          <p className="text-center text-xs text-muted-foreground mt-4">
             For authorised government personnel only
           </p>
         </div>
       </div>
+
+      <Dialog open={showForgotDialog} onOpenChange={setShowForgotDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Password Reset</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  Self-service password reset is not available for NPAMS accounts.
+                </p>
+                <p>
+                  To reset your password, please contact your system administrator or provincial IT support officer.
+                </p>
+                <p className="font-medium text-foreground">
+                  ICT Support Desk: <span className="font-normal">ict@treasury.gov.pg</span>
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setShowForgotDialog(false)}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

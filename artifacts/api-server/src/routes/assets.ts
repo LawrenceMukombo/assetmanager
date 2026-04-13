@@ -1,9 +1,61 @@
 import { Router } from "express";
-import { eq, and, isNull, ilike, or, sql, desc } from "drizzle-orm";
-import { db, assets, assetCategories, provinces, districts, facilities, users, activityLogs } from "@workspace/db";
+import { eq, and, isNull, ilike, or, sql, desc, lte, gte, isNotNull } from "drizzle-orm";
+import { db, assets, assetCategories, provinces, districts, facilities, users, activityLogs, notifications, assetTransfers } from "@workspace/db";
 import { requireAuth, enforceScopeFilter, requireAssetAdmin, isWithinAssetScope } from "../lib/auth";
 
 const router = Router();
+
+function computeDepreciation(asset: {
+  purchaseCost?: string | null;
+  salvageValue?: string | null;
+  usefulLifeYears?: number | null;
+  purchaseDate?: string | null;
+  depreciationMethod?: string;
+}) {
+  if (
+    asset.depreciationMethod === "none" ||
+    !asset.purchaseCost ||
+    !asset.usefulLifeYears ||
+    !asset.purchaseDate
+  ) {
+    return null;
+  }
+
+  const cost = parseFloat(asset.purchaseCost);
+  const salvage = asset.salvageValue ? parseFloat(asset.salvageValue) : 0;
+  const life = asset.usefulLifeYears;
+  const purchasedAt = new Date(asset.purchaseDate);
+  const now = new Date();
+  const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
+  const yearsElapsed = Math.max(0, (now.getTime() - purchasedAt.getTime()) / msPerYear);
+
+  let currentValue: number;
+  let annualDepreciation: number;
+
+  if (asset.depreciationMethod === "straight_line") {
+    annualDepreciation = (cost - salvage) / life;
+    currentValue = Math.max(salvage, cost - annualDepreciation * yearsElapsed);
+  } else {
+    const rate = 2 / life;
+    annualDepreciation = cost * rate;
+    currentValue = Math.max(salvage, cost * Math.pow(1 - rate, yearsElapsed));
+  }
+
+  const depreciatedAmount = cost - currentValue;
+  const percentDepreciated = cost > 0 ? (depreciatedAmount / cost) * 100 : 0;
+
+  return {
+    method: asset.depreciationMethod,
+    original_cost: cost,
+    salvage_value: salvage,
+    useful_life_years: life,
+    years_elapsed: Math.round(yearsElapsed * 10) / 10,
+    annual_depreciation: Math.round(annualDepreciation * 100) / 100,
+    current_value: Math.round(currentValue * 100) / 100,
+    depreciated_amount: Math.round(depreciatedAmount * 100) / 100,
+    percent_depreciated: Math.round(percentDepreciated * 10) / 10,
+  };
+}
 
 router.get("/v1/assets", requireAuth, enforceScopeFilter, async (req, res) => {
   try {
@@ -68,6 +120,10 @@ router.get("/v1/assets", requireAuth, enforceScopeFilter, async (req, res) => {
         supplier: assets.supplier,
         warrantyExpiry: assets.warrantyExpiry,
         usefulLifeYears: assets.usefulLifeYears,
+        depreciationMethod: assets.depreciationMethod,
+        salvageValue: assets.salvageValue,
+        photoUrl: assets.photoUrl,
+        notes: assets.notes,
         createdAt: assets.createdAt,
         updatedAt: assets.updatedAt,
         category: {
@@ -163,6 +219,10 @@ router.post("/v1/assets", requireAuth, requireAssetAdmin, async (req, res) => {
         supplier: body.supplier ?? null,
         warrantyExpiry: body.warranty_expiry ?? null,
         usefulLifeYears: body.useful_life_years ?? null,
+        depreciationMethod: body.depreciation_method ?? "none",
+        salvageValue: body.salvage_value != null ? String(body.salvage_value) : null,
+        photoUrl: body.photo_url ?? null,
+        notes: body.notes ?? null,
         status: body.status ?? "active",
         condition: body.condition ?? "good",
         provinceId: body.province_id ?? userProvinceId ?? null,
@@ -209,6 +269,10 @@ router.get("/v1/assets/:id", requireAuth, async (req, res) => {
         supplier: assets.supplier,
         warrantyExpiry: assets.warrantyExpiry,
         usefulLifeYears: assets.usefulLifeYears,
+        depreciationMethod: assets.depreciationMethod,
+        salvageValue: assets.salvageValue,
+        photoUrl: assets.photoUrl,
+        notes: assets.notes,
         createdAt: assets.createdAt,
         updatedAt: assets.updatedAt,
         category: {
@@ -265,7 +329,9 @@ router.get("/v1/assets/:id", requireAuth, async (req, res) => {
       .orderBy(desc(activityLogs.createdAt))
       .limit(20);
 
-    res.json({ success: true, message: "Asset retrieved", data: { ...row, activity_logs: logs } });
+    const depreciation = computeDepreciation(row);
+
+    res.json({ success: true, message: "Asset retrieved", data: { ...row, activity_logs: logs, depreciation } });
   } catch (err) {
     req.log.error({ err }, "Get asset error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
@@ -317,6 +383,10 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
         supplier: body.supplier ?? null,
         warrantyExpiry: body.warranty_expiry ?? null,
         usefulLifeYears: body.useful_life_years ?? null,
+        depreciationMethod: body.depreciation_method ?? "none",
+        salvageValue: body.salvage_value != null ? String(body.salvage_value) : null,
+        photoUrl: body.photo_url !== undefined ? body.photo_url : undefined,
+        notes: body.notes !== undefined ? body.notes : undefined,
         status: body.status,
         condition: body.condition,
         provinceId: targetProvinceId,
@@ -439,5 +509,212 @@ router.get("/v1/assets/:id/qr-data", requireAuth, async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
+
+router.post("/v1/assets/:id/transfer", requireAuth, requireAssetAdmin, async (req, res) => {
+  if (!req.user) return;
+
+  try {
+    const [existing] = await db
+      .select({
+        id: assets.id,
+        assetTag: assets.assetTag,
+        assetName: assets.assetName,
+        provinceId: assets.provinceId,
+        districtId: assets.districtId,
+        facilityId: assets.facilityId,
+      })
+      .from(assets)
+      .where(and(eq(assets.id, req.params.id as string), isNull(assets.deletedAt)))
+      .limit(1);
+
+    if (!existing) {
+      res.status(404).json({ success: false, message: "Asset not found", data: null });
+      return;
+    }
+
+    if (!isWithinAssetScope(req.user, {
+      provinceId: existing.provinceId,
+      districtId: existing.districtId,
+      facilityId: existing.facilityId,
+    })) {
+      res.status(403).json({ success: false, message: "Access denied", data: null });
+      return;
+    }
+
+    const { to_province_id, to_district_id, to_facility_id, reason } = req.body as {
+      to_province_id: string;
+      to_district_id?: string;
+      to_facility_id?: string;
+      reason?: string;
+    };
+
+    if (!to_province_id) {
+      res.status(400).json({ success: false, message: "to_province_id is required", data: null });
+      return;
+    }
+
+    if (req.user.scopeLevel !== "national" && to_province_id !== existing.provinceId) {
+      res.status(403).json({ success: false, message: "Cannot transfer asset to a different province outside your scope", data: null });
+      return;
+    }
+
+    await db.insert(assetTransfers).values({
+      assetId: existing.id,
+      fromProvinceId: existing.provinceId,
+      fromDistrictId: existing.districtId,
+      fromFacilityId: existing.facilityId,
+      toProvinceId: to_province_id,
+      toDistrictId: to_district_id ?? null,
+      toFacilityId: to_facility_id ?? null,
+      transferredBy: req.user.userId,
+      reason: reason ?? null,
+    });
+
+    const [updated] = await db
+      .update(assets)
+      .set({
+        provinceId: to_province_id,
+        districtId: to_district_id ?? null,
+        facilityId: to_facility_id ?? null,
+        updatedAt: new Date(),
+      })
+      .where(eq(assets.id, existing.id))
+      .returning();
+
+    await db.insert(activityLogs).values({
+      userId: req.user.userId,
+      actionType: "TRANSFER",
+      entityType: "asset",
+      entityId: existing.id,
+      description: `Transferred asset ${existing.assetTag}${reason ? ": " + reason : ""}`,
+    });
+
+    res.json({ success: true, message: "Asset transferred successfully", data: updated });
+  } catch (err) {
+    req.log.error({ err }, "Transfer asset error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
+router.get("/v1/assets/:id/transfers", requireAuth, async (req, res) => {
+  try {
+    const [existing] = await db
+      .select({ id: assets.id, provinceId: assets.provinceId, districtId: assets.districtId, facilityId: assets.facilityId })
+      .from(assets)
+      .where(and(eq(assets.id, req.params.id as string), isNull(assets.deletedAt)))
+      .limit(1);
+
+    if (!existing) {
+      res.status(404).json({ success: false, message: "Asset not found", data: null });
+      return;
+    }
+
+    if (!isWithinAssetScope(req.user!, {
+      provinceId: existing.provinceId,
+      districtId: existing.districtId,
+      facilityId: existing.facilityId,
+    })) {
+      res.status(403).json({ success: false, message: "Access denied", data: null });
+      return;
+    }
+
+    const fromProvinces = db.select({ id: provinces.id, provinceName: provinces.provinceName }).from(provinces).as("from_prov");
+    const toProvinces = db.select({ id: provinces.id, provinceName: provinces.provinceName }).from(provinces).as("to_prov");
+    const fromFacilities = db.select({ id: facilities.id, facilityName: facilities.facilityName }).from(facilities).as("from_fac");
+    const toFacilities = db.select({ id: facilities.id, facilityName: facilities.facilityName }).from(facilities).as("to_fac");
+    const transferUsers = db.select({ id: users.id, fullName: users.fullName }).from(users).as("trans_user");
+
+    const transfers = await db
+      .select({
+        id: assetTransfers.id,
+        reason: assetTransfers.reason,
+        transferredAt: assetTransfers.transferredAt,
+        fromProvince: fromProvinces.provinceName,
+        fromFacility: fromFacilities.facilityName,
+        toProvince: toProvinces.provinceName,
+        toFacility: toFacilities.facilityName,
+        transferredBy: transferUsers.fullName,
+      })
+      .from(assetTransfers)
+      .leftJoin(fromProvinces, eq(assetTransfers.fromProvinceId, fromProvinces.id))
+      .leftJoin(toProvinces, eq(assetTransfers.toProvinceId, toProvinces.id))
+      .leftJoin(fromFacilities, eq(assetTransfers.fromFacilityId, fromFacilities.id))
+      .leftJoin(toFacilities, eq(assetTransfers.toFacilityId, toFacilities.id))
+      .leftJoin(transferUsers, eq(assetTransfers.transferredBy, transferUsers.id))
+      .where(eq(assetTransfers.assetId, req.params.id as string))
+      .orderBy(desc(assetTransfers.transferredAt));
+
+    res.json({ success: true, message: "Transfers retrieved", data: transfers });
+  } catch (err) {
+    req.log.error({ err }, "Get transfers error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
+router.post("/v1/assets/warranty-check", requireAuth, async (req, res) => {
+  if (!req.user || !["Super Admin", "National Asset Controller"].includes(req.user.roleName)) {
+    res.status(403).json({ success: false, message: "Access denied", data: null });
+    return;
+  }
+
+  try {
+    const created = await runWarrantyCheck();
+    res.json({ success: true, message: `Warranty check complete. ${created} notifications created.`, data: { notifications_created: created } });
+  } catch (err) {
+    req.log.error({ err }, "Warranty check error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
+export async function runWarrantyCheck(): Promise<number> {
+  const now = new Date();
+  const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const todayStr = now.toISOString().split("T")[0];
+  const in30DaysStr = in30Days.toISOString().split("T")[0];
+
+  const expiringAssets = await db
+    .select({
+      id: assets.id,
+      assetTag: assets.assetTag,
+      assetName: assets.assetName,
+      warrantyExpiry: assets.warrantyExpiry,
+      provinceId: assets.provinceId,
+      provinceName: provinces.provinceName,
+    })
+    .from(assets)
+    .leftJoin(provinces, eq(assets.provinceId, provinces.id))
+    .where(
+      and(
+        isNull(assets.deletedAt),
+        isNotNull(assets.warrantyExpiry),
+        gte(assets.warrantyExpiry, todayStr),
+        lte(assets.warrantyExpiry, in30DaysStr),
+      ),
+    );
+
+  if (expiringAssets.length === 0) return 0;
+
+  const adminUsers = await db
+    .select({ id: users.id, provinceId: users.id })
+    .from(users)
+    .where(isNull(users.deletedAt));
+
+  let notifCount = 0;
+
+  for (const asset of expiringAssets) {
+    const daysLeft = Math.ceil((new Date(asset.warrantyExpiry!).getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+
+    for (const user of adminUsers) {
+      await db.insert(notifications).values({
+        userId: user.id,
+        title: `Warranty Expiring: ${asset.assetTag}`,
+        message: `${asset.assetName} (${asset.provinceName ?? "Unknown"}) warranty expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} (${asset.warrantyExpiry}).`,
+      }).onConflictDoNothing();
+      notifCount++;
+    }
+  }
+
+  return notifCount;
+}
 
 export default router;

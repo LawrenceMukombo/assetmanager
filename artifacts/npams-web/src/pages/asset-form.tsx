@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,13 +24,15 @@ import {
 import type { CreateAssetRequest, UpdateAssetRequest } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { apiFetchJson } from "@/lib/api-fetch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, ChevronRight, Save } from "lucide-react";
+import { ArrowLeft, ChevronRight, Save, Upload, X, Image } from "lucide-react";
 
 const assetSchema = z.object({
   asset_name: z.string().min(1, "Asset name is required"),
@@ -46,6 +48,10 @@ const assetSchema = z.object({
   supplier: z.string().optional(),
   warranty_expiry: z.string().optional(),
   useful_life_years: z.coerce.number().optional(),
+  depreciation_method: z.enum(["none", "straight_line", "declining_balance"]).default("none"),
+  salvage_value: z.coerce.number().optional(),
+  notes: z.string().optional(),
+  photo_url: z.string().optional(),
   province_id: z.string().min(1, "Province is required"),
   district_id: z.string().optional(),
   facility_id: z.string().optional(),
@@ -62,6 +68,30 @@ export default function AssetForm() {
   const { user } = useAuth();
   
   const [step, setStep] = useState(1);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePhotoUpload = async (file: File) => {
+    setIsUploadingPhoto(true);
+    try {
+      const res = await apiFetchJson<{ uploadURL: string; objectPath: string }>("/api/storage/uploads/request-url", {
+        method: "POST",
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      if (!res.ok || !res.data) throw new Error(res.message || "Failed to get upload URL");
+      await fetch(res.data.uploadURL, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      form.setValue("photo_url", `/api${res.data.objectPath}`);
+      toast({ title: "Photo uploaded successfully" });
+    } catch {
+      toast({ variant: "destructive", title: "Photo upload failed", description: "Please try again." });
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
 
   // Queries
   const { data: assetData, isLoading: isAssetLoading } = useGetAssetById(id!, {
@@ -117,6 +147,10 @@ export default function AssetForm() {
       supplier: "",
       warranty_expiry: "",
       useful_life_years: undefined,
+      depreciation_method: "none",
+      salvage_value: undefined,
+      notes: "",
+      photo_url: "",
       province_id: user?.scope_level !== "national" ? user?.scope?.province_id || "" : "",
       district_id: "",
       facility_id: "",
@@ -143,32 +177,36 @@ export default function AssetForm() {
 
   useEffect(() => {
     if (isEdit && assetData?.data) {
-      const asset = assetData.data;
+      const asset = assetData.data as AssetFormValues & { assetName?: string; assetTag?: string; serialNumber?: string; purchaseDate?: string; purchaseCost?: string; warrantyExpiry?: string; usefulLifeYears?: number; depreciationMethod?: string; salvageValue?: string; photoUrl?: string; category?: { id?: string }; province?: { id?: string }; district?: { id?: string }; facility?: { id?: string }; assignedUser?: { id?: string } };
       form.reset({
-        asset_name: asset.assetName || "",
-        asset_tag: asset.assetTag || "",
-        category_id: asset.category?.id || "",
-        serial_number: asset.serialNumber || "",
-        brand: asset.brand || "",
-        model: asset.model || "",
-        condition: (asset.condition as AssetFormValues["condition"]) ?? "good",
-        status: (asset.status as AssetFormValues["status"]) ?? "active",
-        purchase_date: asset.purchaseDate ? new Date(asset.purchaseDate).toISOString().split('T')[0] : "",
-        purchase_cost: asset.purchaseCost ? Number(asset.purchaseCost) : undefined,
-        supplier: asset.supplier || "",
-        warranty_expiry: asset.warrantyExpiry ? new Date(asset.warrantyExpiry).toISOString().split('T')[0] : "",
-        useful_life_years: asset.usefulLifeYears || undefined,
-        province_id: asset.province?.id || "",
-        district_id: asset.district?.id || "",
-        facility_id: asset.facility?.id || "",
-        assigned_to_user: asset.assignedUser?.id || "",
+        asset_name: (asset as { assetName?: string }).assetName || "",
+        asset_tag: (asset as { assetTag?: string }).assetTag || "",
+        category_id: (asset as { category?: { id?: string } }).category?.id || "",
+        serial_number: (asset as { serialNumber?: string }).serialNumber || "",
+        brand: (asset as { brand?: string }).brand || "",
+        model: (asset as { model?: string }).model || "",
+        condition: ((asset as { condition?: string }).condition as AssetFormValues["condition"]) ?? "good",
+        status: ((asset as { status?: string }).status as AssetFormValues["status"]) ?? "active",
+        purchase_date: (asset as { purchaseDate?: string }).purchaseDate ? new Date((asset as { purchaseDate: string }).purchaseDate).toISOString().split('T')[0] : "",
+        purchase_cost: (asset as { purchaseCost?: string }).purchaseCost ? Number((asset as { purchaseCost: string }).purchaseCost) : undefined,
+        supplier: (asset as { supplier?: string }).supplier || "",
+        warranty_expiry: (asset as { warrantyExpiry?: string }).warrantyExpiry ? new Date((asset as { warrantyExpiry: string }).warrantyExpiry).toISOString().split('T')[0] : "",
+        useful_life_years: (asset as { usefulLifeYears?: number }).usefulLifeYears || undefined,
+        depreciation_method: ((asset as { depreciationMethod?: string }).depreciationMethod as AssetFormValues["depreciation_method"]) ?? "none",
+        salvage_value: (asset as { salvageValue?: string }).salvageValue ? Number((asset as { salvageValue: string }).salvageValue) : undefined,
+        notes: (asset as { notes?: string }).notes || "",
+        photo_url: (asset as { photoUrl?: string }).photoUrl || "",
+        province_id: (asset as { province?: { id?: string } }).province?.id || "",
+        district_id: (asset as { district?: { id?: string } }).district?.id || "",
+        facility_id: (asset as { facility?: { id?: string } }).facility?.id || "",
+        assigned_to_user: (asset as { assignedUser?: { id?: string } }).assignedUser?.id || "",
       });
     }
   }, [isEdit, assetData, form]);
 
   const onSubmit = (values: AssetFormValues) => {
     if (isEdit) {
-      const updateData: UpdateAssetRequest = {
+      const updateData = {
         asset_name: values.asset_name,
         category_id: values.category_id,
         serial_number: values.serial_number,
@@ -181,14 +219,18 @@ export default function AssetForm() {
         supplier: values.supplier,
         warranty_expiry: values.warranty_expiry,
         useful_life_years: values.useful_life_years,
+        depreciation_method: values.depreciation_method,
+        salvage_value: values.salvage_value,
+        notes: values.notes,
+        photo_url: values.photo_url,
         province_id: values.province_id,
         district_id: values.district_id,
         facility_id: values.facility_id,
         assigned_to_user: values.assigned_to_user,
       };
-      updateMutation.mutate({ id: id!, data: updateData });
+      updateMutation.mutate({ id: id!, data: updateData as UpdateAssetRequest });
     } else {
-      const createData: CreateAssetRequest = {
+      const createData = {
         asset_name: values.asset_name,
         asset_tag: values.asset_tag,
         category_id: values.category_id,
@@ -202,12 +244,16 @@ export default function AssetForm() {
         supplier: values.supplier,
         warranty_expiry: values.warranty_expiry,
         useful_life_years: values.useful_life_years,
+        depreciation_method: values.depreciation_method,
+        salvage_value: values.salvage_value,
+        notes: values.notes,
+        photo_url: values.photo_url,
         province_id: values.province_id,
         district_id: values.district_id,
         facility_id: values.facility_id,
         assigned_to_user: values.assigned_to_user,
       };
-      createMutation.mutate({ data: createData });
+      createMutation.mutate({ data: createData as CreateAssetRequest });
     }
   };
 
@@ -432,6 +478,95 @@ export default function AssetForm() {
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={form.control}
+                    name="depreciation_method"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Depreciation Method</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Select method" /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">None</SelectItem>
+                            <SelectItem value="straight_line">Straight Line</SelectItem>
+                            <SelectItem value="declining_balance">Declining Balance</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="salvage_value"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Salvage Value (K)</FormLabel>
+                        <FormControl><Input type="number" step="0.01" placeholder="Residual value at end of life" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="notes"
+                    render={({ field }) => (
+                      <FormItem className="md:col-span-2">
+                        <FormLabel>Notes</FormLabel>
+                        <FormControl><Textarea placeholder="Additional details, remarks, or maintenance history notes..." {...field} rows={3} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="md:col-span-2">
+                    <FormField
+                      control={form.control}
+                      name="photo_url"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Asset Photo</FormLabel>
+                          <div className="space-y-2">
+                            {field.value && (
+                              <div className="relative w-32 h-32 rounded-lg border overflow-hidden">
+                                <img src={field.value} alt="Asset" className="w-full h-full object-cover" />
+                                <button type="button" onClick={() => field.onChange("")} className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-0.5">
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                            <div className="flex gap-2">
+                              <input
+                                ref={photoInputRef}
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handlePhotoUpload(file);
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => photoInputRef.current?.click()}
+                                disabled={isUploadingPhoto}
+                              >
+                                <Upload className="w-4 h-4 mr-2" />
+                                {isUploadingPhoto ? "Uploading..." : "Upload Photo"}
+                              </Button>
+                              {!field.value && (
+                                <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                  <Image className="w-4 h-4" /> No photo added
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                 </div>
               </div>
 

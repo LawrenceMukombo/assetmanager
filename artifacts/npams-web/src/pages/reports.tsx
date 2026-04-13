@@ -4,9 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, Printer, RefreshCw } from "lucide-react";
+import { FileText, Download, Printer, RefreshCw, FileDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Papa from "papaparse";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { apiFetch } from "@/lib/api-fetch";
 import { statusBadgeClass } from "@/lib/status";
 
@@ -151,6 +153,59 @@ export default function Reports() {
     window.print();
   };
 
+  const downloadPDF = async () => {
+    setLoadingAssets(true);
+    try {
+      const res = await apiFetch("/api/v1/reports/assets");
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.message ?? "Failed to fetch");
+      const items: AssetReportRow[] = body.data?.items ?? body.data ?? [];
+      if (items.length === 0) { toast({ title: "No assets found" }); return; }
+
+      const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text("NPAMS — National Asset Register", pageWidth / 2, 40, { align: "center" });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(100);
+      doc.text(
+        `Generated: ${new Date().toLocaleDateString("en-PG", { year: "numeric", month: "long", day: "numeric" })}${user?.full_name ? `   |   Prepared by: ${user.full_name}` : ""}`,
+        pageWidth / 2, 56, { align: "center" }
+      );
+      doc.setTextColor(0);
+
+      autoTable(doc, {
+        startY: 70,
+        head: [["Asset Name", "Tag", "Category", "Status", "Condition", "Province", "Facility", "Purchase Cost"]],
+        body: items.map(row => [
+          row.asset_name ?? "—",
+          row.asset_tag ?? "—",
+          row.category_name ?? "—",
+          (row.status ?? "—").replace(/_/g, " "),
+          row.condition ?? "—",
+          row.province_name ?? "—",
+          row.facility_name ?? row.district_name ?? "—",
+          formatCurrency(row.purchase_cost),
+        ]),
+        styles: { fontSize: 7.5, cellPadding: 4 },
+        headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [245, 247, 255] },
+        margin: { left: 30, right: 30 },
+      });
+
+      doc.save("NPAMS_Asset_Register.pdf");
+      toast({ title: "PDF exported", description: `${items.length} assets` });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Export failed";
+      toast({ variant: "destructive", title: "PDF export failed", description: msg });
+    } finally {
+      setLoadingAssets(false);
+    }
+  };
+
   const formatCurrency = (val?: string | number) => {
     if (!val) return "—";
     const num = typeof val === "string" ? parseFloat(val) : val;
@@ -176,6 +231,15 @@ export default function Reports() {
           <CardContent className="space-y-3">
             <Button className="w-full justify-start" onClick={fetchAndExportAssets} disabled={loadingAssets}>
               <Download className="w-4 h-4 mr-2" /> {loadingAssets ? "Exporting..." : "Export to CSV"}
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={downloadPDF}
+              disabled={loadingAssets}
+            >
+              <FileDown className="w-4 h-4 mr-2" />
+              {loadingAssets ? "Generating..." : "Export to PDF"}
             </Button>
             <Button
               variant="outline"
