@@ -9,6 +9,8 @@ import dashboardRouter from "./dashboard";
 import reportsRouter from "./reports";
 import notificationsRouter from "./notifications";
 import storageRouter from "./storage";
+import auditRouter from "./audit";
+import maintenanceRouter from "./maintenance";
 
 const router: IRouter = Router();
 
@@ -22,5 +24,7 @@ router.use(dashboardRouter);
 router.use(reportsRouter);
 router.use(notificationsRouter);
 router.use(storageRouter);
+router.use(auditRouter);
+router.use(maintenanceRouter);
 
 export default router;

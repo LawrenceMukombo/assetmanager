@@ -19,6 +19,10 @@ import Users from "@/pages/users";
 import Locations from "@/pages/locations";
 import Notifications from "@/pages/notifications";
 import Settings from "@/pages/settings";
+import Audit from "@/pages/audit";
+import AuditDetail from "@/pages/audit-detail";
+import AuditVerify from "@/pages/audit-verify";
+import Maintenance from "@/pages/maintenance";
 const GIS = lazy(() => import("@/pages/gis"));
 
 const queryClient = new QueryClient();
@@ -87,6 +91,10 @@ function Router() {
       <ProtectedRoute path="/reports" component={Reports} />
       <ProtectedRoute path="/users" component={Users} requiredRoles={ADMIN_ROLES} />
       <ProtectedRoute path="/locations" component={Locations} requiredRoles={ADMIN_ROLES} />
+      <ProtectedRoute path="/audit" component={Audit} />
+      <ProtectedRoute path="/audit/verify/:id" component={AuditVerify} />
+      <ProtectedRoute path="/audit/:id" component={AuditDetail} />
+      <ProtectedRoute path="/maintenance" component={Maintenance} />
       <Route path="/gis">
         <AuthGuard>
           <Suspense fallback={<div className="flex items-center justify-center h-full p-12 text-muted-foreground">Loading map...</div>}>

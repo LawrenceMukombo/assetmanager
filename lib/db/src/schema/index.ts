@@ -6,3 +6,5 @@ export * from "./facilities";
 export * from "./users";
 export * from "./assets";
 export * from "./activity";
+export * from "./audit";
+export * from "./maintenance";

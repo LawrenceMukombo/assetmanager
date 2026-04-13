@@ -29,6 +29,8 @@ import {
   LogOut,
   Bell,
   Globe,
+  ClipboardList,
+  Wrench,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
@@ -127,6 +129,24 @@ export function Sidebar() {
                   </CollapsibleContent>
                 </SidebarMenuItem>
               </Collapsible>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location.startsWith("/audit")}>
+                  <Link href="/audit">
+                    <ClipboardList />
+                    <span>Audit Sessions</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location.startsWith("/maintenance")}>
+                  <Link href="/maintenance">
+                    <Wrench />
+                    <span>Maintenance</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
 
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={location === "/reports"}>
