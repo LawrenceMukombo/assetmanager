@@ -31,7 +31,7 @@ const formatNumber = (n: number) =>
     : n.toString();
 
 const regionColors: Record<string, string> = {
-  "Papuan": "#1565C0",
+  "Southern": "#1565C0",
   "Momase": "#2E7D32",
   "Highlands": "#6A1B9A",
   "Islands": "#B71C1C",
