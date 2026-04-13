@@ -17,16 +17,19 @@ import { Redirect } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus } from "lucide-react";
+import { Plus, Pencil, ShieldCheck } from "lucide-react";
+import { Label } from "@/components/ui/label";
 
 interface RoleItem {
   id: string;
@@ -35,6 +38,68 @@ interface RoleItem {
 }
 
 const NATIONAL_SCOPES = ["national"];
+
+const ROLE_PERMISSIONS: Record<string, { description: string; permissions: string[] }> = {
+  "Super Admin": {
+    description: "Full platform access — national scope. Manages all provinces, users, roles, and system configuration.",
+    permissions: [
+      "View, create, edit, and delete all assets across all provinces",
+      "Manage all users — create, edit, deactivate, change roles",
+      "Edit province branding (flag URL, theme colour)",
+      "Create, edit, and delete districts and facilities",
+      "View all reports and audit logs",
+      "Configure system-wide settings",
+      "Manage roles and permissions",
+    ],
+  },
+  "National Asset Controller": {
+    description: "Read/write access to all assets across all provinces. Cannot manage users or system settings.",
+    permissions: [
+      "View, create, and edit all assets across all provinces",
+      "Transfer assets between provinces",
+      "Run warranty and depreciation reports",
+      "View all provincial data",
+      "Cannot manage users or system settings",
+    ],
+  },
+  "National Auditor": {
+    description: "Read-only access to all data across all provinces. Audit and compliance role.",
+    permissions: [
+      "View all assets across all provinces (read-only)",
+      "View all users and their scopes (read-only)",
+      "View all reports and audit logs",
+      "Cannot create, edit, or delete any records",
+    ],
+  },
+  "Provincial Admin": {
+    description: "Full access within their assigned province. Can manage provincial users and assets.",
+    permissions: [
+      "View, create, edit assets within their province",
+      "Manage users within their province — create, edit, deactivate",
+      "View provincial reports",
+      "Cannot access other provinces' data",
+      "Cannot create national-scope users",
+    ],
+  },
+  "Provincial Asset Officer": {
+    description: "Create and edit assets within their province. Limited user management.",
+    permissions: [
+      "View, create, and edit assets within their province",
+      "Update asset status and condition",
+      "View provincial reports",
+      "Cannot manage users",
+      "Cannot delete assets",
+    ],
+  },
+  "Provincial Viewer": {
+    description: "Read-only access within their assigned province.",
+    permissions: [
+      "View assets within their province (read-only)",
+      "View provincial reports (read-only)",
+      "Cannot create, edit, or delete any records",
+    ],
+  },
+};
 
 async function fetchRoles(token: string | null): Promise<RoleItem[]> {
   const res = await fetch("/api/v1/roles", {
@@ -55,6 +120,16 @@ const userSchema = z.object({
 
 type UserFormValues = z.infer<typeof userSchema>;
 
+interface UserRow {
+  id?: string;
+  fullName?: string | null;
+  email?: string | null;
+  active?: boolean | null;
+  role?: { id?: string | null; roleName?: string | null; scopeLevel?: string | null } | null;
+  scope?: { provinceId?: string | null; districtId?: string | null; facilityId?: string | null } | null;
+  provinceName?: string | null;
+}
+
 export default function Users() {
   const { user } = useAuth();
   const isAdmin = ADMIN_ROLES.includes(user?.role as typeof ADMIN_ROLES[number]);
@@ -63,6 +138,12 @@ export default function Users() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedProvinceId, setSelectedProvinceId] = useState("");
   const [selectedRoleScope, setSelectedRoleScope] = useState("");
+
+  const [editUser, setEditUser] = useState<UserRow | null>(null);
+  const [editRoleId, setEditRoleId] = useState("");
+  const [editProvinceId, setEditProvinceId] = useState("");
+  const [editRoleScope, setEditRoleScope] = useState("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const token = localStorage.getItem("npams_token");
 
@@ -139,72 +220,159 @@ export default function Users() {
     createMutation.mutate({ data: payload as UserFormValues });
   };
 
+  const openEditUser = (u: UserRow) => {
+    setEditUser(u);
+    setEditRoleId(u.role?.id ?? "");
+    setEditProvinceId(u.scope?.provinceId ?? "");
+    const role = rolesData?.find(r => r.id === u.role?.id);
+    setEditRoleScope(role?.scopeLevel ?? u.role?.scopeLevel ?? "");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editUser?.id) return;
+    setIsSavingEdit(true);
+    const body: Record<string, string | null | undefined> = {};
+    if (editRoleId && editRoleId !== editUser.role?.id) body.role_id = editRoleId;
+    const isNationalRole = NATIONAL_SCOPES.includes(editRoleScope);
+    if (isNationalRole) {
+      body.province_id = null;
+      body.district_id = null;
+      body.facility_id = null;
+    } else if (editProvinceId !== editUser.scope?.provinceId) {
+      body.province_id = editProvinceId || null;
+      body.district_id = null;
+      body.facility_id = null;
+    }
+
+    const result = await apiFetchJson(`/api/v1/users/${editUser.id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+    setIsSavingEdit(false);
+    if (result.ok) {
+      toast({ title: "User updated successfully" });
+      setEditUser(null);
+      refetch();
+    } else {
+      toast({ variant: "destructive", title: "Error", description: result.message });
+    }
+  };
+
   const isNationalRole = NATIONAL_SCOPES.includes(selectedRoleScope);
+  const isEditNationalRole = NATIONAL_SCOPES.includes(editRoleScope);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">User Management</h2>
-          <p className="text-muted-foreground">Manage system access and roles.</p>
+          <p className="text-muted-foreground">Manage system access, roles, and permissions.</p>
         </div>
         <Button onClick={() => { setIsAddOpen(true); setSelectedProvinceId(""); setSelectedRoleScope(""); }}>
           <Plus className="w-4 h-4 mr-2" /> Add User
         </Button>
       </div>
 
-      <div className="bg-card border rounded-lg overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Full Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Scope Level</TableHead>
-              <TableHead>Province</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Active</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading users...</TableCell>
-              </TableRow>
-            ) : data?.data?.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No users found.</TableCell>
-              </TableRow>
-            ) : data?.data?.map((u) => (
-              <TableRow key={u.id}>
-                <TableCell className="font-medium">{u.fullName}</TableCell>
-                <TableCell className="text-sm">{u.email}</TableCell>
-                <TableCell><Badge variant="outline">{u.role?.roleName}</Badge></TableCell>
-                <TableCell className="capitalize text-sm">{u.role?.scopeLevel ?? "N/A"}</TableCell>
-                <TableCell>{u.provinceName || "National"}</TableCell>
-                <TableCell>
-                  <Badge className={u.active ? "bg-green-600 hover:bg-green-700" : "bg-gray-500 hover:bg-gray-600"}>
-                    {u.active ? "Active" : "Inactive"}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Switch
-                    checked={!!u.active}
-                    onCheckedChange={() => {
-                      if (u.active) {
-                        deactivateMutation.mutate({ id: u.id! });
-                      } else {
-                        reactivateUser(u.id!);
-                      }
-                    }}
-                    disabled={deactivateMutation.isPending || u.id === user?.id}
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      <Tabs defaultValue="users">
+        <TabsList>
+          <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="permissions">
+            <ShieldCheck className="w-4 h-4 mr-1" /> Roles & Permissions
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="users" className="mt-4">
+          <div className="bg-card border rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Full Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Scope Level</TableHead>
+                  <TableHead>Province</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Active</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Loading users...</TableCell>
+                  </TableRow>
+                ) : (data?.data as UserRow[])?.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No users found.</TableCell>
+                  </TableRow>
+                ) : (data?.data as UserRow[])?.map((u) => (
+                  <TableRow key={u.id}>
+                    <TableCell className="font-medium">{u.fullName}</TableCell>
+                    <TableCell className="text-sm">{u.email}</TableCell>
+                    <TableCell><Badge variant="outline">{u.role?.roleName}</Badge></TableCell>
+                    <TableCell className="capitalize text-sm">{u.role?.scopeLevel ?? "N/A"}</TableCell>
+                    <TableCell>{u.provinceName || "National"}</TableCell>
+                    <TableCell>
+                      <Badge className={u.active ? "bg-green-600 hover:bg-green-700" : "bg-gray-500 hover:bg-gray-600"}>
+                        {u.active ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={!!u.active}
+                        onCheckedChange={() => {
+                          if (u.active) {
+                            deactivateMutation.mutate({ id: u.id! });
+                          } else {
+                            reactivateUser(u.id!);
+                          }
+                        }}
+                        disabled={deactivateMutation.isPending || u.id === user?.id}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="sm" onClick={() => openEditUser(u)}>
+                        <Pencil className="w-3 h-3 mr-1" /> Edit Role
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="permissions" className="mt-4">
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              This panel describes the capabilities of each system role. Roles are assigned to users during creation or via the Edit Role action on the Users tab.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              {Object.entries(ROLE_PERMISSIONS).map(([roleName, info]) => (
+                <Card key={roleName}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-primary" />
+                      {roleName}
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground">{info.description}</p>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-1">
+                      {info.permissions.map((perm, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm">
+                          <span className="mt-1 w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                          {perm}
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <DialogContent className="max-w-md">
@@ -341,6 +509,83 @@ export default function Users() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      {editUser && (
+        <Dialog open={!!editUser} onOpenChange={(open) => { if (!open) setEditUser(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Role & Scope — {editUser.fullName}</DialogTitle>
+              <DialogDescription>
+                Change this user's role or provincial scope. This affects what data they can access.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="p-3 bg-muted/40 rounded-lg text-sm space-y-1">
+                <p><span className="text-muted-foreground">Email:</span> <span className="font-medium">{editUser.email}</span></p>
+                <p><span className="text-muted-foreground">Current Role:</span> <span className="font-medium">{editUser.role?.roleName ?? "None"}</span></p>
+                <p><span className="text-muted-foreground">Current Province:</span> <span className="font-medium">{editUser.provinceName || "National"}</span></p>
+              </div>
+
+              <div className="space-y-1">
+                <Label>New Role</Label>
+                <Select
+                  value={editRoleId}
+                  onValueChange={(val) => {
+                    setEditRoleId(val);
+                    const role = rolesData?.find(r => r.id === val);
+                    setEditRoleScope(role?.scopeLevel ?? "");
+                    if (role?.scopeLevel === "national") {
+                      setEditProvinceId("");
+                    }
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+                  <SelectContent>
+                    {rolesData?.map(r => (
+                      <SelectItem key={r.id} value={r.id}>{r.roleName}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {editRoleId && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {ROLE_PERMISSIONS[rolesData?.find(r => r.id === editRoleId)?.roleName ?? ""]?.description ?? ""}
+                  </p>
+                )}
+              </div>
+
+              {!isEditNationalRole && (
+                <div className="space-y-1">
+                  <Label>
+                    Province Scope <span className="text-destructive">*</span>
+                  </Label>
+                  <Select value={editProvinceId} onValueChange={setEditProvinceId}>
+                    <SelectTrigger className={!editProvinceId ? "border-destructive/50" : ""}>
+                      <SelectValue placeholder="Select province (required)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {provincesData?.data?.map(p => (
+                        <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!editProvinceId && (
+                    <p className="text-xs text-destructive">Province is required for provincial roles.</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditUser(null)}>Cancel</Button>
+              <Button
+                onClick={handleSaveEdit}
+                disabled={isSavingEdit || !editRoleId || (!isEditNationalRole && !editProvinceId)}
+              >
+                {isSavingEdit ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

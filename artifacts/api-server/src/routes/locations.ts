@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, provinces, districts, facilities } from "@workspace/db";
+import { db, provinces, districts, facilities, assets, assetTransfers } from "@workspace/db";
 import { requireAuth } from "../lib/auth";
 
 const router = Router();
@@ -270,6 +270,70 @@ router.get("/v1/locations/facilities/:id", requireAuth, async (req, res) => {
     res.json({ success: true, message: "Facility retrieved", data: row });
   } catch (err) {
     req.log.error({ err }, "Get facility error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
+router.post("/v1/locations/facilities", requireAuth, async (req, res) => {
+  try {
+    const user = req.user!;
+    if (user.roleName !== "Super Admin") {
+      res.status(403).json({ success: false, message: "Only Super Admin can create facilities", data: null });
+      return;
+    }
+    const { districtId, facilityName, facilityType, address } = req.body as {
+      districtId: string;
+      facilityName: string;
+      facilityType?: string | null;
+      address?: string | null;
+    };
+
+    if (!districtId || !facilityName) {
+      res.status(400).json({ success: false, message: "districtId and facilityName are required", data: null });
+      return;
+    }
+
+    const [districtRow] = await db.select().from(districts).where(eq(districts.id, districtId)).limit(1);
+    if (!districtRow) {
+      res.status(404).json({ success: false, message: "District not found", data: null });
+      return;
+    }
+
+    const [row] = await db
+      .insert(facilities)
+      .values({ districtId, facilityName, facilityType: facilityType ?? null, address: address ?? null })
+      .returning();
+
+    res.status(201).json({ success: true, message: "Facility created", data: row });
+  } catch (err) {
+    req.log.error({ err }, "Create facility error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
+router.delete("/v1/locations/facilities/:id", requireAuth, async (req, res) => {
+  try {
+    const user = req.user!;
+    if (user.roleName !== "Super Admin") {
+      res.status(403).json({ success: false, message: "Only Super Admin can delete facilities", data: null });
+      return;
+    }
+    const facilityId = String(req.params.id);
+
+    const existing = await db.select().from(facilities).where(eq(facilities.id, facilityId)).limit(1);
+    if (existing.length === 0) {
+      res.status(404).json({ success: false, message: "Facility not found", data: null });
+      return;
+    }
+
+    await db.update(assets).set({ facilityId: null }).where(eq(assets.facilityId, facilityId));
+    await db.update(assetTransfers).set({ fromFacilityId: null }).where(eq(assetTransfers.fromFacilityId, facilityId));
+    await db.update(assetTransfers).set({ toFacilityId: null }).where(eq(assetTransfers.toFacilityId, facilityId));
+
+    await db.delete(facilities).where(eq(facilities.id, facilityId));
+    res.json({ success: true, message: "Facility deleted", data: null });
+  } catch (err) {
+    req.log.error({ err }, "Delete facility error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });

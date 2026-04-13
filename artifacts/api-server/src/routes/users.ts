@@ -272,14 +272,25 @@ router.put("/v1/users/:id", requireAuth, requireUserAdmin, async (req, res) => {
       }
     }
 
+    let targetRole: { id: string; scopeLevel: string } | null = null;
     if (role_id) {
-      const [targetRole] = await db.select().from(roles).where(eq(roles.id, role_id as string)).limit(1);
-      if (!targetRole) {
+      const [found] = await db.select().from(roles).where(eq(roles.id, role_id as string)).limit(1);
+      if (!found) {
         res.status(400).json({ success: false, message: "Role not found", data: null });
         return;
       }
-      if (req.user.scopeLevel !== "national" && targetRole.scopeLevel === "national") {
+      if (req.user.scopeLevel !== "national" && found.scopeLevel === "national") {
         res.status(403).json({ success: false, message: "Cannot assign national-level roles", data: null });
+        return;
+      }
+      targetRole = found;
+    }
+
+    const resolvedRole = targetRole ?? (await db.select().from(roles).innerJoin(userRoles, eq(userRoles.roleId, roles.id)).where(eq(userRoles.userId, targetId)).limit(1).then(r => r[0]?.roles ?? null));
+    if (resolvedRole && resolvedRole.scopeLevel !== "national") {
+      const resolvedProvince = newProvinceId ?? (province_id === undefined ? existingScope?.provinceId : null);
+      if (!resolvedProvince) {
+        res.status(400).json({ success: false, message: "A province must be assigned for provincial roles", data: null });
         return;
       }
     }

@@ -510,6 +510,71 @@ router.get("/v1/assets/:id/qr-data", requireAuth, async (req, res) => {
   }
 });
 
+router.patch("/v1/assets/:id/status", requireAuth, requireAssetAdmin, async (req, res) => {
+  if (!req.user) return;
+
+  try {
+    const [existing] = await db
+      .select({ id: assets.id, provinceId: assets.provinceId, districtId: assets.districtId, facilityId: assets.facilityId, assetTag: assets.assetTag, status: assets.status })
+      .from(assets)
+      .where(and(eq(assets.id, req.params.id as string), isNull(assets.deletedAt)))
+      .limit(1);
+
+    if (!existing) {
+      res.status(404).json({ success: false, message: "Asset not found", data: null });
+      return;
+    }
+
+    if (!isWithinAssetScope(req.user, {
+      provinceId: existing.provinceId,
+      districtId: existing.districtId,
+      facilityId: existing.facilityId,
+    })) {
+      res.status(403).json({ success: false, message: "Access denied", data: null });
+      return;
+    }
+
+    const { status, notes } = req.body as { status: "active" | "under_maintenance" | "disposed" | "missing"; notes?: string };
+    const validStatuses = ["active", "under_maintenance", "disposed", "missing"];
+
+    if (!status || !validStatuses.includes(status)) {
+      res.status(400).json({ success: false, message: `status must be one of: ${validStatuses.join(", ")}`, data: null });
+      return;
+    }
+
+    if (status === existing.status) {
+      res.status(400).json({ success: false, message: "Asset is already in that status", data: null });
+      return;
+    }
+
+    const [updated] = await db
+      .update(assets)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(assets.id, existing.id))
+      .returning();
+
+    const actionLabels: Record<string, string> = {
+      active: "Marked as Active",
+      under_maintenance: "Marked as Under Maintenance",
+      disposed: "Marked as Disposed",
+      missing: "Reported as Missing",
+    };
+
+    await db.insert(activityLogs).values({
+      userId: req.user.userId,
+      actionType: "STATUS_CHANGE",
+      entityType: "asset",
+      entityId: existing.id,
+      description: `${actionLabels[status] ?? `Status changed to ${status}`} — ${existing.assetTag}${notes ? ". Notes: " + notes : ""}`,
+    });
+
+    res.json({ success: true, message: "Asset status updated", data: updated });
+  } catch (err) {
+    req.log.error({ err }, "Update asset status error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
 router.post("/v1/assets/:id/transfer", requireAuth, requireAssetAdmin, async (req, res) => {
   if (!req.user) return;
 

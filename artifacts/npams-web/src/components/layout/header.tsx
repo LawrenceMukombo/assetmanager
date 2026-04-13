@@ -47,7 +47,9 @@ export function Header() {
     ? `${branding.provinceName} Asset Management`
     : "Provincial Asset Management";
 
-  const accentStyle = !isNational && branding.themeAccentColor
+  const accentStyle = isNational
+    ? { borderBottomColor: "#CE1126", borderBottomWidth: "3px" }
+    : !isNational && branding.themeAccentColor
     ? { borderBottomColor: branding.themeAccentColor, borderBottomWidth: "3px" }
     : {};
 
@@ -56,13 +58,19 @@ export function Header() {
       <div className="flex items-center gap-4">
         <SidebarTrigger />
         <div className="flex items-center gap-3">
-          {!isNational && branding.flagUrl && (
+          {isNational ? (
+            <img
+              src="/flags/png_national.svg"
+              alt="Papua New Guinea National Flag"
+              className="h-6 w-10 object-cover rounded-sm border hidden sm:block"
+            />
+          ) : branding.flagUrl ? (
             <img
               src={branding.flagUrl}
               alt={`${branding.provinceName ?? "Province"} flag`}
               className="h-6 w-10 object-contain rounded-sm border bg-muted hidden sm:block"
             />
-          )}
+          ) : null}
           <h1 className="font-semibold text-lg hidden sm:block">{headerTitle}</h1>
         </div>
       </div>

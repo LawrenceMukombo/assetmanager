@@ -55,13 +55,19 @@ export function Sidebar() {
 
   return (
     <SidebarComponent>
-      <SidebarHeader className="border-b p-4" style={{ borderTopWidth: 4, borderTopStyle: "solid", borderTopColor: "var(--province-accent, hsl(var(--primary)))" }}>
+      <SidebarHeader className="border-b p-4" style={{ borderTopWidth: 4, borderTopStyle: "solid", borderTopColor: isNational ? "#CE1126" : "var(--province-accent, hsl(var(--primary)))" }}>
         <div className="flex items-center gap-2">
           {!isNational && branding.flagUrl ? (
             <img
               src={branding.flagUrl}
               alt={`${branding.provinceName ?? "Province"} flag`}
               className="w-10 h-6 object-contain rounded-sm border bg-muted"
+            />
+          ) : isNational ? (
+            <img
+              src="/flags/png_national.svg"
+              alt="Papua New Guinea National Flag"
+              className="w-10 h-6 object-cover rounded-sm border"
             />
           ) : (
             <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center text-primary-foreground font-bold text-xs">

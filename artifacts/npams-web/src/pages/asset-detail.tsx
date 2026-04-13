@@ -12,12 +12,13 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Edit, Printer, Download, Activity, ArrowRight, TrendingDown, ImageIcon, FileText } from "lucide-react";
+import { ArrowLeft, Edit, Printer, Download, Activity, ArrowRight, TrendingDown, ImageIcon, FileText, Wrench, CheckCircle, AlertTriangle, Trash2 } from "lucide-react";
 import { statusBadgeClass } from "@/lib/status";
 import QRCode from "react-qr-code";
 import { useRef, useState } from "react";
@@ -58,11 +59,72 @@ type TransferRecord = {
   transferredAt: string;
 };
 
+type AssetStatus = "active" | "under_maintenance" | "disposed" | "missing";
+
+type WorkflowAction = {
+  label: string;
+  targetStatus: AssetStatus;
+  icon: React.ReactNode;
+  variant: "default" | "outline" | "destructive" | "secondary";
+  confirmTitle: string;
+  confirmDescription: string;
+};
+
 function buildQRPayload(asset: AssetDetail): string {
   return JSON.stringify({ id: asset.id, tag: asset.assetTag });
 }
 
 const ADMIN_ROLES = ["Super Admin", "National Asset Controller", "Provincial Admin", "Provincial Asset Officer"];
+
+function getWorkflowActions(currentStatus: string | undefined | null): WorkflowAction[] {
+  const actions: WorkflowAction[] = [];
+
+  if (currentStatus !== "active") {
+    actions.push({
+      label: "Mark as Active",
+      targetStatus: "active",
+      icon: <CheckCircle className="w-4 h-4 mr-2" />,
+      variant: "default",
+      confirmTitle: "Mark Asset as Active",
+      confirmDescription: "This will set the asset status to Active, indicating it is operational and in use.",
+    });
+  }
+
+  if (currentStatus !== "under_maintenance") {
+    actions.push({
+      label: "Mark as Under Maintenance",
+      targetStatus: "under_maintenance",
+      icon: <Wrench className="w-4 h-4 mr-2" />,
+      variant: "outline",
+      confirmTitle: "Mark Asset as Under Maintenance",
+      confirmDescription: "This will set the asset status to Under Maintenance. The asset will be temporarily unavailable until returned to active status.",
+    });
+  }
+
+  if (currentStatus !== "missing") {
+    actions.push({
+      label: "Report Missing",
+      targetStatus: "missing",
+      icon: <AlertTriangle className="w-4 h-4 mr-2" />,
+      variant: "outline",
+      confirmTitle: "Report Asset as Missing",
+      confirmDescription: "This will flag the asset as Missing. Please document all known details about the last known location and circumstances.",
+    });
+  }
+
+  if (currentStatus !== "disposed") {
+    actions.push({
+      label: "Mark as Disposed",
+      targetStatus: "disposed",
+      icon: <Trash2 className="w-4 h-4 mr-2" />,
+      variant: "destructive",
+      confirmTitle: "Mark Asset as Disposed",
+      confirmDescription: "This will permanently mark the asset as Disposed. This indicates the asset has been decommissioned, sold, or written off.",
+    });
+  }
+
+  return actions;
+}
 
 export default function AssetDetailPage() {
   const { id } = useParams();
@@ -79,6 +141,10 @@ export default function AssetDetailPage() {
   const [isTransferring, setIsTransferring] = useState(false);
   const [transfers, setTransfers] = useState<TransferRecord[] | null>(null);
   const [loadingTransfers, setLoadingTransfers] = useState(false);
+
+  const [workflowAction, setWorkflowAction] = useState<WorkflowAction | null>(null);
+  const [workflowNotes, setWorkflowNotes] = useState("");
+  const [isWorkflowSaving, setIsWorkflowSaving] = useState(false);
 
   const { data, isLoading } = useGetAssetById(id!, {
     query: {
@@ -161,6 +227,30 @@ export default function AssetDetailPage() {
     }
   };
 
+  const handleWorkflowTransition = async () => {
+    if (!workflowAction || !asset?.id) return;
+    setIsWorkflowSaving(true);
+    try {
+      const res = await apiFetchJson(`/api/v1/assets/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: workflowAction.targetStatus,
+          notes: workflowNotes || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error(res.message || "Status update failed");
+      toast({ title: "Asset status updated", description: `Status changed to ${workflowAction.targetStatus.replace("_", " ")}.` });
+      queryClient.invalidateQueries({ queryKey: getGetAssetByIdQueryKey(id!) });
+      setTransfers(null);
+      setWorkflowAction(null);
+      setWorkflowNotes("");
+    } catch (err) {
+      toast({ variant: "destructive", title: "Status update failed", description: (err as Error).message });
+    } finally {
+      setIsWorkflowSaving(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -175,6 +265,7 @@ export default function AssetDetailPage() {
   }
 
   const assetAny = asset as AssetDetail & { supplier?: string; warrantyExpiry?: string; depreciationMethod?: string; salvageValue?: string; photoUrl?: string; notes?: string };
+  const workflowActions = getWorkflowActions(asset.status);
 
   return (
     <div className="space-y-6">
@@ -191,7 +282,7 @@ export default function AssetDetailPage() {
             <Badge className={`capitalize ${statusBadgeClass(asset.status)}`}>{asset.status?.replace("_", " ")}</Badge>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {isAdmin && (
             <Button variant="outline" onClick={() => setShowTransferDialog(true)}>
               <ArrowRight className="w-4 h-4 mr-2" />
@@ -206,6 +297,34 @@ export default function AssetDetailPage() {
           </Button>
         </div>
       </div>
+
+      {isAdmin && workflowActions.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Activity className="w-4 h-4" /> Workflow Actions
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-3">
+              Current status: <span className="font-medium capitalize">{asset.status?.replace("_", " ")}</span>. Select an action to transition this asset to a new lifecycle state.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {workflowActions.map((action) => (
+                <Button
+                  key={action.targetStatus}
+                  variant={action.variant}
+                  size="sm"
+                  onClick={() => { setWorkflowAction(action); setWorkflowNotes(""); }}
+                >
+                  {action.icon}
+                  {action.label}
+                </Button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 md:grid-cols-3">
         <div className="md:col-span-2 space-y-6">
@@ -545,6 +664,41 @@ export default function AssetDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {workflowAction && (
+        <Dialog open={!!workflowAction} onOpenChange={(open) => { if (!open) { setWorkflowAction(null); setWorkflowNotes(""); } }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{workflowAction.confirmTitle}</DialogTitle>
+              <DialogDescription>{workflowAction.confirmDescription}</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div>
+                <Label htmlFor="workflowNotes">Notes (optional)</Label>
+                <Textarea
+                  id="workflowNotes"
+                  className="mt-1"
+                  value={workflowNotes}
+                  onChange={(e) => setWorkflowNotes(e.target.value)}
+                  placeholder="Add any relevant notes about this status change..."
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setWorkflowAction(null); setWorkflowNotes(""); }}>Cancel</Button>
+              <Button
+                variant={workflowAction.variant === "destructive" ? "destructive" : "default"}
+                onClick={handleWorkflowTransition}
+                disabled={isWorkflowSaving}
+              >
+                {workflowAction.icon}
+                {isWorkflowSaving ? "Updating..." : workflowAction.label}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

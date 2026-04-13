@@ -135,9 +135,18 @@ function NationalDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">National Overview</h2>
-        <p className="text-muted-foreground">High-level view of all public assets across Papua New Guinea.</p>
+      <div className="flex items-center gap-4">
+        <div className="w-12 h-12 rounded-full overflow-hidden border-2 flex-shrink-0" style={{ borderColor: "#CE1126" }}>
+          <img
+            src="/flags/png_national.svg"
+            alt="Papua New Guinea"
+            className="w-full h-full object-cover"
+          />
+        </div>
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">National Overview</h2>
+          <p className="text-muted-foreground">High-level view of all public assets across Papua New Guinea.</p>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">

@@ -292,6 +292,26 @@ async function main() {
     { fullName: "Morobe Viewer", email: "morobe.viewer@npams.gov.pg", roleName: "Provincial Viewer", scope: { provinceCode: "MO" } },
     { fullName: "WHP Admin", email: "whp.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "WHP" } },
     { fullName: "NCD Admin", email: "ncd.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "NCD" } },
+    // All 22 PNG Provincial Admins
+    { fullName: "Bougainville Provincial Admin", email: "bougainville.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "AB" } },
+    { fullName: "Central Province Admin", email: "central.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "CP" } },
+    { fullName: "Chimbu Simbu Admin", email: "chimbu.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "CH" } },
+    { fullName: "East New Britain Admin", email: "east-new-britain.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "ENB" } },
+    { fullName: "East Sepik Admin", email: "east-sepik.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "ES" } },
+    { fullName: "Eastern Highlands Admin", email: "eastern-highlands.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "EH" } },
+    { fullName: "Enga Province Admin", email: "enga.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "EN" } },
+    { fullName: "Gulf Province Admin", email: "gulf.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "GU" } },
+    { fullName: "Hela Province Admin", email: "hela.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "HE" } },
+    { fullName: "Jiwaka Province Admin", email: "jiwaka.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "JI" } },
+    { fullName: "Madang Province Admin", email: "madang.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "MD" } },
+    { fullName: "Manus Province Admin", email: "manus.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "MA" } },
+    { fullName: "Milne Bay Admin", email: "milne-bay.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "MB" } },
+    { fullName: "New Ireland Admin", email: "new-ireland.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "NI" } },
+    { fullName: "Northern Oro Admin", email: "northern.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "NO" } },
+    { fullName: "Sandaun West Sepik Admin", email: "sandaun.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "SA" } },
+    { fullName: "Southern Highlands Admin", email: "southern-highlands.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "SH" } },
+    { fullName: "West New Britain Admin", email: "west-new-britain.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "WNB" } },
+    { fullName: "Western Province Admin", email: "western.admin@npams.gov.pg", roleName: "Provincial Admin", scope: { provinceCode: "WS" } },
   ];
 
   const userMap: Record<string, string> = {};
@@ -393,11 +413,33 @@ async function main() {
   console.log("Notifications seeded.");
   console.log("\nSeed complete!");
   console.log("\nDemo credentials (all use password: Admin1234!):");
-  console.log("  superadmin@npams.gov.pg - Super Admin (national)");
-  console.log("  national@npams.gov.pg   - National Asset Controller");
-  console.log("  morobe.admin@npams.gov.pg - Provincial Admin (Morobe)");
-  console.log("  whp.admin@npams.gov.pg  - Provincial Admin (Western Highlands)");
-  console.log("  ncd.admin@npams.gov.pg  - Provincial Admin (NCD)");
+  console.log("  superadmin@npams.gov.pg            - Super Admin (national)");
+  console.log("  national@npams.gov.pg              - National Asset Controller");
+  console.log("  auditor@npams.gov.pg               - National Auditor");
+  console.log("  morobe.admin@npams.gov.pg          - Provincial Admin (Morobe)");
+  console.log("  morobe.officer@npams.gov.pg        - Provincial Asset Officer (Morobe)");
+  console.log("  morobe.viewer@npams.gov.pg         - Provincial Viewer (Morobe)");
+  console.log("  whp.admin@npams.gov.pg             - Provincial Admin (Western Highlands)");
+  console.log("  ncd.admin@npams.gov.pg             - Provincial Admin (NCD)");
+  console.log("  bougainville.admin@npams.gov.pg    - Provincial Admin (Bougainville)");
+  console.log("  central.admin@npams.gov.pg         - Provincial Admin (Central)");
+  console.log("  chimbu.admin@npams.gov.pg          - Provincial Admin (Chimbu/Simbu)");
+  console.log("  east-new-britain.admin@npams.gov.pg - Provincial Admin (East New Britain)");
+  console.log("  east-sepik.admin@npams.gov.pg      - Provincial Admin (East Sepik)");
+  console.log("  eastern-highlands.admin@npams.gov.pg - Provincial Admin (Eastern Highlands)");
+  console.log("  enga.admin@npams.gov.pg            - Provincial Admin (Enga)");
+  console.log("  gulf.admin@npams.gov.pg            - Provincial Admin (Gulf)");
+  console.log("  hela.admin@npams.gov.pg            - Provincial Admin (Hela)");
+  console.log("  jiwaka.admin@npams.gov.pg          - Provincial Admin (Jiwaka)");
+  console.log("  madang.admin@npams.gov.pg          - Provincial Admin (Madang)");
+  console.log("  manus.admin@npams.gov.pg           - Provincial Admin (Manus)");
+  console.log("  milne-bay.admin@npams.gov.pg       - Provincial Admin (Milne Bay)");
+  console.log("  new-ireland.admin@npams.gov.pg     - Provincial Admin (New Ireland)");
+  console.log("  northern.admin@npams.gov.pg        - Provincial Admin (Northern/Oro)");
+  console.log("  sandaun.admin@npams.gov.pg         - Provincial Admin (Sandaun/West Sepik)");
+  console.log("  southern-highlands.admin@npams.gov.pg - Provincial Admin (Southern Highlands)");
+  console.log("  west-new-britain.admin@npams.gov.pg - Provincial Admin (West New Britain)");
+  console.log("  western.admin@npams.gov.pg         - Provincial Admin (Western)");
 }
 
 main()

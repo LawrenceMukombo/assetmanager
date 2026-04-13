@@ -34,6 +34,7 @@ export default function Login() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [showForgotDialog, setShowForgotDialog] = useState(false);
+  const [flagError, setFlagError] = useState(false);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -63,18 +64,25 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
-      <div className="w-full max-w-md bg-card border rounded-xl shadow-lg overflow-hidden">
-        <div className="bg-primary px-8 py-6 flex flex-col items-center text-center">
-          <div className="w-16 h-16 bg-white/15 rounded-full flex items-center justify-center mb-3 border-2 border-white/30">
-            <svg viewBox="0 0 48 48" className="w-9 h-9 fill-white" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path d="M24 4L6 14v10c0 10.5 7.7 20.3 18 22.9C35.3 44.3 43 34.5 43 24V14L24 4zm0 4.2l15 8.6v7.2c0 8.7-6.3 16.9-15 19.3-8.7-2.4-15-10.6-15-19.3v-7.2L24 8.2z"/>
-              <path d="M24 15a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 2.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z"/>
-              <circle cx="24" cy="24" r="3"/>
-            </svg>
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "linear-gradient(135deg, #000000 0%, #1a0000 50%, #CE1126 100%)" }}>
+      <div className="w-full max-w-md bg-card border rounded-xl shadow-2xl overflow-hidden">
+        <div className="px-8 py-6 flex flex-col items-center text-center" style={{ background: "linear-gradient(135deg, #000000 0%, #CE1126 100%)" }}>
+          <div className="w-20 h-20 rounded-full flex items-center justify-center mb-3 overflow-hidden border-2 border-white/30 bg-black/20">
+            {flagError ? (
+              <svg viewBox="0 0 48 48" className="w-10 h-10 fill-white" xmlns="http://www.w3.org/2000/svg">
+                <path d="M24 4L6 14v10c0 10.5 7.7 20.3 18 22.9C35.3 44.3 43 34.5 43 24V14L24 4zm0 4.2l15 8.6v7.2c0 8.7-6.3 16.9-15 19.3-8.7-2.4-15-10.6-15-19.3v-7.2L24 8.2z" />
+              </svg>
+            ) : (
+              <img
+                src="/flags/png_national.svg"
+                alt="Papua New Guinea Flag"
+                className="w-full h-full object-cover"
+                onError={() => setFlagError(true)}
+              />
+            )}
           </div>
           <h1 className="text-xl font-bold text-white tracking-wide">NPAMS</h1>
-          <p className="text-white/80 text-sm mt-1">National Public Asset Management System</p>
+          <p className="text-white/90 text-sm mt-1 font-medium">National Public Asset Management System</p>
           <p className="text-white/60 text-xs mt-0.5">Independent State of Papua New Guinea</p>
         </div>
 
@@ -109,7 +117,12 @@ export default function Login() {
                 )}
               />
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button
+                type="submit"
+                className="w-full text-white font-semibold"
+                style={{ background: "linear-gradient(135deg, #CE1126, #8B0000)" }}
+                disabled={isLoading}
+              >
                 {isLoading ? "Signing in..." : "Sign In"}
               </Button>
             </form>
@@ -125,9 +138,12 @@ export default function Login() {
             </button>
           </div>
 
-          <p className="text-center text-xs text-muted-foreground mt-4">
-            For authorised government personnel only
-          </p>
+          <div className="flex items-center justify-center gap-3 mt-5 pt-4 border-t">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#000000" }} />
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#CE1126" }} />
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#FCD116" }} />
+            <p className="text-xs text-muted-foreground">For authorised government personnel only</p>
+          </div>
         </div>
       </div>
 

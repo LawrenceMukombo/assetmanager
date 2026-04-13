@@ -10,9 +10,9 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Pencil } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetchJson } from "@/lib/api-fetch";
 
@@ -41,6 +41,11 @@ export default function Locations() {
 
   const [editFacility, setEditFacility] = useState<Facility | null>(null);
   const [editFacilityForm, setEditFacilityForm] = useState({ facilityName: "", facilityType: "" });
+
+  const [showAddFacility, setShowAddFacility] = useState(false);
+  const [addFacilityForm, setAddFacilityForm] = useState({ facilityName: "", facilityType: "", address: "" });
+
+  const [deleteFacility, setDeleteFacility] = useState<Facility | null>(null);
 
   const [saving, setSaving] = useState(false);
 
@@ -129,6 +134,45 @@ export default function Locations() {
     if (result.ok) {
       toast({ title: "Facility updated" });
       setEditFacility(null);
+      queryClient.invalidateQueries({ queryKey: getGetFacilitiesByDistrictQueryKey(selectedDistrict) });
+    } else {
+      toast({ variant: "destructive", title: "Error", description: result.message });
+    }
+  };
+
+  const handleAddFacility = async () => {
+    if (!selectedDistrict) return;
+    setSaving(true);
+    const result = await apiFetchJson("/api/v1/locations/facilities", {
+      method: "POST",
+      body: JSON.stringify({
+        districtId: selectedDistrict,
+        facilityName: addFacilityForm.facilityName,
+        facilityType: addFacilityForm.facilityType || null,
+        address: addFacilityForm.address || null,
+      }),
+    });
+    setSaving(false);
+    if (result.ok) {
+      toast({ title: "Facility created" });
+      setShowAddFacility(false);
+      setAddFacilityForm({ facilityName: "", facilityType: "", address: "" });
+      queryClient.invalidateQueries({ queryKey: getGetFacilitiesByDistrictQueryKey(selectedDistrict) });
+    } else {
+      toast({ variant: "destructive", title: "Error", description: result.message });
+    }
+  };
+
+  const handleDeleteFacility = async () => {
+    if (!deleteFacility?.id) return;
+    setSaving(true);
+    const result = await apiFetchJson(`/api/v1/locations/facilities/${deleteFacility.id}`, {
+      method: "DELETE",
+    });
+    setSaving(false);
+    if (result.ok) {
+      toast({ title: "Facility deleted" });
+      setDeleteFacility(null);
       queryClient.invalidateQueries({ queryKey: getGetFacilitiesByDistrictQueryKey(selectedDistrict) });
     } else {
       toast({ variant: "destructive", title: "Error", description: result.message });
@@ -238,19 +282,26 @@ export default function Locations() {
         </TabsContent>
 
         <TabsContent value="facilities" className="mt-6 space-y-4">
-          <div className="flex gap-4 flex-wrap">
-            <Select onValueChange={(val) => { setSelectedProvince(val); setSelectedDistrict(""); }} value={selectedProvince}>
-              <SelectTrigger className="w-[300px]"><SelectValue placeholder="Select Province" /></SelectTrigger>
-              <SelectContent>
-                {provincesData?.data?.map(p => <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select onValueChange={setSelectedDistrict} value={selectedDistrict} disabled={!selectedProvince}>
-              <SelectTrigger className="w-[300px]"><SelectValue placeholder="Select District" /></SelectTrigger>
-              <SelectContent>
-                {districtsData?.data?.map(d => <SelectItem key={d.id} value={d.id!}>{d.districtName}</SelectItem>)}
-              </SelectContent>
-            </Select>
+          <div className="flex gap-4 flex-wrap items-center justify-between">
+            <div className="flex gap-4 flex-wrap">
+              <Select onValueChange={(val) => { setSelectedProvince(val); setSelectedDistrict(""); }} value={selectedProvince}>
+                <SelectTrigger className="w-[300px]"><SelectValue placeholder="Select Province" /></SelectTrigger>
+                <SelectContent>
+                  {provincesData?.data?.map(p => <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select onValueChange={setSelectedDistrict} value={selectedDistrict} disabled={!selectedProvince}>
+                <SelectTrigger className="w-[300px]"><SelectValue placeholder="Select District" /></SelectTrigger>
+                <SelectContent>
+                  {districtsData?.data?.map(d => <SelectItem key={d.id} value={d.id!}>{d.districtName}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {isSuperAdmin && selectedDistrict && (
+              <Button onClick={() => { setAddFacilityForm({ facilityName: "", facilityType: "", address: "" }); setShowAddFacility(true); }}>
+                <Plus className="w-4 h-4 mr-2" /> Add Facility
+              </Button>
+            )}
           </div>
 
           <Card>
@@ -268,6 +319,8 @@ export default function Locations() {
                   <TableRow><TableCell colSpan={isSuperAdmin ? 4 : 3} className="text-center py-8 text-muted-foreground">Select a district to view facilities.</TableCell></TableRow>
                 ) : fLoading ? (
                   <TableRow><TableCell colSpan={isSuperAdmin ? 4 : 3} className="text-center py-4">Loading...</TableCell></TableRow>
+                ) : facilitiesData?.data?.length === 0 ? (
+                  <TableRow><TableCell colSpan={isSuperAdmin ? 4 : 3} className="text-center py-8 text-muted-foreground">No facilities found in this district.</TableCell></TableRow>
                 ) : (
                   facilitiesData?.data?.map(f => (
                     <TableRow key={f.id}>
@@ -276,9 +329,14 @@ export default function Locations() {
                       <TableCell>{f.address ?? "—"}</TableCell>
                       {isSuperAdmin && (
                         <TableCell>
-                          <Button variant="ghost" size="sm" onClick={() => openEditFacility(f as Facility)}>
-                            <Pencil className="w-3 h-3 mr-1" /> Edit
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => openEditFacility(f as Facility)}>
+                              <Pencil className="w-3 h-3 mr-1" /> Edit
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteFacility(f as Facility)}>
+                              <Trash2 className="w-3 h-3 mr-1" /> Delete
+                            </Button>
+                          </div>
                         </TableCell>
                       )}
                     </TableRow>
@@ -393,6 +451,69 @@ export default function Locations() {
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditFacility(null)}>Cancel</Button>
               <Button onClick={handleSaveFacility} disabled={saving || !editFacilityForm.facilityName.trim()}>{saving ? "Saving..." : "Save Changes"}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {isSuperAdmin && showAddFacility && (
+        <Dialog open={showAddFacility} onOpenChange={(open) => { if (!open) setShowAddFacility(false); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add New Facility</DialogTitle>
+              <DialogDescription>
+                Create a new facility in the selected district.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1">
+                <Label htmlFor="newFacilityName">Facility Name <span className="text-destructive">*</span></Label>
+                <Input
+                  id="newFacilityName"
+                  placeholder="e.g. District Government Office"
+                  value={addFacilityForm.facilityName}
+                  onChange={(e) => setAddFacilityForm(f => ({ ...f, facilityName: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="newFacilityType">Facility Type</Label>
+                <Input
+                  id="newFacilityType"
+                  placeholder="e.g. Hospital, School, Government Office"
+                  value={addFacilityForm.facilityType}
+                  onChange={(e) => setAddFacilityForm(f => ({ ...f, facilityType: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="newFacilityAddress">Address</Label>
+                <Input
+                  id="newFacilityAddress"
+                  placeholder="e.g. Main Street, Town"
+                  value={addFacilityForm.address}
+                  onChange={(e) => setAddFacilityForm(f => ({ ...f, address: e.target.value }))}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowAddFacility(false)}>Cancel</Button>
+              <Button onClick={handleAddFacility} disabled={saving || !addFacilityForm.facilityName.trim()}>{saving ? "Creating..." : "Create Facility"}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {isSuperAdmin && deleteFacility && (
+        <Dialog open={!!deleteFacility} onOpenChange={(open) => { if (!open) setDeleteFacility(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Delete Facility</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete <strong>{deleteFacility.facilityName}</strong>? This action cannot be undone. Assets assigned to this facility will lose their facility assignment.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteFacility(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={handleDeleteFacility} disabled={saving}>{saving ? "Deleting..." : "Delete Facility"}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
