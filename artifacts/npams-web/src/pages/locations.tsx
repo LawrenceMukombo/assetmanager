@@ -168,7 +168,7 @@ export default function Locations() {
                     <TableRow key={p.id}>
                       <TableCell>
                         {p.flagUrl
-                          ? <img src={p.flagUrl} alt="flag" className="h-6 w-10 object-cover border rounded-sm" />
+                          ? <img src={p.flagUrl} alt="flag" className="h-6 w-12 object-contain border rounded-sm bg-muted" />
                           : <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
                       <TableCell className="font-medium">{p.provinceName}</TableCell>
@@ -306,7 +306,7 @@ export default function Locations() {
                   onChange={(e) => setEditProvinceForm(f => ({ ...f, flagUrl: e.target.value }))}
                 />
                 {editProvinceForm.flagUrl && (
-                  <img src={editProvinceForm.flagUrl} alt="preview" className="h-8 w-12 object-cover border rounded-sm mt-1" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                  <img src={editProvinceForm.flagUrl} alt="preview" className="h-8 w-14 object-contain border rounded-sm mt-1 bg-muted" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                 )}
               </div>
               <div className="space-y-1">

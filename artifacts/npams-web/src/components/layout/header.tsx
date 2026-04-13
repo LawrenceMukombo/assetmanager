@@ -60,7 +60,7 @@ export function Header() {
             <img
               src={branding.flagUrl}
               alt={`${branding.provinceName ?? "Province"} flag`}
-              className="h-6 w-9 object-cover rounded-sm border hidden sm:block"
+              className="h-6 w-10 object-contain rounded-sm border bg-muted hidden sm:block"
             />
           )}
           <h1 className="font-semibold text-lg hidden sm:block">{headerTitle}</h1>

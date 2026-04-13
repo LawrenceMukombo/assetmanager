@@ -61,7 +61,7 @@ export function Sidebar() {
             <img
               src={branding.flagUrl}
               alt={`${branding.provinceName ?? "Province"} flag`}
-              className="w-8 h-6 object-cover rounded-sm border"
+              className="w-10 h-6 object-contain rounded-sm border bg-muted"
             />
           ) : (
             <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center text-primary-foreground font-bold text-xs">

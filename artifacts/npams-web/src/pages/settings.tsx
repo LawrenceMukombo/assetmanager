@@ -205,7 +205,7 @@ export default function Settings() {
                   <img
                     src={branding.flagUrl}
                     alt={`${branding.provinceName} flag`}
-                    className="h-12 w-18 object-cover rounded border"
+                    className="h-12 w-20 object-contain rounded border bg-muted"
                   />
                 )}
                 <div>
