@@ -199,7 +199,7 @@ export default function Locations() {
         </TabsList>
 
         <TabsContent value="provinces" className="mt-6">
-          <Card>
+          <Card className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -259,13 +259,13 @@ export default function Locations() {
 
         <TabsContent value="districts" className="mt-6 space-y-4">
           <Select onValueChange={(val) => { setSelectedProvince(val); setSelectedDistrict(""); }} value={selectedProvince}>
-            <SelectTrigger className="w-[300px]"><SelectValue placeholder="Select Province first" /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-[300px]"><SelectValue placeholder="Select Province first" /></SelectTrigger>
             <SelectContent>
               {provincesData?.data?.map(p => <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>)}
             </SelectContent>
           </Select>
 
-          <Card>
+          <Card className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -307,13 +307,13 @@ export default function Locations() {
           <div className="flex gap-4 flex-wrap items-center justify-between">
             <div className="flex gap-4 flex-wrap">
               <Select onValueChange={(val) => { setSelectedProvince(val); setSelectedDistrict(""); }} value={selectedProvince}>
-                <SelectTrigger className="w-[300px]"><SelectValue placeholder="Select Province" /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-[300px]"><SelectValue placeholder="Select Province" /></SelectTrigger>
                 <SelectContent>
                   {provincesData?.data?.map(p => <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select onValueChange={setSelectedDistrict} value={selectedDistrict} disabled={!selectedProvince}>
-                <SelectTrigger className="w-[300px]"><SelectValue placeholder="Select District" /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-[300px]"><SelectValue placeholder="Select District" /></SelectTrigger>
                 <SelectContent>
                   {districtsData?.data?.map(d => <SelectItem key={d.id} value={d.id!}>{d.districtName}</SelectItem>)}
                 </SelectContent>
@@ -326,7 +326,7 @@ export default function Locations() {
             )}
           </div>
 
-          <Card>
+          <Card className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
