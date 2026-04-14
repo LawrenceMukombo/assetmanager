@@ -84,7 +84,7 @@ export default function AssetForm() {
         headers: { "Content-Type": file.type },
         body: file,
       });
-      form.setValue("photo_url", `/api${res.data.objectPath}`);
+      form.setValue("photo_url", `/api/storage${res.data.objectPath}`, { shouldValidate: true, shouldDirty: true });
       toast({ title: "Photo uploaded successfully" });
     } catch {
       toast({ variant: "destructive", title: "Photo upload failed", description: "Please try again." });
@@ -661,13 +661,27 @@ export default function AssetForm() {
               <div className={step === 4 ? 'block' : 'hidden'}>
                 <h3 className="text-xl font-semibold mb-4">Review & Submit</h3>
                 <div className="bg-muted p-4 rounded-lg space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div><span className="font-semibold">Asset Name:</span> {form.getValues("asset_name")}</div>
-                    <div><span className="font-semibold">Asset Tag:</span> {form.getValues("asset_tag")}</div>
-                    <div><span className="font-semibold">Condition:</span> <span className="capitalize">{form.getValues("condition")}</span></div>
-                    <div><span className="font-semibold">Status:</span> <span className="capitalize">{form.getValues("status")}</span></div>
+                  <div className="flex gap-4">
+                    {form.watch("photo_url") && (
+                      <div className="w-24 h-24 rounded-lg border overflow-hidden flex-shrink-0">
+                        <img src={form.watch("photo_url")} alt="Asset" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-3 flex-1">
+                      <div><span className="font-semibold">Asset Name:</span> {form.getValues("asset_name")}</div>
+                      <div><span className="font-semibold">Asset Tag:</span> {form.getValues("asset_tag")}</div>
+                      <div><span className="font-semibold">Condition:</span> <span className="capitalize">{form.getValues("condition")}</span></div>
+                      <div><span className="font-semibold">Status:</span> <span className="capitalize">{form.getValues("status").replace(/_/g, " ")}</span></div>
+                      {form.getValues("brand") && <div><span className="font-semibold">Brand:</span> {form.getValues("brand")}</div>}
+                      {form.getValues("model") && <div><span className="font-semibold">Model:</span> {form.getValues("model")}</div>}
+                      {form.getValues("purchase_date") && <div><span className="font-semibold">Purchase Date:</span> {form.getValues("purchase_date")}</div>}
+                      {form.getValues("purchase_cost") && <div><span className="font-semibold">Cost (K):</span> {Number(form.getValues("purchase_cost")).toLocaleString()}</div>}
+                      {form.getValues("warranty_expiry") && <div><span className="font-semibold">Warranty Expires:</span> {form.getValues("warranty_expiry")}</div>}
+                      {(() => { const cat = categoriesData?.data?.find(c => c.id === form.getValues("category_id")); return cat ? <div><span className="font-semibold">Category:</span> {cat.categoryName}</div> : null; })()}
+                      {(() => { const prov = provincesData?.data?.find(p => p.id === form.getValues("province_id")); return prov ? <div><span className="font-semibold">Province:</span> {(prov as { provinceName?: string }).provinceName}</div> : null; })()}
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-4">Please review the details before saving. You can edit them later if needed.</p>
+                  <p className="text-sm text-muted-foreground">Please review the details before saving. You can edit them later if needed.</p>
                 </div>
               </div>
 

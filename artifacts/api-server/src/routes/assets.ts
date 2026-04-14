@@ -196,6 +196,12 @@ router.get("/v1/assets", requireAuth, enforceScopeFilter, async (req, res) => {
   }
 });
 
+/** Convert empty strings (and null/undefined) to null for optional DB fields */
+function orNull(v: unknown): null | string {
+  if (v === null || v === undefined || v === "") return null;
+  return String(v);
+}
+
 router.post("/v1/assets", requireAuth, requireAssetAdmin, async (req, res) => {
   if (!req.user) return;
 
@@ -226,25 +232,25 @@ router.post("/v1/assets", requireAuth, requireAssetAdmin, async (req, res) => {
       .values({
         assetTag: body.asset_tag,
         assetName: body.asset_name,
-        categoryId: body.category_id ?? null,
-        serialNumber: body.serial_number ?? null,
-        brand: body.brand ?? null,
-        model: body.model ?? null,
-        purchaseDate: body.purchase_date ?? null,
-        purchaseCost: body.purchase_cost != null ? String(body.purchase_cost) : null,
-        supplier: body.supplier ?? null,
-        warrantyExpiry: body.warranty_expiry ?? null,
-        usefulLifeYears: body.useful_life_years ?? null,
-        depreciationMethod: body.depreciation_method ?? "none",
-        salvageValue: body.salvage_value != null ? String(body.salvage_value) : null,
-        photoUrl: body.photo_url ?? null,
-        notes: body.notes ?? null,
+        categoryId: orNull(body.category_id),
+        serialNumber: orNull(body.serial_number),
+        brand: orNull(body.brand),
+        model: orNull(body.model),
+        purchaseDate: orNull(body.purchase_date),
+        purchaseCost: orNull(body.purchase_cost),
+        supplier: orNull(body.supplier),
+        warrantyExpiry: orNull(body.warranty_expiry),
+        usefulLifeYears: body.useful_life_years != null && body.useful_life_years !== "" ? Number(body.useful_life_years) : null,
+        depreciationMethod: orNull(body.depreciation_method) ?? "none",
+        salvageValue: orNull(body.salvage_value),
+        photoUrl: orNull(body.photo_url),
+        notes: orNull(body.notes),
         status: body.status ?? "active",
         condition: body.condition ?? "good",
-        provinceId: body.province_id ?? userProvinceId ?? null,
-        districtId: body.district_id ?? null,
-        facilityId: body.facility_id ?? null,
-        assignedToUser: body.assigned_to_user ?? null,
+        provinceId: orNull(body.province_id) ?? userProvinceId ?? null,
+        districtId: orNull(body.district_id),
+        facilityId: orNull(body.facility_id),
+        assignedToUser: orNull(body.assigned_to_user),
         createdBy: req.user.userId,
       })
       .returning();
@@ -390,25 +396,25 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
       .update(assets)
       .set({
         assetName: body.asset_name,
-        categoryId: body.category_id ?? null,
-        serialNumber: body.serial_number ?? null,
-        brand: body.brand ?? null,
-        model: body.model ?? null,
-        purchaseDate: body.purchase_date ?? null,
-        purchaseCost: body.purchase_cost != null ? String(body.purchase_cost) : null,
-        supplier: body.supplier ?? null,
-        warrantyExpiry: body.warranty_expiry ?? null,
-        usefulLifeYears: body.useful_life_years ?? null,
-        depreciationMethod: body.depreciation_method ?? "none",
-        salvageValue: body.salvage_value != null ? String(body.salvage_value) : null,
-        photoUrl: body.photo_url !== undefined ? body.photo_url : undefined,
-        notes: body.notes !== undefined ? body.notes : undefined,
+        categoryId: orNull(body.category_id),
+        serialNumber: orNull(body.serial_number),
+        brand: orNull(body.brand),
+        model: orNull(body.model),
+        purchaseDate: orNull(body.purchase_date),
+        purchaseCost: orNull(body.purchase_cost),
+        supplier: orNull(body.supplier),
+        warrantyExpiry: orNull(body.warranty_expiry),
+        usefulLifeYears: body.useful_life_years != null && body.useful_life_years !== "" ? Number(body.useful_life_years) : null,
+        depreciationMethod: orNull(body.depreciation_method) ?? "none",
+        salvageValue: orNull(body.salvage_value),
+        photoUrl: body.photo_url !== undefined ? orNull(body.photo_url) : undefined,
+        notes: body.notes !== undefined ? orNull(body.notes) : undefined,
         status: body.status,
         condition: body.condition,
         provinceId: targetProvinceId,
-        districtId: body.district_id ?? null,
-        facilityId: body.facility_id ?? null,
-        assignedToUser: body.assigned_to_user ?? null,
+        districtId: orNull(body.district_id),
+        facilityId: orNull(body.facility_id),
+        assignedToUser: orNull(body.assigned_to_user),
         updatedAt: new Date(),
       })
       .where(eq(assets.id, req.params.id as string))
