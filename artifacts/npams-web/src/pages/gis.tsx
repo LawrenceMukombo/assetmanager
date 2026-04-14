@@ -28,28 +28,28 @@ const DB_CODE_TO_GIS_ID: Record<string, string> = {
 
 // Maps GADM NAME_1 → PNG_PROVINCES id
 const GADM_TO_GIS_ID: Record<string, string> = {
-  Bougainville: "bougainville",
-  Central: "central",
-  Chimbu: "chimbu",
-  EastNewBritain: "east-new-britain",
-  EastSepik: "east-sepik",
-  EasternHighlands: "eastern-highlands",
-  Enga: "enga",
-  Gulf: "gulf",
-  Hela: "hela",
-  Jiwaka: "jiwaka",
-  Madang: "madang",
-  Manus: "manus",
-  MilneBay: "milne-bay",
-  Morobe: "morobe",
-  NationalCapitalDistrict: "ncd",
-  NewIreland: "new-ireland",
-  Oro: "oro",
-  Sandaun: "sandaun",
-  SouthernHighlands: "southern-highlands",
-  WestNewBritain: "west-new-britain",
-  Western: "western",
+  Bougainville: "bougainville", Central: "central", Chimbu: "chimbu",
+  EastNewBritain: "east-new-britain", EastSepik: "east-sepik",
+  EasternHighlands: "eastern-highlands", Enga: "enga", Gulf: "gulf",
+  Hela: "hela", Jiwaka: "jiwaka", Madang: "madang", Manus: "manus",
+  MilneBay: "milne-bay", Morobe: "morobe",
+  NationalCapitalDistrict: "ncd", NewIreland: "new-ireland",
+  Oro: "oro", Sandaun: "sandaun", SouthernHighlands: "southern-highlands",
+  WestNewBritain: "west-new-britain", Western: "western",
   WesternHighlands: "western-highlands",
+};
+
+// Maps GADM GID_1 → PNG_PROVINCES id (for district parent lookup)
+const GID1_TO_GIS_ID: Record<string, string> = {
+  "PNG.1_1": "bougainville", "PNG.2_1": "central", "PNG.3_1": "chimbu",
+  "PNG.4_1": "east-new-britain", "PNG.5_1": "east-sepik",
+  "PNG.6_1": "eastern-highlands", "PNG.7_1": "enga", "PNG.8_1": "gulf",
+  "PNG.9_1": "hela", "PNG.10_1": "jiwaka", "PNG.11_1": "madang",
+  "PNG.12_1": "manus", "PNG.13_1": "milne-bay", "PNG.14_1": "morobe",
+  "PNG.15_1": "ncd", "PNG.16_1": "new-ireland", "PNG.17_1": "oro",
+  "PNG.18_1": "sandaun", "PNG.19_1": "southern-highlands",
+  "PNG.20_1": "west-new-britain", "PNG.21_1": "western-highlands",
+  "PNG.22_1": "western",
 };
 
 delete (L.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl;
@@ -60,21 +60,24 @@ L.Icon.Default.mergeOptions({
 });
 
 const formatNumber = (n: number) =>
-  n >= 1_000_000
-    ? `${(n / 1_000_000).toFixed(2)}M`
-    : n >= 1_000
-    ? `${(n / 1_000).toFixed(1)}K`
-    : n.toString();
+  n >= 1_000_000 ? `${(n / 1_000_000).toFixed(2)}M`
+  : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K`
+  : n.toString();
 
 const regionColors: Record<string, string> = {
-  "Southern": "#1565C0",
-  "Momase": "#2E7D32",
-  "Highlands": "#6A1B9A",
-  "Islands": "#B71C1C",
+  "Southern": "#1565C0", "Momase": "#2E7D32",
+  "Highlands": "#6A1B9A", "Islands": "#B71C1C",
 };
 
 function getProvinceColor(prov: ProvinceProfile) {
   return regionColors[prov.region] ?? prov.color;
+}
+
+function hexToRgba(hex: string, alpha: number) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 function StatBox({ label, value }: { label: string; value: string }) {
@@ -94,8 +97,10 @@ export default function GISPage() {
   const circlesRef = useRef<Map<string, L.CircleMarker>>(new Map());
   const districtMarkersRef = useRef<L.LayerGroup | null>(null);
   const geoLayerRef = useRef<L.GeoJSON | null>(null);
+  const districtGeoLayerRef = useRef<L.GeoJSON | null>(null);
   const selectedProvinceRef = useRef<ProvinceProfile | null>(null);
   const selectedRegionRef = useRef<string | null>(null);
+  const showDistrictsRef = useRef(true);
   const baseLayers = useRef<Record<string, L.TileLayer>>({});
   const currentLayer = useRef<L.TileLayer | null>(null);
 
@@ -108,21 +113,16 @@ export default function GISPage() {
   const userProvince = useMemo(() => {
     if (user?.scope_level === "national") return null;
     const scope = user?.scope as { province_code?: string; province_name?: string } | null;
-
     if (scope?.province_code) {
       const gisId = DB_CODE_TO_GIS_ID[scope.province_code];
       if (gisId) return PNG_PROVINCES.find((p) => p.id === gisId) ?? null;
     }
-
-    const scopeProvinceName = scope?.province_name ?? branding.provinceName;
-    if (!scopeProvinceName) return null;
-    return (
-      PNG_PROVINCES.find(
-        (p) =>
-          p.name.toLowerCase() === scopeProvinceName.toLowerCase() ||
-          p.name.toLowerCase().includes(scopeProvinceName.toLowerCase())
-      ) ?? null
-    );
+    const name = scope?.province_name ?? branding.provinceName;
+    if (!name) return null;
+    return PNG_PROVINCES.find(
+      (p) => p.name.toLowerCase() === name.toLowerCase() ||
+             p.name.toLowerCase().includes(name.toLowerCase())
+    ) ?? null;
   }, [user, branding.provinceName]);
 
   const visibleProvinceIds = useMemo(() => {
@@ -130,29 +130,7 @@ export default function GISPage() {
     return userProvince ? new Set([userProvince.id]) : new Set(PNG_PROVINCES.map((p) => p.id));
   }, [user, userProvince]);
 
-  // Style a GeoJSON feature
-  const getFeatureStyle = useCallback(
-    (feature: GeoJSON.Feature | undefined, isSelected: boolean, isDimmed: boolean): L.PathOptions => {
-      const gadmName = feature?.properties?.NAME_1 as string | undefined;
-      const gisId = gadmName ? GADM_TO_GIS_ID[gadmName] : undefined;
-      const prov = gisId ? PNG_PROVINCES.find((p) => p.id === gisId) : undefined;
-      const color = prov ? getProvinceColor(prov) : "#64748b";
-      const isVisible = gisId ? visibleProvinceIds.has(gisId) : false;
-
-      if (!isVisible) return { fillOpacity: 0, opacity: 0, weight: 0 };
-
-      return {
-        fillColor: color,
-        fillOpacity: isSelected ? 0.45 : isDimmed ? 0.05 : 0.2,
-        color: isSelected ? color : isDimmed ? "#94a3b8" : "#ffffff",
-        weight: isSelected ? 2.5 : isDimmed ? 0.5 : 1.2,
-        opacity: isDimmed ? 0.3 : 1,
-      };
-    },
-    [visibleProvinceIds]
-  );
-
-  // Refresh all polygon styles based on current selection + region filter
+  // ── Province polygon styles ─────────────────────────────────────────────────
   const refreshGeoStyles = useCallback(() => {
     const layer = geoLayerRef.current;
     if (!layer) return;
@@ -160,26 +138,69 @@ export default function GISPage() {
     const selRegion = selectedRegionRef.current;
 
     layer.eachLayer((l) => {
-      const polyLayer = l as L.Path & { feature?: GeoJSON.Feature };
-      const gadmName = polyLayer.feature?.properties?.NAME_1 as string | undefined;
-      const gisId = gadmName ? GADM_TO_GIS_ID[gadmName] : undefined;
+      const pl = l as L.Path & { feature?: GeoJSON.Feature };
+      const gisId = GADM_TO_GIS_ID[pl.feature?.properties?.NAME_1 as string];
       const prov = gisId ? PNG_PROVINCES.find((p) => p.id === gisId) : undefined;
-      const isSelected = !!(selProv && prov && selProv.id === prov.id);
-      const isDimmed = !!(selRegion && prov && prov.region !== selRegion && !isSelected);
-      polyLayer.setStyle(getFeatureStyle(polyLayer.feature, isSelected, isDimmed));
+      if (!prov || !visibleProvinceIds.has(prov.id)) return;
+
+      const isSelected = selProv?.id === prov.id;
+      const isDimmed = !!(selRegion && prov.region !== selRegion && !isSelected);
+      const color = getProvinceColor(prov);
+
+      pl.setStyle({
+        fillColor: color,
+        fillOpacity: isSelected ? 0.45 : isDimmed ? 0.05 : 0.18,
+        color: isSelected ? color : isDimmed ? "#94a3b8" : "#ffffff",
+        weight: isSelected ? 2.5 : isDimmed ? 0.5 : 1.2,
+        opacity: isDimmed ? 0.3 : 1,
+      });
+      if (isSelected) (l as L.Path & { bringToFront(): void }).bringToFront();
     });
-  }, [getFeatureStyle]);
+  }, [visibleProvinceIds]);
+
+  // ── District polygon styles ─────────────────────────────────────────────────
+  const refreshDistrictStyles = useCallback(() => {
+    const layer = districtGeoLayerRef.current;
+    if (!layer) return;
+    const selProv = selectedProvinceRef.current;
+    const selRegion = selectedRegionRef.current;
+    const show = showDistrictsRef.current;
+
+    layer.eachLayer((l) => {
+      const pl = l as L.Path & { feature?: GeoJSON.Feature };
+      const gid1 = pl.feature?.properties?.GID_1 as string;
+      const gisId = GID1_TO_GIS_ID[gid1];
+      const prov = gisId ? PNG_PROVINCES.find((p) => p.id === gisId) : undefined;
+      if (!prov || !visibleProvinceIds.has(prov.id)) {
+        pl.setStyle({ fillOpacity: 0, opacity: 0, weight: 0 });
+        return;
+      }
+
+      if (!show) { pl.setStyle({ fillOpacity: 0, opacity: 0, weight: 0 }); return; }
+
+      const isInSelected = selProv?.id === prov.id;
+      const isRegionDimmed = !!(selRegion && prov.region !== selRegion);
+      const color = getProvinceColor(prov);
+
+      pl.setStyle({
+        fillColor: color,
+        fillOpacity: isRegionDimmed ? 0.02
+                   : isInSelected   ? 0.16
+                   : selProv        ? 0.04
+                   : 0.07,
+        color: isInSelected ? hexToRgba(color, 0.6) : hexToRgba(color, 0.25),
+        weight: isInSelected ? 0.8 : 0.5,
+        opacity: isRegionDimmed ? 0.15 : 0.9,
+      });
+    });
+  }, [visibleProvinceIds]);
 
   function updateDistrictMarkers(prov: ProvinceProfile, group: L.LayerGroup) {
     group.clearLayers();
     prov.districts.forEach((d) => {
       const marker = L.circleMarker([d.lat, d.lng], {
-        radius: 7,
-        fillColor: "#FCD116",
-        color: "#000",
-        weight: 1.5,
-        opacity: 1,
-        fillOpacity: 0.95,
+        radius: 7, fillColor: "#FCD116", color: "#000",
+        weight: 1.5, opacity: 1, fillOpacity: 0.95,
       });
       marker.bindTooltip(
         `<div style="font-weight:bold;font-size:12px">${d.name}</div>
@@ -194,30 +215,27 @@ export default function GISPage() {
     (prov: ProvinceProfile) => {
       selectedProvinceRef.current = prov;
       setSelectedProvince(prov);
-      if (mapRef.current) {
-        mapRef.current.setView([prov.lat, prov.lng], 8, { animate: true, duration: 0.7 });
-      }
+      mapRef.current?.setView([prov.lat, prov.lng], 8, { animate: true, duration: 0.7 });
       if (districtMarkersRef.current) {
         updateDistrictMarkers(prov, districtMarkersRef.current);
-        if (!showDistricts && mapRef.current) districtMarkersRef.current.addTo(mapRef.current);
+        if (!showDistrictsRef.current && mapRef.current)
+          districtMarkersRef.current.addTo(mapRef.current);
+        showDistrictsRef.current = true;
         setShowDistricts(true);
       }
       refreshGeoStyles();
+      refreshDistrictStyles();
     },
-    [refreshGeoStyles, showDistricts]
+    [refreshGeoStyles, refreshDistrictStyles]
   );
 
-  // Map initialisation
+  // ── Map initialisation ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      center: PNG_CENTER,
-      zoom: 6,
-      zoomControl: false,
-      attributionControl: true,
+      center: PNG_CENTER, zoom: 6, zoomControl: false, attributionControl: true,
     });
-
     L.control.zoom({ position: "bottomright" }).addTo(map);
 
     const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -226,14 +244,10 @@ export default function GISPage() {
     });
     const satellite = L.tileLayer(
       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      {
-        attribution: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics",
-        maxZoom: 19,
-      }
+      { attribution: "Tiles &copy; Esri", maxZoom: 19 }
     );
     const topo = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
-      attribution: 'Map data: &copy; OpenStreetMap, SRTM | Style: &copy; OpenTopoMap',
-      maxZoom: 17,
+      attribution: "Map data: &copy; OpenStreetMap | Style: &copy; OpenTopoMap", maxZoom: 17,
     });
 
     baseLayers.current = { osm, satellite, topo };
@@ -243,33 +257,26 @@ export default function GISPage() {
     const districtGroup = L.layerGroup().addTo(map);
     districtMarkersRef.current = districtGroup;
 
-    // Fetch & render province boundaries GeoJSON
+    // ── Province boundaries ─────────────────────────────────────────────────
     fetch("/png-provinces.geojson")
       .then((r) => r.json())
-      .then((geojsonData: GeoJSON.FeatureCollection) => {
-        const geoLayer = L.geoJSON(geojsonData, {
+      .then((data: GeoJSON.FeatureCollection) => {
+        const geoLayer = L.geoJSON(data, {
           style: (feature) => {
-            const gadmName = feature?.properties?.NAME_1 as string | undefined;
-            const gisId = gadmName ? GADM_TO_GIS_ID[gadmName] : undefined;
+            const gisId = GADM_TO_GIS_ID[feature?.properties?.NAME_1 as string];
             const prov = gisId ? PNG_PROVINCES.find((p) => p.id === gisId) : undefined;
-            const color = prov ? getProvinceColor(prov) : "#64748b";
-            const isVisible = gisId ? visibleProvinceIds.has(gisId) : false;
-            if (!isVisible) return { fillOpacity: 0, opacity: 0, weight: 0, interactive: false };
+            if (!prov || !visibleProvinceIds.has(prov.id))
+              return { fillOpacity: 0, opacity: 0, weight: 0, interactive: false };
             return {
-              fillColor: color,
-              fillOpacity: 0.2,
-              color: "#ffffff",
-              weight: 1.2,
-              opacity: 1,
+              fillColor: getProvinceColor(prov), fillOpacity: 0.18,
+              color: "#ffffff", weight: 1.2, opacity: 1,
             };
           },
           onEachFeature: (feature, layer) => {
-            const gadmName = feature.properties?.NAME_1 as string | undefined;
-            const gisId = gadmName ? GADM_TO_GIS_ID[gadmName] : undefined;
+            const gisId = GADM_TO_GIS_ID[feature.properties?.NAME_1 as string];
             const prov = gisId ? PNG_PROVINCES.find((p) => p.id === gisId) : undefined;
             if (!prov || !visibleProvinceIds.has(prov.id)) return;
-
-            const polyLayer = layer as L.Path;
+            const pl = layer as L.Path;
 
             layer.bindTooltip(
               `<div style="font-weight:bold;font-size:13px">${prov.name}</div>
@@ -279,100 +286,122 @@ export default function GISPage() {
             );
 
             layer.on("mouseover", () => {
-              const isSelected = selectedProvinceRef.current?.id === prov.id;
-              if (!isSelected) {
-                polyLayer.setStyle({
-                  fillOpacity: 0.38,
-                  weight: 2,
-                  color: getProvinceColor(prov),
-                });
-                (layer as L.Path & { bringToFront: () => void }).bringToFront();
-              }
+              if (selectedProvinceRef.current?.id === prov.id) return;
+              pl.setStyle({ fillOpacity: 0.38, weight: 2, color: getProvinceColor(prov) });
+              (layer as L.Path & { bringToFront(): void }).bringToFront();
             });
-
             layer.on("mouseout", () => {
-              const isSelected = selectedProvinceRef.current?.id === prov.id;
-              const isRegionDimmed =
-                selectedRegionRef.current !== null &&
-                prov.region !== selectedRegionRef.current;
-              if (!isSelected) {
-                polyLayer.setStyle({
-                  fillOpacity: isRegionDimmed ? 0.05 : 0.2,
-                  weight: isRegionDimmed ? 0.5 : 1.2,
-                  color: isRegionDimmed ? "#94a3b8" : "#ffffff",
-                });
-              }
-            });
-
-            layer.on("click", () => {
-              selectedProvinceRef.current = prov;
-              setSelectedProvince(prov);
-              map.setView([prov.lat, prov.lng], 8, { animate: true, duration: 0.7 });
-              updateDistrictMarkers(prov, districtGroup);
-              if (!showDistricts) districtGroup.addTo(map);
-              setShowDistricts(true);
-              // Refresh styles for all polygons
-              geoLayer.eachLayer((l) => {
-                const fl = l as L.Path & { feature?: GeoJSON.Feature };
-                const gn = fl.feature?.properties?.NAME_1 as string | undefined;
-                const gi = gn ? GADM_TO_GIS_ID[gn] : undefined;
-                const fp = gi ? PNG_PROVINCES.find((p) => p.id === gi) : undefined;
-                if (!fp) return;
-                const isSel = fp.id === prov.id;
-                const isDim =
-                  selectedRegionRef.current !== null &&
-                  fp.region !== selectedRegionRef.current &&
-                  !isSel;
-                const c = getProvinceColor(fp);
-                fl.setStyle({
-                  fillColor: c,
-                  fillOpacity: isSel ? 0.45 : isDim ? 0.05 : 0.2,
-                  color: isSel ? c : isDim ? "#94a3b8" : "#ffffff",
-                  weight: isSel ? 2.5 : isDim ? 0.5 : 1.2,
-                  opacity: isDim ? 0.3 : 1,
-                });
-                if (isSel) (l as L.Path & { bringToFront: () => void }).bringToFront();
+              if (selectedProvinceRef.current?.id === prov.id) return;
+              const isDimmed = selectedRegionRef.current !== null && prov.region !== selectedRegionRef.current;
+              pl.setStyle({
+                fillOpacity: isDimmed ? 0.05 : 0.18,
+                weight: isDimmed ? 0.5 : 1.2,
+                color: isDimmed ? "#94a3b8" : "#ffffff",
               });
             });
+            layer.on("click", () => selectProvince(prov));
           },
         });
-
         geoLayer.addTo(map);
         geoLayerRef.current = geoLayer;
         setGeoReady(true);
       })
-      .catch((err) => console.warn("GeoJSON load failed", err));
+      .catch((e) => console.warn("Province GeoJSON failed", e));
 
-    // Population circle markers (rendered above polygons)
+    // ── District boundaries ──────────────────────────────────────────────────
+    fetch("/png-districts.geojson")
+      .then((r) => r.json())
+      .then((data: GeoJSON.FeatureCollection) => {
+        const distLayer = L.geoJSON(data, {
+          style: (feature) => {
+            const gid1 = feature?.properties?.GID_1 as string;
+            const gisId = GID1_TO_GIS_ID[gid1];
+            const prov = gisId ? PNG_PROVINCES.find((p) => p.id === gisId) : undefined;
+            if (!prov || !visibleProvinceIds.has(prov.id))
+              return { fillOpacity: 0, opacity: 0, weight: 0, interactive: false };
+            const color = getProvinceColor(prov);
+            return {
+              fillColor: color, fillOpacity: 0.07,
+              color: hexToRgba(color, 0.25), weight: 0.5, opacity: 0.9,
+            };
+          },
+        });
+
+        // Add to map first, then bind tooltips & events (avoids appendChild error)
+        distLayer.addTo(map);
+
+        distLayer.eachLayer((layer) => {
+          const pl = layer as L.Path & { feature?: GeoJSON.Feature };
+          const feature = pl.feature;
+          if (!feature) return;
+
+          const gid1 = feature.properties?.GID_1 as string;
+          const gisId = GID1_TO_GIS_ID[gid1];
+          const prov = gisId ? PNG_PROVINCES.find((p) => p.id === gisId) : undefined;
+          if (!prov || !visibleProvinceIds.has(prov.id)) return;
+
+          const rawName = feature.properties?.NAME_2 as string ?? "";
+          const districtName = rawName
+            .replace(/([a-z])([A-Z])/g, "$1 $2")
+            .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+          const color = getProvinceColor(prov);
+
+          layer.bindTooltip(
+            `<div style="font-weight:bold;font-size:12px">${districtName} District</div>
+             <div style="font-size:11px">${prov.name}</div>`,
+            { className: "leaflet-custom-tooltip", direction: "top", sticky: false }
+          );
+
+          layer.on("mouseover", () => {
+            if (!showDistrictsRef.current) return;
+            pl.setStyle({ fillOpacity: 0.3, weight: 1.2, color });
+            (layer as L.Path & { bringToFront(): void }).bringToFront();
+          });
+          layer.on("mouseout", () => {
+            if (!showDistrictsRef.current) return;
+            const isInSelected = selectedProvinceRef.current?.id === prov.id;
+            const isRegionDimmed = selectedRegionRef.current !== null && prov.region !== selectedRegionRef.current;
+            pl.setStyle({
+              fillOpacity: isRegionDimmed ? 0.02 : isInSelected ? 0.16 : selectedProvinceRef.current ? 0.04 : 0.07,
+              color: isInSelected ? hexToRgba(color, 0.6) : hexToRgba(color, 0.25),
+              weight: isInSelected ? 0.8 : 0.5,
+            });
+          });
+          layer.on("click", () => {
+            selectProvince(prov);
+            const matchName = districtName.toLowerCase();
+            const distData = prov.districts.find(
+              (d) => d.name.toLowerCase().includes(matchName.split(" ")[0])
+            );
+            if (distData) {
+              setTimeout(() => {
+                map.setView([distData.lat, distData.lng], 10, { animate: true, duration: 0.6 });
+              }, 400);
+            }
+          });
+        });
+
+        districtGeoLayerRef.current = distLayer;
+      })
+      .catch((e) => console.warn("District GeoJSON failed", e));
+
+    // ── Population circle markers ────────────────────────────────────────────
     const bounds = getPNGBounds();
     PNG_PROVINCES.forEach((prov) => {
       if (!visibleProvinceIds.has(prov.id)) return;
       const color = getProvinceColor(prov);
-
       const circle = L.circleMarker([prov.lat, prov.lng], {
         radius: Math.max(8, Math.min(20, prov.population_2021_est / 40000)),
-        fillColor: color,
-        color: "#fff",
-        weight: 2,
-        opacity: 1,
-        fillOpacity: 0.88,
-        zIndexOffset: 500,
+        fillColor: color, color: "#fff", weight: 2, opacity: 1,
+        fillOpacity: 0.88, zIndexOffset: 500,
       });
-
       circle.bindTooltip(
         `<div style="font-weight:bold;font-size:13px">${prov.name}</div>
          <div style="font-size:11px">Capital: ${prov.capital}</div>
          <div style="font-size:11px">Pop: ${formatNumber(prov.population_2021_est)}</div>`,
         { permanent: false, direction: "top", className: "leaflet-custom-tooltip" }
       );
-
-      circle.on("click", () => {
-        selectedProvinceRef.current = prov;
-        setSelectedProvince(prov);
-        map.setView([prov.lat, prov.lng], 8, { animate: true, duration: 0.8 });
-        updateDistrictMarkers(prov, districtGroup);
-      });
-
+      circle.on("click", () => selectProvince(prov));
       circle.on("mouseover", function (this: L.CircleMarker) {
         if (selectedRegionRef.current && selectedRegionRef.current !== prov.region) return;
         this.setStyle({ weight: 3.5, fillOpacity: 1 });
@@ -381,7 +410,6 @@ export default function GISPage() {
         if (selectedRegionRef.current && selectedRegionRef.current !== prov.region) return;
         this.setStyle({ weight: 2, fillOpacity: 0.88 });
       });
-
       circle.addTo(map);
       circlesRef.current.set(prov.id, circle);
     });
@@ -396,54 +424,42 @@ export default function GISPage() {
     }
 
     mapRef.current = map;
-
-    return () => {
-      map.remove();
-      mapRef.current = null;
-      geoLayerRef.current = null;
-    };
+    return () => { map.remove(); mapRef.current = null; geoLayerRef.current = null; districtGeoLayerRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync selected province when userProvince resolves after async auth
+  // Sync province after async auth resolves
   useEffect(() => {
     if (!userProvince || !mapRef.current) return;
     if (selectedProvinceRef.current?.id === userProvince.id) return;
     selectedProvinceRef.current = userProvince;
     setSelectedProvince(userProvince);
     mapRef.current.setView([userProvince.lat, userProvince.lng], 8, { animate: true });
-    if (districtMarkersRef.current) {
-      updateDistrictMarkers(userProvince, districtMarkersRef.current);
-    }
+    if (districtMarkersRef.current) updateDistrictMarkers(userProvince, districtMarkersRef.current);
     refreshGeoStyles();
-  }, [userProvince, refreshGeoStyles]);
+    refreshDistrictStyles();
+  }, [userProvince, refreshGeoStyles, refreshDistrictStyles]);
 
-  // Refresh polygon styles when GeoJSON loads (might happen after selection is set)
+  // Refresh after GeoJSON layers load
   useEffect(() => {
-    if (geoReady) refreshGeoStyles();
-  }, [geoReady, refreshGeoStyles]);
+    if (geoReady) { refreshGeoStyles(); refreshDistrictStyles(); }
+  }, [geoReady, refreshGeoStyles, refreshDistrictStyles]);
 
-  // Region filter effect
+  // Region filter
   useEffect(() => {
     selectedRegionRef.current = selectedRegion;
-
     circlesRef.current.forEach((circle, provId) => {
       const prov = PNG_PROVINCES.find((p) => p.id === provId);
       if (!prov) return;
       const dimmed = selectedRegion !== null && prov.region !== selectedRegion;
-      circle.setStyle({
-        fillOpacity: dimmed ? 0 : 0.88,
-        weight: dimmed ? 0 : 2,
-        opacity: dimmed ? 0 : 1,
-      });
+      circle.setStyle({ fillOpacity: dimmed ? 0 : 0.88, weight: dimmed ? 0 : 2, opacity: dimmed ? 0 : 1 });
     });
-
     refreshGeoStyles();
-  }, [selectedRegion, refreshGeoStyles]);
+    refreshDistrictStyles();
+  }, [selectedRegion, refreshGeoStyles, refreshDistrictStyles]);
 
-  const toggleRegionFilter = (region: string) => {
+  const toggleRegionFilter = (region: string) =>
     setSelectedRegion((prev) => (prev === region ? null : region));
-  };
 
   const switchBasemap = (style: "osm" | "satellite" | "topo") => {
     const map = mapRef.current;
@@ -456,24 +472,25 @@ export default function GISPage() {
 
   const toggleDistricts = () => {
     const group = districtMarkersRef.current;
+    const distGeo = districtGeoLayerRef.current;
     const map = mapRef.current;
     if (!group || !map) return;
-    if (showDistricts) {
-      map.removeLayer(group);
-    } else {
-      group.addTo(map);
+    const next = !showDistricts;
+    showDistrictsRef.current = next;
+    // Toggle district dot markers
+    if (next) { group.addTo(map); } else { map.removeLayer(group); }
+    // Toggle district polygon layer (add/remove instead of just styling invisible)
+    if (distGeo) {
+      if (next) { distGeo.addTo(map); } else { map.removeLayer(distGeo); }
     }
-    setShowDistricts(!showDistricts);
+    setShowDistricts(next);
   };
 
   const resetView = () => {
     const map = mapRef.current;
     if (!map) return;
-    if (userProvince) {
-      map.setView([userProvince.lat, userProvince.lng], 8, { animate: true });
-    } else {
-      map.fitBounds(getPNGBounds(), { padding: [20, 20], animate: true });
-    }
+    if (userProvince) map.setView([userProvince.lat, userProvince.lng], 8, { animate: true });
+    else map.fitBounds(getPNGBounds(), { padding: [20, 20], animate: true });
   };
 
   const handleProvinceClick = (prov: ProvinceProfile) => {
@@ -485,16 +502,19 @@ export default function GISPage() {
       if (districtMarkersRef.current) {
         updateDistrictMarkers(prov, districtMarkersRef.current);
         if (!showDistricts) districtMarkersRef.current.addTo(map);
+        showDistrictsRef.current = true;
         setShowDistricts(true);
       }
     }
     refreshGeoStyles();
+    refreshDistrictStyles();
   };
 
   const prov = selectedProvince;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] -mt-0">
+    <div className="flex flex-col h-[calc(100vh-64px)]">
+      {/* Toolbar */}
       <div className="flex items-center justify-between px-4 py-3 border-b bg-background shrink-0">
         <div className="flex items-center gap-3">
           <Globe className="w-5 h-5 text-primary" />
@@ -515,12 +535,7 @@ export default function GISPage() {
               </button>
             ))}
           </div>
-          <Button
-            variant={showDistricts ? "default" : "outline"}
-            size="sm"
-            onClick={toggleDistricts}
-            className="text-xs"
-          >
+          <Button variant={showDistricts ? "default" : "outline"} size="sm" onClick={toggleDistricts} className="text-xs" aria-pressed={showDistricts}>
             <Layers className="w-3.5 h-3.5 mr-1" />
             Districts
           </Button>
@@ -532,6 +547,7 @@ export default function GISPage() {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
+        {/* Map area */}
         <div className="flex-1 relative">
           <div ref={mapContainerRef} className="w-full h-full" />
 
@@ -540,10 +556,7 @@ export default function GISPage() {
             <div className="flex items-center justify-between mb-1.5 gap-3">
               <p className="font-semibold text-xs">Regions</p>
               {selectedRegion && (
-                <button
-                  onClick={() => setSelectedRegion(null)}
-                  className="text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2"
-                >
+                <button onClick={() => setSelectedRegion(null)} className="text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2">
                   Clear
                 </button>
               )}
@@ -557,27 +570,11 @@ export default function GISPage() {
                   <button
                     key={r}
                     onClick={() => toggleRegionFilter(r)}
-                    className={`flex items-center gap-1.5 w-full px-1.5 py-1 rounded transition-all text-left ${
-                      active
-                        ? "bg-foreground/10 font-semibold"
-                        : dimmed
-                        ? "opacity-40"
-                        : "hover:bg-foreground/5"
-                    }`}
+                    className={`flex items-center gap-1.5 w-full px-1.5 py-1 rounded transition-all text-left ${active ? "bg-foreground/10 font-semibold" : dimmed ? "opacity-40" : "hover:bg-foreground/5"}`}
                   >
-                    <div
-                      className="w-3 h-3 rounded-sm shrink-0 transition-all"
-                      style={{
-                        background: c,
-                        outline: active ? `2px solid ${c}` : "none",
-                        outlineOffset: "1px",
-                        border: "1.5px solid rgba(255,255,255,0.5)",
-                      }}
-                    />
+                    <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: c, outline: active ? `2px solid ${c}` : "none", outlineOffset: "1px", border: "1.5px solid rgba(255,255,255,0.5)" }} />
                     <span className="flex-1">{r}</span>
-                    <span className={`text-[10px] ${active ? "text-foreground" : "text-muted-foreground"}`}>
-                      {count}
-                    </span>
+                    <span className={`text-[10px] ${active ? "text-foreground" : "text-muted-foreground"}`}>{count}</span>
                   </button>
                 );
               })}
@@ -588,16 +585,14 @@ export default function GISPage() {
             </div>
           </div>
 
-          {/* National stats overlay */}
+          {/* National stats */}
           {user?.scope_level === "national" && (
             <div className="absolute top-3 left-3 z-[1000] bg-background/90 backdrop-blur rounded-lg px-3 py-2 border shadow text-xs text-muted-foreground">
               {selectedRegion ? (
                 <>
                   <span className="font-semibold" style={{ color: regionColors[selectedRegion] }}>{selectedRegion} Region</span>
-                  {" · "}
-                  {PNG_PROVINCES.filter((p) => p.region === selectedRegion).length} provinces
-                  {" · "}
-                  {PNG_PROVINCES.filter((p) => p.region === selectedRegion).reduce((a, p) => a + p.num_districts, 0)} districts
+                  {" · "}{PNG_PROVINCES.filter((p) => p.region === selectedRegion).length} provinces
+                  {" · "}{PNG_PROVINCES.filter((p) => p.region === selectedRegion).reduce((a, p) => a + p.num_districts, 0)} districts
                 </>
               ) : (
                 <>{PNG_PROVINCES.length} provinces · {PNG_PROVINCES.reduce((a, p) => a + p.num_districts, 0)} districts</>
@@ -606,7 +601,7 @@ export default function GISPage() {
           )}
         </div>
 
-        {/* Right panel */}
+        {/* Right info panel */}
         <div className="w-[360px] border-l flex flex-col overflow-hidden bg-background shrink-0">
           {user?.scope_level === "national" && (
             <div className="border-b px-3 py-2 bg-muted/30">
@@ -615,10 +610,7 @@ export default function GISPage() {
                   {selectedRegion ? `${selectedRegion} Region` : "All Provinces"}
                 </p>
                 <span className="text-[10px] text-muted-foreground">
-                  {selectedRegion
-                    ? PNG_PROVINCES.filter((p) => p.region === selectedRegion).length
-                    : PNG_PROVINCES.length}{" "}
-                  provinces
+                  {selectedRegion ? PNG_PROVINCES.filter((p) => p.region === selectedRegion).length : PNG_PROVINCES.length} provinces
                 </span>
               </div>
               <div className="space-y-0.5 max-h-40 overflow-y-auto pr-1">
@@ -626,16 +618,9 @@ export default function GISPage() {
                   <button
                     key={p.id}
                     onClick={() => handleProvinceClick(p)}
-                    className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors flex items-center gap-2 ${
-                      selectedProvince?.id === p.id
-                        ? "bg-primary text-primary-foreground"
-                        : "hover:bg-muted"
-                    }`}
+                    className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors flex items-center gap-2 ${selectedProvince?.id === p.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
                   >
-                    <span
-                      className="w-2.5 h-2.5 rounded-sm shrink-0"
-                      style={{ background: regionColors[p.region] ?? p.color }}
-                    />
+                    <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: regionColors[p.region] ?? p.color }} />
                     <span className="truncate">{p.name}</span>
                   </button>
                 ))}
@@ -649,11 +634,7 @@ export default function GISPage() {
                 <div>
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <h3 className="font-bold text-base leading-tight">{prov.name}</h3>
-                    <Badge
-                      variant="outline"
-                      className="text-xs shrink-0 mt-0.5"
-                      style={{ borderColor: regionColors[prov.region], color: regionColors[prov.region] }}
-                    >
+                    <Badge variant="outline" className="text-xs shrink-0 mt-0.5" style={{ borderColor: regionColors[prov.region], color: regionColors[prov.region] }}>
                       {prov.region}
                     </Badge>
                   </div>
@@ -670,7 +651,6 @@ export default function GISPage() {
 
                   <TabsContent value="profile" className="space-y-3 mt-3">
                     <p className="text-xs text-muted-foreground leading-relaxed">{prov.description}</p>
-
                     <div className="grid grid-cols-2 gap-2">
                       <StatBox label="Population (2021 est.)" value={formatNumber(prov.population_2021_est)} />
                       <StatBox label="Population (2011)" value={formatNumber(prov.population_2011)} />
@@ -679,16 +659,12 @@ export default function GISPage() {
                       <StatBox label="Districts" value={prov.num_districts.toString()} />
                       <StatBox label="Region" value={prov.region} />
                     </div>
-
                     <div>
                       <p className="text-xs font-semibold mb-1.5">Languages</p>
                       <div className="flex flex-wrap gap-1">
-                        {prov.languages.map((l) => (
-                          <Badge key={l} variant="secondary" className="text-xs">{l}</Badge>
-                        ))}
+                        {prov.languages.map((l) => <Badge key={l} variant="secondary" className="text-xs">{l}</Badge>)}
                       </div>
                     </div>
-
                     <div>
                       <p className="text-xs font-semibold mb-1.5">Notable Facts</p>
                       <ul className="space-y-1">
@@ -708,15 +684,11 @@ export default function GISPage() {
                         <div
                           key={d.name}
                           className="border rounded-lg px-3 py-2 text-xs cursor-pointer hover:bg-muted/50 transition-colors"
-                          onClick={() => {
-                            mapRef.current?.setView([d.lat, d.lng], 10, { animate: true });
-                          }}
+                          onClick={() => mapRef.current?.setView([d.lat, d.lng], 10, { animate: true })}
                         >
                           <p className="font-semibold">{d.name}</p>
                           <p className="text-muted-foreground">Capital: {d.capital}</p>
-                          <p className="text-muted-foreground font-mono">
-                            {d.lat.toFixed(3)}°S, {d.lng.toFixed(3)}°E
-                          </p>
+                          <p className="text-muted-foreground font-mono">{d.lat.toFixed(3)}°S, {d.lng.toFixed(3)}°E</p>
                         </div>
                       ))}
                     </div>
@@ -726,27 +698,20 @@ export default function GISPage() {
                     <div>
                       <p className="text-xs font-semibold mb-1.5">Main Industries</p>
                       <div className="flex flex-wrap gap-1">
-                        {prov.main_industries.map((ind) => (
-                          <Badge key={ind} variant="outline" className="text-xs">{ind}</Badge>
-                        ))}
+                        {prov.main_industries.map((ind) => <Badge key={ind} variant="outline" className="text-xs">{ind}</Badge>)}
                       </div>
                     </div>
-
                     <div className="border rounded-lg p-3 space-y-2">
                       <p className="text-xs font-semibold">Population Growth</p>
                       <div className="flex items-end gap-2">
                         <div className="flex-1">
                           <p className="text-xs text-muted-foreground">2011 Census</p>
-                          <div className="mt-1 h-4 bg-blue-200 rounded relative">
-                            <div className="h-full bg-blue-500 rounded" style={{ width: "70%" }} />
-                          </div>
+                          <div className="mt-1 h-4 bg-blue-200 rounded"><div className="h-full bg-blue-500 rounded" style={{ width: "70%" }} /></div>
                           <p className="text-xs font-mono mt-0.5">{formatNumber(prov.population_2011)}</p>
                         </div>
                         <div className="flex-1">
                           <p className="text-xs text-muted-foreground">2021 Estimate</p>
-                          <div className="mt-1 h-4 bg-green-200 rounded relative">
-                            <div className="h-full bg-green-500 rounded" style={{ width: "90%" }} />
-                          </div>
+                          <div className="mt-1 h-4 bg-green-200 rounded"><div className="h-full bg-green-500 rounded" style={{ width: "90%" }} /></div>
                           <p className="text-xs font-mono mt-0.5">{formatNumber(prov.population_2021_est)}</p>
                         </div>
                       </div>
@@ -754,7 +719,6 @@ export default function GISPage() {
                         Growth: +{((prov.population_2021_est - prov.population_2011) / prov.population_2011 * 100).toFixed(1)}% over ~10 years
                       </p>
                     </div>
-
                     <div className="grid grid-cols-2 gap-2">
                       <StatBox label="Area" value={`${prov.area_km2.toLocaleString()} km²`} />
                       <StatBox label="Density" value={`${prov.density_per_km2} /km²`} />
@@ -765,7 +729,7 @@ export default function GISPage() {
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center p-6">
                 <Globe className="w-12 h-12 text-muted-foreground/30 mb-3" />
-                <p className="text-sm text-muted-foreground">Click a province on the map to view its demographic profile</p>
+                <p className="text-sm text-muted-foreground">Click a province on the map to view its profile</p>
               </div>
             )}
           </div>
@@ -774,24 +738,13 @@ export default function GISPage() {
 
       <style>{`
         .leaflet-custom-tooltip {
-          background: rgba(0,0,0,0.82);
-          border: none;
-          color: white;
-          border-radius: 6px;
-          padding: 5px 8px;
-          font-size: 12px;
+          background: rgba(0,0,0,0.82); border: none; color: white;
+          border-radius: 6px; padding: 5px 8px; font-size: 12px;
           box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
-        .leaflet-custom-tooltip::before {
-          border-top-color: rgba(0,0,0,0.82);
-        }
-        .leaflet-container {
-          font-family: inherit;
-          cursor: default;
-        }
-        .leaflet-interactive {
-          cursor: pointer;
-        }
+        .leaflet-custom-tooltip::before { border-top-color: rgba(0,0,0,0.82); }
+        .leaflet-container { font-family: inherit; cursor: default; }
+        .leaflet-interactive { cursor: pointer; }
       `}</style>
     </div>
   );
