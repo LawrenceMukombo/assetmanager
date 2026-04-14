@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { users, userRoles, roles, userScope } from "@workspace/db";
+import { users, userRoles, roles, userScope, provinces } from "@workspace/db";
 import {
   signAccessToken,
   issueRefreshToken,
@@ -66,6 +66,35 @@ router.post("/v1/auth/login", async (req, res) => {
     const accessToken = signAccessToken(payload);
     const refreshToken = await issueRefreshToken(user.id);
 
+    let provinceBranding: {
+      provinceName: string;
+      flagUrl: string | null;
+      flagColors: string[];
+      themeAccentColor: string | null;
+    } | null = null;
+
+    if (scope?.provinceId) {
+      const [prov] = await db
+        .select({
+          provinceName: provinces.provinceName,
+          flagUrl: provinces.flagUrl,
+          flagColors: provinces.flagColors,
+          themeAccentColor: provinces.themeAccentColor,
+        })
+        .from(provinces)
+        .where(eq(provinces.id, scope.provinceId))
+        .limit(1);
+
+      if (prov) {
+        provinceBranding = {
+          provinceName: prov.provinceName,
+          flagUrl: prov.flagUrl ?? null,
+          flagColors: Array.isArray(prov.flagColors) ? (prov.flagColors as string[]) : [],
+          themeAccentColor: prov.themeAccentColor ?? null,
+        };
+      }
+    }
+
     res.json({
       success: true,
       message: "Login successful",
@@ -85,6 +114,7 @@ router.post("/v1/auth/login", async (req, res) => {
             facility_id: scope?.facilityId ?? null,
           },
         },
+        province_branding: provinceBranding,
       },
     });
   } catch (err) {

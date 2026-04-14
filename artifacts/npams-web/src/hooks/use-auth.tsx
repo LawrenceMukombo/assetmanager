@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { useLocation } from "wouter";
 import { useLogin, useLogout } from "@workspace/api-client-react";
 import type { LoginRequest, LoginResponseData, LoginUser } from "@workspace/api-client-react";
+import { useProvinceBranding } from "@/hooks/use-province-branding";
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -18,6 +19,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [, setLocation] = useLocation();
+  const { applyBranding, clearBranding } = useProvinceBranding();
   const [state, setState] = useState<AuthState>({
     isAuthenticated: false,
     user: null,
@@ -49,7 +51,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (credentials: LoginRequest) => {
     const response = await loginMutation.mutateAsync({ data: credentials });
     if (response.success && response.data) {
-      const responseData: LoginResponseData = response.data;
+      const responseData = response.data as LoginResponseData & {
+        province_branding?: {
+          provinceName: string;
+          flagUrl: string | null;
+          flagColors: string[];
+          themeAccentColor: string | null;
+        } | null;
+      };
       const { access_token, refresh_token, user } = responseData;
 
       if (access_token) localStorage.setItem("npams_token", access_token);
@@ -57,8 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (user) localStorage.setItem("npams_user", JSON.stringify(user));
 
       if (user?.scope_level === "national") {
-        localStorage.removeItem("npams_province_branding");
-        document.documentElement.style.removeProperty("--province-accent");
+        clearBranding();
+      } else if (responseData.province_branding) {
+        applyBranding({
+          provinceName: responseData.province_branding.provinceName,
+          flagUrl: responseData.province_branding.flagUrl,
+          themeAccentColor: responseData.province_branding.themeAccentColor,
+          flagColors: responseData.province_branding.flagColors,
+        });
       }
 
       setState({ isAuthenticated: true, user: user ?? null, isLoading: false });
@@ -77,8 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem("npams_token");
       localStorage.removeItem("npams_refresh");
       localStorage.removeItem("npams_user");
-      localStorage.removeItem("npams_province_branding");
-      document.documentElement.style.removeProperty("--province-accent");
+      clearBranding();
       setState({ isAuthenticated: false, user: null, isLoading: false });
       setLocation("/login");
     }
