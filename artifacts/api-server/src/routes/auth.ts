@@ -72,11 +72,13 @@ router.post("/v1/auth/login", async (req, res) => {
       flagColors: string[];
       themeAccentColor: string | null;
     } | null = null;
+    let provinceCode: string | null = null;
 
     if (scope?.provinceId) {
       const [prov] = await db
         .select({
           provinceName: provinces.provinceName,
+          provinceCode: provinces.provinceCode,
           flagUrl: provinces.flagUrl,
           flagColors: provinces.flagColors,
           themeAccentColor: provinces.themeAccentColor,
@@ -86,6 +88,7 @@ router.post("/v1/auth/login", async (req, res) => {
         .limit(1);
 
       if (prov) {
+        provinceCode = prov.provinceCode;
         provinceBranding = {
           provinceName: prov.provinceName,
           flagUrl: prov.flagUrl ?? null,
@@ -110,6 +113,8 @@ router.post("/v1/auth/login", async (req, res) => {
           scope_level: userRoleRow?.role.scopeLevel,
           scope: {
             province_id: scope?.provinceId ?? null,
+            province_name: provinceBranding?.provinceName ?? null,
+            province_code: provinceCode,
             district_id: scope?.districtId ?? null,
             facility_id: scope?.facilityId ?? null,
           },

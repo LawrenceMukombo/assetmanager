@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useAuth } from "@/hooks/use-auth";
+import { useProvinceBranding } from "@/hooks/use-province-branding";
 import { PNG_PROVINCES, PNG_CENTER, getPNGBounds } from "@/data/png-provinces";
 import type { ProvinceProfile } from "@/data/png-provinces";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +16,15 @@ import {
   Globe,
   Layers,
 } from "lucide-react";
+
+// Maps DB province_code → PNG_PROVINCES id
+const DB_CODE_TO_GIS_ID: Record<string, string> = {
+  WS: "western", GU: "gulf", CP: "central", NCD: "ncd", MB: "milne-bay",
+  NO: "oro", MO: "morobe", MD: "madang", ES: "east-sepik", SA: "sandaun",
+  MA: "manus", NI: "new-ireland", ENB: "east-new-britain", WNB: "west-new-britain",
+  AB: "bougainville", CH: "chimbu", EH: "eastern-highlands", WHP: "western-highlands",
+  SH: "southern-highlands", EN: "enga", HE: "hela", JI: "jiwaka",
+};
 
 delete (L.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -48,6 +58,7 @@ function StatBox({ label, value }: { label: string; value: string }) {
 
 export default function GISPage() {
   const { user } = useAuth();
+  const { branding } = useProvinceBranding();
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const circlesRef = useRef<Map<string, L.CircleMarker>>(new Map());
@@ -63,13 +74,25 @@ export default function GISPage() {
 
   const userProvince = useMemo(() => {
     if (user?.scope_level === "national") return null;
-    const scopeProvinceName = (user?.scope as { province_name?: string } | null)?.province_name;
+    const scope = user?.scope as { province_code?: string; province_name?: string } | null;
+
+    // 1. Match by DB province_code (most reliable)
+    if (scope?.province_code) {
+      const gisId = DB_CODE_TO_GIS_ID[scope.province_code];
+      if (gisId) return PNG_PROVINCES.find((p) => p.id === gisId) ?? null;
+    }
+
+    // 2. Fall back to province_name (exact then partial)
+    const scopeProvinceName = scope?.province_name ?? branding.provinceName;
     if (!scopeProvinceName) return null;
-    return PNG_PROVINCES.find(
-      (p) => p.name.toLowerCase().includes(scopeProvinceName.toLowerCase()) ||
-             scopeProvinceName.toLowerCase().includes(p.name.toLowerCase().split(" ")[0])
-    ) ?? null;
-  }, [user]);
+    return (
+      PNG_PROVINCES.find(
+        (p) =>
+          p.name.toLowerCase() === scopeProvinceName.toLowerCase() ||
+          p.name.toLowerCase().includes(scopeProvinceName.toLowerCase())
+      ) ?? null
+    );
+  }, [user, branding.provinceName]);
 
   const visibleProvinces = useMemo(() => {
     if (user?.scope_level === "national") return PNG_PROVINCES;
@@ -161,9 +184,6 @@ export default function GISPage() {
       updateDistrictMarkers(userProvince, districtGroup);
     } else {
       map.fitBounds(bounds, { padding: [20, 20] });
-      if (PNG_PROVINCES.length > 0) {
-        setSelectedProvince(PNG_PROVINCES[3]);
-      }
     }
 
     mapRef.current = map;
@@ -173,6 +193,17 @@ export default function GISPage() {
       mapRef.current = null;
     };
   }, []);
+
+  // Sync selected province when userProvince resolves (auth loads asynchronously)
+  useEffect(() => {
+    if (!userProvince || !mapRef.current) return;
+    if (selectedProvince?.id === userProvince.id) return;
+    setSelectedProvince(userProvince);
+    mapRef.current.setView([userProvince.lat, userProvince.lng], 8, { animate: true });
+    if (districtMarkersRef.current) {
+      updateDistrictMarkers(userProvince, districtMarkersRef.current);
+    }
+  }, [userProvince]);
 
   useEffect(() => {
     selectedRegionRef.current = selectedRegion;
