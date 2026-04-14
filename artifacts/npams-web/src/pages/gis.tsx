@@ -130,6 +130,35 @@ export default function GISPage() {
     return userProvince ? new Set([userProvince.id]) : new Set(PNG_PROVINCES.map((p) => p.id));
   }, [user, userProvince]);
 
+  // ── Province dot (circle marker) styles ────────────────────────────────────
+  const refreshCircleStyles = useCallback(() => {
+    const sel = selectedProvinceRef.current;
+    const selRegion = selectedRegionRef.current;
+    const map = mapRef.current;
+    if (!map) return;
+    circlesRef.current.forEach((circle, provId) => {
+      if (sel) {
+        // Province selected: keep only that province's dot on the map
+        if (provId === sel.id) {
+          circle.setStyle({ fillOpacity: 0.88, weight: 2, opacity: 1 });
+          if (!map.hasLayer(circle)) circle.addTo(map);
+        } else {
+          if (map.hasLayer(circle)) map.removeLayer(circle);
+        }
+      } else {
+        // No province selected: apply region filter logic
+        const p = PNG_PROVINCES.find((pr) => pr.id === provId);
+        const dimmed = !!(selRegion && p && p.region !== selRegion);
+        if (dimmed) {
+          if (map.hasLayer(circle)) map.removeLayer(circle);
+        } else {
+          if (!map.hasLayer(circle)) circle.addTo(map);
+          circle.setStyle({ fillOpacity: 0.88, weight: 2, opacity: 1 });
+        }
+      }
+    });
+  }, []);
+
   // ── Province polygon styles ─────────────────────────────────────────────────
   const refreshGeoStyles = useCallback(() => {
     const layer = geoLayerRef.current;
@@ -234,8 +263,9 @@ export default function GISPage() {
       }
       refreshGeoStyles();
       refreshDistrictStyles();
+      refreshCircleStyles();
     },
-    [refreshGeoStyles, refreshDistrictStyles]
+    [refreshGeoStyles, refreshDistrictStyles, refreshCircleStyles]
   );
 
   // ── Map initialisation ──────────────────────────────────────────────────────
@@ -428,10 +458,14 @@ export default function GISPage() {
       );
       circle.on("click", () => selectProvince(prov));
       circle.on("mouseover", function (this: L.CircleMarker) {
+        const sel = selectedProvinceRef.current;
+        if (sel && sel.id !== prov.id) return; // hidden — don't reveal on hover
         if (selectedRegionRef.current && selectedRegionRef.current !== prov.region) return;
         this.setStyle({ weight: 3.5, fillOpacity: 1 });
       });
       circle.on("mouseout", function (this: L.CircleMarker) {
+        const sel = selectedProvinceRef.current;
+        if (sel && sel.id !== prov.id) return; // keep hidden
         if (selectedRegionRef.current && selectedRegionRef.current !== prov.region) return;
         this.setStyle({ weight: 2, fillOpacity: 0.88 });
       });
@@ -467,21 +501,16 @@ export default function GISPage() {
 
   // Refresh after GeoJSON layers load
   useEffect(() => {
-    if (geoReady) { refreshGeoStyles(); refreshDistrictStyles(); }
-  }, [geoReady, refreshGeoStyles, refreshDistrictStyles]);
+    if (geoReady) { refreshGeoStyles(); refreshDistrictStyles(); refreshCircleStyles(); }
+  }, [geoReady, refreshGeoStyles, refreshDistrictStyles, refreshCircleStyles]);
 
   // Region filter
   useEffect(() => {
     selectedRegionRef.current = selectedRegion;
-    circlesRef.current.forEach((circle, provId) => {
-      const prov = PNG_PROVINCES.find((p) => p.id === provId);
-      if (!prov) return;
-      const dimmed = selectedRegion !== null && prov.region !== selectedRegion;
-      circle.setStyle({ fillOpacity: dimmed ? 0 : 0.88, weight: dimmed ? 0 : 2, opacity: dimmed ? 0 : 1 });
-    });
+    refreshCircleStyles();
     refreshGeoStyles();
     refreshDistrictStyles();
-  }, [selectedRegion, refreshGeoStyles, refreshDistrictStyles]);
+  }, [selectedRegion, refreshCircleStyles, refreshGeoStyles, refreshDistrictStyles]);
 
   const toggleRegionFilter = (region: string) =>
     setSelectedRegion((prev) => (prev === region ? null : region));
@@ -514,8 +543,17 @@ export default function GISPage() {
   const resetView = () => {
     const map = mapRef.current;
     if (!map) return;
-    if (userProvince) map.setView([userProvince.lat, userProvince.lng], 8, { animate: true });
-    else map.fitBounds(getPNGBounds(), { padding: [20, 20], animate: true });
+    if (userProvince) {
+      map.setView([userProvince.lat, userProvince.lng], 8, { animate: true });
+    } else {
+      // Clear province selection and restore all dots/polygons
+      selectedProvinceRef.current = null;
+      setSelectedProvince(null);
+      map.fitBounds(getPNGBounds(), { padding: [20, 20], animate: true });
+      refreshGeoStyles();
+      refreshDistrictStyles();
+      refreshCircleStyles();
+    }
   };
 
   const handleProvinceClick = (prov: ProvinceProfile) => {
@@ -533,6 +571,7 @@ export default function GISPage() {
     }
     refreshGeoStyles();
     refreshDistrictStyles();
+    refreshCircleStyles();
   };
 
   const prov = selectedProvince;
