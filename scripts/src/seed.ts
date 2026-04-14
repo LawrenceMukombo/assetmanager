@@ -50,140 +50,30 @@ async function main() {
   }
   console.log("Roles seeded:", Object.keys(roleMap).length);
 
-  // --- PROVINCES (All 22 PNG Provinces with Wikipedia flag URLs) ---
+  // --- PROVINCES (All 22 PNG Provinces with local flag files) ---
   const provinceData = [
-    {
-      provinceCode: "CP",
-      provinceName: "Central Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/Flag_of_Central_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_Central_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#1E40AF",
-    },
-    {
-      provinceCode: "CH",
-      provinceName: "Chimbu (Simbu) Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Flag_of_Simbu_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_Simbu_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#B91C1C",
-    },
-    {
-      provinceCode: "EH",
-      provinceName: "Eastern Highlands Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Flag_of_Eastern_Highlands_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_Eastern_Highlands_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#065F46",
-    },
-    {
-      provinceCode: "ENB",
-      provinceName: "East New Britain Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d3/Flag_of_East_New_Britain_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_East_New_Britain_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#7C3AED",
-    },
-    {
-      provinceCode: "ES",
-      provinceName: "East Sepik Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Flag_of_East_Sepik_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_East_Sepik_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#0369A1",
-    },
-    {
-      provinceCode: "EN",
-      provinceName: "Enga Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/Flag_of_Enga_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_Enga_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#CA8A04",
-    },
-    {
-      provinceCode: "GU",
-      provinceName: "Gulf Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/Flag_of_Gulf_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_Gulf_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#0F766E",
-    },
-    {
-      provinceCode: "HE",
-      provinceName: "Hela Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/Flag_of_Hela_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_Hela_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#92400E",
-    },
-    {
-      provinceCode: "JI",
-      provinceName: "Jiwaka Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/78/Flag_of_Jiwaka_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_Jiwaka_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#1D4ED8",
-    },
-    {
-      provinceCode: "MA",
-      provinceName: "Manus Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/Flag_of_Manus_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_Manus_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#0284C7",
-    },
-    {
-      provinceCode: "MB",
-      provinceName: "Milne Bay Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Flag_of_Milne_Bay_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_Milne_Bay_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#047857",
-    },
-    {
-      provinceCode: "MO",
-      provinceName: "Morobe Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/92/Flag_of_Morobe_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_Morobe_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#1E3A8A",
-    },
-    {
-      provinceCode: "NCD",
-      provinceName: "National Capital District",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Flag_of_National_Capital_District%2C_Papua_New_Guinea.svg/200px-Flag_of_National_Capital_District%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#DC2626",
-    },
-    {
-      provinceCode: "NI",
-      provinceName: "New Ireland Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Flag_of_New_Ireland_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_New_Ireland_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#9D174D",
-    },
-    {
-      provinceCode: "NO",
-      provinceName: "Northern (Oro) Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Flag_of_Oro_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_Oro_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#166534",
-    },
-    {
-      provinceCode: "AB",
-      provinceName: "Autonomous Region of Bougainville",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ed/Flag_of_the_Autonomous_Region_of_Bougainville.svg/200px-Flag_of_the_Autonomous_Region_of_Bougainville.svg.png",
-      themeAccentColor: "#1E3A5F",
-    },
-    {
-      provinceCode: "SA",
-      provinceName: "Sandaun (West Sepik) Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Flag_of_Sandaun_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_Sandaun_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#6D28D9",
-    },
-    {
-      provinceCode: "SH",
-      provinceName: "Southern Highlands Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/Flag_of_Southern_Highlands_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_Southern_Highlands_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#B45309",
-    },
-    {
-      provinceCode: "WS",
-      provinceName: "Western Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Flag_of_Western_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_Western_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#047857",
-    },
-    {
-      provinceCode: "WHP",
-      provinceName: "Western Highlands Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ce/Flag_of_Western_Highlands_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_Western_Highlands_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#7C2D12",
-    },
-    {
-      provinceCode: "WNB",
-      provinceName: "West New Britain Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/Flag_of_West_New_Britain_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_West_New_Britain_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#064E3B",
-    },
-    {
-      provinceCode: "MD",
-      provinceName: "Madang Province",
-      flagUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Flag_of_Madang_Province%2C_Papua_New_Guinea.svg/200px-Flag_of_Madang_Province%2C_Papua_New_Guinea.svg.png",
-      themeAccentColor: "#312E81",
-    },
+    { provinceCode: "CP",  provinceName: "Central Province",                    flagUrl: "/flags/central.svg",             themeAccentColor: "#1E40AF" },
+    { provinceCode: "CH",  provinceName: "Chimbu (Simbu) Province",             flagUrl: "/flags/chimbu.svg",              themeAccentColor: "#B91C1C" },
+    { provinceCode: "EH",  provinceName: "Eastern Highlands Province",          flagUrl: "/flags/eastern_highlands.svg",   themeAccentColor: "#065F46" },
+    { provinceCode: "ENB", provinceName: "East New Britain Province",           flagUrl: "/flags/east_new_britain.svg",    themeAccentColor: "#7C3AED" },
+    { provinceCode: "ES",  provinceName: "East Sepik Province",                 flagUrl: "/flags/east_sepik.svg",          themeAccentColor: "#0369A1" },
+    { provinceCode: "EN",  provinceName: "Enga Province",                       flagUrl: "/flags/enga.svg",                themeAccentColor: "#CA8A04" },
+    { provinceCode: "GU",  provinceName: "Gulf Province",                       flagUrl: "/flags/gulf.svg",                themeAccentColor: "#0F766E" },
+    { provinceCode: "HE",  provinceName: "Hela Province",                       flagUrl: "/flags/hela.svg",                themeAccentColor: "#92400E" },
+    { provinceCode: "JI",  provinceName: "Jiwaka Province",                     flagUrl: "/flags/jiwaka.svg",              themeAccentColor: "#1D4ED8" },
+    { provinceCode: "MA",  provinceName: "Manus Province",                      flagUrl: "/flags/manus.svg",               themeAccentColor: "#0284C7" },
+    { provinceCode: "MB",  provinceName: "Milne Bay Province",                  flagUrl: "/flags/milne_bay.svg",           themeAccentColor: "#047857" },
+    { provinceCode: "MO",  provinceName: "Morobe Province",                     flagUrl: "/flags/morobe.svg",              themeAccentColor: "#1E3A8A" },
+    { provinceCode: "NCD", provinceName: "National Capital District",           flagUrl: "/flags/ncd.svg",                 themeAccentColor: "#DC2626" },
+    { provinceCode: "NI",  provinceName: "New Ireland Province",                flagUrl: "/flags/new_ireland.svg",         themeAccentColor: "#9D174D" },
+    { provinceCode: "NO",  provinceName: "Northern (Oro) Province",             flagUrl: "/flags/northern.svg",            themeAccentColor: "#166534" },
+    { provinceCode: "AB",  provinceName: "Autonomous Region of Bougainville",   flagUrl: "/flags/bougainville.svg",        themeAccentColor: "#1E3A5F" },
+    { provinceCode: "SA",  provinceName: "Sandaun (West Sepik) Province",       flagUrl: "/flags/sandaun.svg",             themeAccentColor: "#6D28D9" },
+    { provinceCode: "SH",  provinceName: "Southern Highlands Province",         flagUrl: "/flags/southern_highlands.svg",  themeAccentColor: "#B45309" },
+    { provinceCode: "WS",  provinceName: "Western Province",                    flagUrl: "/flags/western.svg",             themeAccentColor: "#047857" },
+    { provinceCode: "WHP", provinceName: "Western Highlands Province",          flagUrl: "/flags/western_highlands.svg",   themeAccentColor: "#7C2D12" },
+    { provinceCode: "WNB", provinceName: "West New Britain Province",           flagUrl: "/flags/west_new_britain.svg",    themeAccentColor: "#064E3B" },
+    { provinceCode: "MD",  provinceName: "Madang Province",                     flagUrl: "/flags/madang.svg",              themeAccentColor: "#312E81" },
   ];
 
   const provinceMap: Record<string, string> = {};
