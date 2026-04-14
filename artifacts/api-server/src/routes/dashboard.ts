@@ -5,6 +5,9 @@ import { requireAuth, requireNational } from "../lib/auth";
 
 const router = Router();
 
+const VALID_STATUSES   = ["active", "missing", "under_maintenance", "disposed", "transferred"] as const;
+const VALID_CONDITIONS = ["new", "good", "fair", "poor", "unserviceable"] as const;
+
 // ─── PROVINCIAL DASHBOARD (supports cross-filter params) ─────────────────────
 
 router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
@@ -24,15 +27,17 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
   const conditionFilter = (req.query.condition as string | undefined)?.toLowerCase() || undefined;
   const categoryName    = (req.query.category_name as string | undefined) || undefined;
   const districtId      = (req.query.district_id as string | undefined) || undefined;
+  const facilityId      = (req.query.facility_id as string | undefined) || undefined;
 
-  const VALID_STATUSES   = ["active", "missing", "under_maintenance", "disposed", "transferred"];
-  const VALID_CONDITIONS = ["new", "good", "fair", "poor", "unserviceable"];
-
-  const safeStatus    = statusFilter    && VALID_STATUSES.includes(statusFilter)    ? statusFilter    : undefined;
-  const safeCondition = conditionFilter && VALID_CONDITIONS.includes(conditionFilter) ? conditionFilter : undefined;
+  const safeStatus    = statusFilter    && VALID_STATUSES.includes(statusFilter as typeof VALID_STATUSES[number])    ? statusFilter    : undefined;
+  const safeCondition = conditionFilter && VALID_CONDITIONS.includes(conditionFilter as typeof VALID_CONDITIONS[number]) ? conditionFilter : undefined;
 
   try {
     const baseConditions = [isNull(assets.deletedAt), eq(assets.provinceId, provinceId)];
+
+    // Optional district/facility scope on baseConditions
+    if (districtId) baseConditions.push(eq(assets.districtId, districtId));
+    if (facilityId) baseConditions.push(eq(assets.facilityId, facilityId));
 
     // Resolve category_id from name (for cross-filter)
     let categoryId: string | undefined;
@@ -49,13 +54,12 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
     if (safeStatus)    filterConditions.push(eq(assets.status, safeStatus));
     if (safeCondition) filterConditions.push(eq(assets.condition, safeCondition));
     if (categoryId)    filterConditions.push(eq(assets.categoryId, categoryId));
-    if (districtId)    filterConditions.push(eq(assets.districtId, districtId));
 
     const baseWhere     = and(...baseConditions);
     const filteredWhere = and(...filterConditions);
     const hasFilters    = filterConditions.length > baseConditions.length;
 
-    // Totals — always unfiltered for the KPI cards
+    // Totals — always unfiltered for the KPI cards (but scoped to province/district/facility)
     const [totals] = await db.select({
       total_assets:       sql<number>`count(*)::int`,
       active_assets:      sql<number>`sum(case when ${assets.status} = 'active' then 1 else 0 end)::int`,
@@ -71,11 +75,10 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
       total_value:  sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
     }).from(assets).where(filteredWhere);
 
-    // By Status — filter by condition/category/district if set (but NOT status itself)
+    // By Status — filter by condition/category but NOT status itself
     const statusConditions = [...baseConditions];
     if (safeCondition) statusConditions.push(eq(assets.condition, safeCondition));
     if (categoryId)    statusConditions.push(eq(assets.categoryId, categoryId));
-    if (districtId)    statusConditions.push(eq(assets.districtId, districtId));
 
     const byStatus = await db.select({
       status: assets.status,
@@ -83,11 +86,10 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
       value:  sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
     }).from(assets).where(and(...statusConditions)).groupBy(assets.status).orderBy(desc(sql`count(*)`));
 
-    // By Condition — filter by status/category/district if set (but NOT condition itself)
+    // By Condition — filter by status/category but NOT condition itself
     const conditionConditions = [...baseConditions];
     if (safeStatus)  conditionConditions.push(eq(assets.status, safeStatus));
     if (categoryId)  conditionConditions.push(eq(assets.categoryId, categoryId));
-    if (districtId)  conditionConditions.push(eq(assets.districtId, districtId));
 
     const byCondition = await db.select({
       condition: assets.condition,
@@ -95,11 +97,10 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
       value:     sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
     }).from(assets).where(and(...conditionConditions)).groupBy(assets.condition).orderBy(assets.condition);
 
-    // By Category — filter by status/condition/district if set
+    // By Category — filter by status/condition but NOT category itself
     const categoryConditions = [...baseConditions];
     if (safeStatus)    categoryConditions.push(eq(assets.status, safeStatus));
     if (safeCondition) categoryConditions.push(eq(assets.condition, safeCondition));
-    if (districtId)    categoryConditions.push(eq(assets.districtId, districtId));
 
     const byCategory = await db.select({
       category_id:   assetCategories.id,
@@ -113,11 +114,15 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
       .orderBy(desc(sql`count(*)`))
       .limit(12);
 
-    // By District — filter by status/condition/category if set
-    const districtConditions = [...baseConditions];
-    if (safeStatus)    districtConditions.push(eq(assets.status, safeStatus));
-    if (safeCondition) districtConditions.push(eq(assets.condition, safeCondition));
-    if (categoryId)    districtConditions.push(eq(assets.categoryId, categoryId));
+    // By District — filter by status/condition/category but NOT district itself
+    const districtConditions = [...baseConditions.filter(c => c !== (districtId ? eq(assets.districtId, districtId) : null))];
+    // Re-build baseConditions without districtId for the district chart
+    const baseNoDistrict = [isNull(assets.deletedAt), eq(assets.provinceId, provinceId)];
+    if (facilityId) baseNoDistrict.push(eq(assets.facilityId, facilityId));
+    const districtChartConditions = [...baseNoDistrict];
+    if (safeStatus)    districtChartConditions.push(eq(assets.status, safeStatus));
+    if (safeCondition) districtChartConditions.push(eq(assets.condition, safeCondition));
+    if (categoryId)    districtChartConditions.push(eq(assets.categoryId, categoryId));
 
     const byDistrict = await db.select({
       district_id:    districts.id,
@@ -127,16 +132,19 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
       active_assets:  sql<number>`sum(case when ${assets.status} = 'active' then 1 else 0 end)::int`,
       total_value:    sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
     }).from(districts)
-      .leftJoin(assets, and(eq(assets.districtId, districts.id), isNull(assets.deletedAt),
+      .leftJoin(assets, and(
+        eq(assets.districtId, districts.id),
+        isNull(assets.deletedAt),
         ...(safeStatus    ? [eq(assets.status, safeStatus)]      : []),
         ...(safeCondition ? [eq(assets.condition, safeCondition)]: []),
         ...(categoryId    ? [eq(assets.categoryId, categoryId)]  : []),
+        ...(facilityId    ? [eq(assets.facilityId, facilityId)]  : []),
       ))
       .where(eq(districts.provinceId, provinceId))
       .groupBy(districts.id, districts.districtName)
       .orderBy(desc(sql`count(${assets.id})`));
 
-    // Acquisition trend (always unfiltered)
+    // Acquisition trend (scoped, always unfiltered by cross-filters)
     const acquisitionTrend = await db.select({
       month:       sql<string>`to_char(date_trunc('month', ${assets.createdAt}), 'Mon YYYY')`,
       month_key:   sql<string>`to_char(date_trunc('month', ${assets.createdAt}), 'YYYY-MM')`,
@@ -207,18 +215,19 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
   }
 });
 
-// ─── NATIONAL DASHBOARD (supports cross-filter params) ───────────────────────
+// ─── NATIONAL DASHBOARD (supports cross-filter params + location scope) ──────
 
 router.get("/v1/dashboard/national", requireNational, async (req, res) => {
   const statusFilter    = (req.query.status as string | undefined)?.toLowerCase() || undefined;
   const conditionFilter = (req.query.condition as string | undefined)?.toLowerCase() || undefined;
   const categoryName    = (req.query.category_name as string | undefined) || undefined;
+  const provinceIdParam = (req.query.province_id as string | undefined) || undefined;
+  const districtIdParam = (req.query.district_id as string | undefined) || undefined;
+  const facilityIdParam = (req.query.facility_id as string | undefined) || undefined;
+  const regionParam     = (req.query.region as string | undefined) || undefined;
 
-  const VALID_STATUSES   = ["active", "missing", "under_maintenance", "disposed", "transferred"];
-  const VALID_CONDITIONS = ["new", "good", "fair", "poor", "unserviceable"];
-
-  const safeStatus    = statusFilter    && VALID_STATUSES.includes(statusFilter)    ? statusFilter    : undefined;
-  const safeCondition = conditionFilter && VALID_CONDITIONS.includes(conditionFilter) ? conditionFilter : undefined;
+  const safeStatus    = statusFilter    && VALID_STATUSES.includes(statusFilter as typeof VALID_STATUSES[number])    ? statusFilter    : undefined;
+  const safeCondition = conditionFilter && VALID_CONDITIONS.includes(conditionFilter as typeof VALID_CONDITIONS[number]) ? conditionFilter : undefined;
 
   try {
     let categoryId: string | undefined;
@@ -228,9 +237,27 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
       categoryId = cat?.id;
     }
 
-    const baseWhere = isNull(assets.deletedAt);
+    // Resolve region → list of province IDs
+    let regionProvinceIds: string[] | undefined;
+    if (regionParam && !provinceIdParam) {
+      const regionProvinces = await db.select({ id: provinces.id })
+        .from(provinces)
+        .where(and(eq(provinces.region, regionParam), eq(provinces.active, true)));
+      regionProvinceIds = regionProvinces.map(p => p.id);
+    }
 
-    // Unfiltered global totals
+    // Base scope conditions (location scope — always applied to everything)
+    const scopeConditions: ReturnType<typeof eq>[] = [isNull(assets.deletedAt) as unknown as ReturnType<typeof eq>];
+    if (provinceIdParam) scopeConditions.push(eq(assets.provinceId, provinceIdParam) as ReturnType<typeof eq>);
+    else if (regionProvinceIds && regionProvinceIds.length > 0) scopeConditions.push(inArray(assets.provinceId, regionProvinceIds) as unknown as ReturnType<typeof eq>);
+    if (districtIdParam) scopeConditions.push(eq(assets.districtId, districtIdParam) as ReturnType<typeof eq>);
+    if (facilityIdParam) scopeConditions.push(eq(assets.facilityId, facilityIdParam) as ReturnType<typeof eq>);
+
+    const baseWhere = and(...scopeConditions);
+
+    const hasLocationScope = !!(provinceIdParam || districtIdParam || facilityIdParam || regionParam);
+
+    // Unfiltered KPI totals (scoped by location)
     const [totals] = await db.select({
       total_assets:   sql<number>`count(*)::int`,
       active_assets:  sql<number>`sum(case when ${assets.status} = 'active' then 1 else 0 end)::int`,
@@ -241,11 +268,14 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
     const [provinceCount] = await db.select({ count: sql<number>`count(*)::int` })
       .from(provinces).where(eq(provinces.active, true));
 
-    // Province breakdown — filtered by status/condition/category for "missing" etc columns
-    const byProvinceConditions: ReturnType<typeof eq>[] = [];
-    if (safeStatus)    byProvinceConditions.push(eq(assets.status, safeStatus) as ReturnType<typeof eq>);
-    if (safeCondition) byProvinceConditions.push(eq(assets.condition, safeCondition) as ReturnType<typeof eq>);
-    if (categoryId)    byProvinceConditions.push(eq(assets.categoryId, categoryId) as ReturnType<typeof eq>);
+    // Province breakdown — location-scoped, filtered by cross-filter params
+    const byProvinceWhere = and(
+      eq(provinces.active, true),
+      ...(provinceIdParam ? [eq(provinces.id, provinceIdParam)] : []),
+      ...(regionParam && !provinceIdParam && regionProvinceIds && regionProvinceIds.length > 0
+        ? [inArray(provinces.id, regionProvinceIds)]
+        : []),
+    );
 
     const byProvince = await db.select({
       province_id:        provinces.id,
@@ -264,13 +294,15 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
         ...(safeStatus    ? [eq(assets.status, safeStatus)]      : []),
         ...(safeCondition ? [eq(assets.condition, safeCondition)]: []),
         ...(categoryId    ? [eq(assets.categoryId, categoryId)]  : []),
+        ...(districtIdParam ? [eq(assets.districtId, districtIdParam)] : []),
+        ...(facilityIdParam ? [eq(assets.facilityId, facilityIdParam)] : []),
       ))
-      .where(eq(provinces.active, true))
+      .where(byProvinceWhere)
       .groupBy(provinces.id, provinces.provinceName, provinces.provinceCode, provinces.flagUrl, provinces.themeAccentColor)
       .orderBy(desc(sql`count(${assets.id})`));
 
-    // Status breakdown — filtered by condition/category but NOT status
-    const statusConditions = [baseWhere];
+    // Status breakdown — scoped, filtered by condition/category but NOT status
+    const statusConditions = [...scopeConditions];
     if (safeCondition) statusConditions.push(eq(assets.condition, safeCondition) as ReturnType<typeof eq>);
     if (categoryId)    statusConditions.push(eq(assets.categoryId, categoryId) as ReturnType<typeof eq>);
 
@@ -280,8 +312,8 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
       value:  sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
     }).from(assets).where(and(...statusConditions)).groupBy(assets.status).orderBy(desc(sql`count(*)`));
 
-    // Condition breakdown — filtered by status/category but NOT condition
-    const conditionConditions = [baseWhere];
+    // Condition breakdown — scoped, filtered by status/category but NOT condition
+    const conditionConditions = [...scopeConditions];
     if (safeStatus)  conditionConditions.push(eq(assets.status, safeStatus) as ReturnType<typeof eq>);
     if (categoryId)  conditionConditions.push(eq(assets.categoryId, categoryId) as ReturnType<typeof eq>);
 
@@ -291,8 +323,8 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
       value:     sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
     }).from(assets).where(and(...conditionConditions)).groupBy(assets.condition).orderBy(assets.condition);
 
-    // Category breakdown — filtered by status/condition but NOT category
-    const categoryConditions = [baseWhere];
+    // Category breakdown — scoped, filtered by status/condition but NOT category
+    const categoryConditions = [...scopeConditions];
     if (safeStatus)    categoryConditions.push(eq(assets.status, safeStatus) as ReturnType<typeof eq>);
     if (safeCondition) categoryConditions.push(eq(assets.condition, safeCondition) as ReturnType<typeof eq>);
 
@@ -308,7 +340,7 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
       .orderBy(desc(sql`count(*)`))
       .limit(8);
 
-    // Acquisition trend (always unfiltered)
+    // Acquisition trend (location-scoped, always unfiltered by cross-filters)
     const acquisitionTrend = await db.select({
       month:       sql<string>`to_char(date_trunc('month', ${assets.createdAt}), 'Mon YYYY')`,
       month_key:   sql<string>`to_char(date_trunc('month', ${assets.createdAt}), 'YYYY-MM')`,
@@ -319,10 +351,10 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
       .groupBy(sql`date_trunc('month', ${assets.createdAt})`)
       .orderBy(sql`date_trunc('month', ${assets.createdAt})`);
 
-    const hasFilters = !!(safeStatus || safeCondition || categoryId);
+    const hasFilters = !!(safeStatus || safeCondition || categoryId || hasLocationScope);
 
     // Filtered global totals
-    const filterConds = [baseWhere];
+    const filterConds = [...scopeConditions];
     if (safeStatus)    filterConds.push(eq(assets.status, safeStatus) as ReturnType<typeof eq>);
     if (safeCondition) filterConds.push(eq(assets.condition, safeCondition) as ReturnType<typeof eq>);
     if (categoryId)    filterConds.push(eq(assets.categoryId, categoryId) as ReturnType<typeof eq>);

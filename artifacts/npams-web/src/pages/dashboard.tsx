@@ -91,11 +91,13 @@ interface DashFilters {
   condition:    string | null;
   categoryName: string | null;
   districtId:   string | null;
-  provinceId:   string | null;  // national only — clicking province row
+  provinceId:   string | null;
+  facilityId:   string | null;
+  region:       string | null;
 }
 
 const EMPTY_FILTERS: DashFilters = {
-  status: null, condition: null, categoryName: null, districtId: null, provinceId: null,
+  status: null, condition: null, categoryName: null, districtId: null, provinceId: null, facilityId: null, region: null,
 };
 
 function buildParams(filters: DashFilters, extra?: Record<string, string>): string {
@@ -103,8 +105,10 @@ function buildParams(filters: DashFilters, extra?: Record<string, string>): stri
   if (filters.status)       p.set("status", filters.status);
   if (filters.condition)    p.set("condition", filters.condition);
   if (filters.categoryName) p.set("category_name", filters.categoryName);
-  if (filters.districtId)   p.set("district_id", filters.districtId);
+  if (filters.region)       p.set("region", filters.region);
   if (filters.provinceId)   p.set("province_id", filters.provinceId);
+  if (filters.districtId)   p.set("district_id", filters.districtId);
+  if (filters.facilityId)   p.set("facility_id", filters.facilityId);
   if (extra) Object.entries(extra).forEach(([k, v]) => p.set(k, v));
   const s = p.toString();
   return s ? `?${s}` : "";
@@ -113,33 +117,46 @@ function buildParams(filters: DashFilters, extra?: Record<string, string>): stri
 // ─── Location Filter Bar ──────────────────────────────────────────────────────
 
 interface LocationScope {
+  region:       string | null;
   provinceId:   string | null;
   provinceName: string | null;
   districtId:   string | null;
   districtName: string | null;
+  facilityId:   string | null;
+  facilityName: string | null;
 }
-const EMPTY_LOCATION: LocationScope = { provinceId: null, provinceName: null, districtId: null, districtName: null };
+const EMPTY_LOCATION: LocationScope = {
+  region: null, provinceId: null, provinceName: null,
+  districtId: null, districtName: null, facilityId: null, facilityName: null,
+};
+
+type RegionEntry = { name: string; provinces: { id: string; provinceName: string; provinceCode: string }[] };
 
 function LocationFilterBar({
   scope,
-  onProvinceChange,
-  onDistrictChange,
-  showProvince,
+  onChange,
+  showRegionProvince,
   fixedProvinceId,
 }: {
   scope: LocationScope;
-  onProvinceChange: (id: string | null, name: string | null) => void;
-  onDistrictChange: (id: string | null, name: string | null) => void;
-  showProvince: boolean;
+  onChange: (patch: Partial<LocationScope> & Partial<DashFilters>) => void;
+  showRegionProvince: boolean;
   fixedProvinceId?: string | null;
 }) {
   const lookupProvinceId = fixedProvinceId ?? scope.provinceId;
+
+  const { data: regionsData } = useQuery({
+    queryKey: ["regions-list"],
+    queryFn:  () => apiFetchJson("/api/v1/locations/regions"),
+    staleTime: 600_000,
+    enabled:  showRegionProvince,
+  });
 
   const { data: provData } = useQuery({
     queryKey: ["provinces-list"],
     queryFn:  () => apiFetchJson("/api/v1/locations/provinces"),
     staleTime: 600_000,
-    enabled:  showProvince,
+    enabled:  showRegionProvince,
   });
 
   const { data: distData } = useQuery({
@@ -149,10 +166,32 @@ function LocationFilterBar({
     enabled:  !!lookupProvinceId,
   });
 
-  type ProvRow = { id: string; provinceName: string };
+  const { data: facData } = useQuery({
+    queryKey: ["facilities-list", scope.districtId],
+    queryFn:  () => apiFetchJson(`/api/v1/locations/districts/${scope.districtId}/facilities`),
+    staleTime: 600_000,
+    enabled:  !!scope.districtId,
+  });
+
+  type ProvRow = { id: string; provinceName: string; provinceCode?: string };
   type DistRow = { id: string; districtName: string };
-  const provinces: ProvRow[] = (provData?.data as ProvRow[]) ?? [];
+  type FacRow  = { id: string; facilityName: string };
+
+  const regionsList: RegionEntry[] = (regionsData?.data as RegionEntry[]) ?? [];
+  const allProvinces: ProvRow[] = (provData?.data as ProvRow[]) ?? [];
   const districts: DistRow[] = (distData?.data as DistRow[]) ?? [];
+  const facList: FacRow[] = (facData?.data as FacRow[]) ?? [];
+
+  // Filter province list by selected region
+  const filteredProvinces = useMemo(() => {
+    if (!scope.region) return allProvinces;
+    const rEntry = regionsList.find(r => r.name === scope.region);
+    if (!rEntry) return allProvinces;
+    const codes = new Set(rEntry.provinces.map(p => p.provinceCode));
+    return allProvinces.filter(p => codes.has(p.provinceCode ?? ""));
+  }, [allProvinces, regionsList, scope.region]);
+
+  const hasAnyScope = !!(scope.region || scope.provinceId || scope.districtId || scope.facilityId);
 
   return (
     <Card className="border-dashed bg-muted/30">
@@ -161,14 +200,38 @@ function LocationFilterBar({
           <MapPin className="w-4 h-4" /> Location Scope
         </div>
 
-        {showProvince && (
+        {showRegionProvince && (
+          <Select
+            value={scope.region ?? "_none"}
+            onValueChange={v => {
+              if (v === "_none") {
+                onChange({ region: null, provinceId: null, provinceName: null, districtId: null, districtName: null, facilityId: null, facilityName: null });
+              } else {
+                onChange({ region: v, provinceId: null, provinceName: null, districtId: null, districtName: null, facilityId: null, facilityName: null });
+              }
+            }}
+          >
+            <SelectTrigger className="h-8 w-[160px] text-sm">
+              <SelectValue placeholder="All Regions" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">All Regions</SelectItem>
+              {regionsList.map(r => (
+                <SelectItem key={r.name} value={r.name}>{r.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {showRegionProvince && (
           <Select
             value={scope.provinceId ?? "_none"}
             onValueChange={v => {
-              if (v === "_none") { onProvinceChange(null, null); }
-              else {
-                const p = provinces.find(x => x.id === v);
-                onProvinceChange(v, p?.provinceName ?? null);
+              if (v === "_none") {
+                onChange({ provinceId: null, provinceName: null, districtId: null, districtName: null, facilityId: null, facilityName: null });
+              } else {
+                const p = filteredProvinces.find(x => x.id === v);
+                onChange({ provinceId: v, provinceName: p?.provinceName ?? null, districtId: null, districtName: null, facilityId: null, facilityName: null });
               }
             }}
           >
@@ -177,7 +240,7 @@ function LocationFilterBar({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="_none">All Provinces</SelectItem>
-              {provinces.map(p => (
+              {filteredProvinces.map(p => (
                 <SelectItem key={p.id} value={p.id}>{p.provinceName}</SelectItem>
               ))}
             </SelectContent>
@@ -187,16 +250,17 @@ function LocationFilterBar({
         <Select
           value={scope.districtId ?? "_none"}
           onValueChange={v => {
-            if (v === "_none") { onDistrictChange(null, null); }
-            else {
+            if (v === "_none") {
+              onChange({ districtId: null, districtName: null, facilityId: null, facilityName: null });
+            } else {
               const d = districts.find(x => x.id === v);
-              onDistrictChange(v, d?.districtName ?? null);
+              onChange({ districtId: v, districtName: d?.districtName ?? null, facilityId: null, facilityName: null });
             }
           }}
-          disabled={showProvince && !scope.provinceId}
+          disabled={showRegionProvince && !lookupProvinceId}
         >
-          <SelectTrigger className="h-8 w-[200px] text-sm">
-            <SelectValue placeholder={showProvince && !scope.provinceId ? "Select province first" : "All Districts"} />
+          <SelectTrigger className="h-8 w-[190px] text-sm">
+            <SelectValue placeholder={showRegionProvince && !lookupProvinceId ? "Select province first" : "All Districts"} />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="_none">All Districts</SelectItem>
@@ -206,12 +270,35 @@ function LocationFilterBar({
           </SelectContent>
         </Select>
 
-        {(scope.provinceId || scope.districtId) && (
+        <Select
+          value={scope.facilityId ?? "_none"}
+          onValueChange={v => {
+            if (v === "_none") {
+              onChange({ facilityId: null, facilityName: null });
+            } else {
+              const f = facList.find(x => x.id === v);
+              onChange({ facilityId: v, facilityName: f?.facilityName ?? null });
+            }
+          }}
+          disabled={!scope.districtId}
+        >
+          <SelectTrigger className="h-8 w-[190px] text-sm">
+            <SelectValue placeholder={!scope.districtId ? "Select district first" : "All Facilities"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_none">All Facilities</SelectItem>
+            {facList.map(f => (
+              <SelectItem key={f.id} value={f.id}>{f.facilityName}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {hasAnyScope && (
           <Button
             variant="ghost"
             size="sm"
             className="h-7 text-xs text-muted-foreground"
-            onClick={() => { onProvinceChange(null, null); onDistrictChange(null, null); }}
+            onClick={() => onChange(EMPTY_LOCATION)}
           >
             <X className="w-3 h-3 mr-1" /> Reset location
           </Button>
@@ -234,8 +321,10 @@ function FilterStrip({ filters, onClear, total, filteredTotal, locationScope }: 
   if (filters.status)       chips.push({ key: "status",       label: STATUS_LABELS[filters.status] ?? capitalize(filters.status) });
   if (filters.condition)    chips.push({ key: "condition",    label: CONDITION_LABELS[filters.condition] ?? capitalize(filters.condition) });
   if (filters.categoryName) chips.push({ key: "categoryName", label: filters.categoryName });
-  if (filters.districtId)   chips.push({ key: "districtId",   label: locationScope?.districtName ?? "District filter" });
+  if (filters.region)       chips.push({ key: "region",       label: `${filters.region} Region` });
   if (filters.provinceId)   chips.push({ key: "provinceId",   label: locationScope?.provinceName ?? "Province filter" });
+  if (filters.districtId)   chips.push({ key: "districtId",   label: locationScope?.districtName ?? "District filter" });
+  if (filters.facilityId)   chips.push({ key: "facilityId",   label: locationScope?.facilityName ?? "Facility filter" });
 
   if (chips.length === 0) return null;
 
@@ -560,25 +649,32 @@ function NationalDashboard() {
     if (key === "all") {
       setFilters(EMPTY_FILTERS);
       setLocationScope(EMPTY_LOCATION);
-    } else if (key === "provinceId") {
-      setFilters(f => ({ ...f, provinceId: null, districtId: null }));
+    } else if (key === "region") {
+      setFilters(f => ({ ...f, region: null, provinceId: null, districtId: null, facilityId: null }));
       setLocationScope(EMPTY_LOCATION);
+    } else if (key === "provinceId") {
+      setFilters(f => ({ ...f, provinceId: null, districtId: null, facilityId: null }));
+      setLocationScope(s => ({ ...s, provinceId: null, provinceName: null, districtId: null, districtName: null, facilityId: null, facilityName: null }));
     } else if (key === "districtId") {
-      setFilters(f => ({ ...f, districtId: null }));
-      setLocationScope(s => ({ ...s, districtId: null, districtName: null }));
+      setFilters(f => ({ ...f, districtId: null, facilityId: null }));
+      setLocationScope(s => ({ ...s, districtId: null, districtName: null, facilityId: null, facilityName: null }));
+    } else if (key === "facilityId") {
+      setFilters(f => ({ ...f, facilityId: null }));
+      setLocationScope(s => ({ ...s, facilityId: null, facilityName: null }));
     } else {
       setFilters(f => ({ ...f, [key]: null }));
     }
   }, []);
 
-  const handleProvinceChange = useCallback((id: string | null, name: string | null) => {
-    setFilters(f => ({ ...f, provinceId: id, districtId: null }));
-    setLocationScope({ provinceId: id, provinceName: name, districtId: null, districtName: null });
-  }, []);
-
-  const handleDistrictChange = useCallback((id: string | null, name: string | null) => {
-    setFilters(f => ({ ...f, districtId: id }));
-    setLocationScope(s => ({ ...s, districtId: id, districtName: name }));
+  const handleLocationChange = useCallback((patch: Partial<LocationScope> & Partial<DashFilters>) => {
+    setLocationScope(s => ({ ...s, ...patch }));
+    setFilters(f => ({
+      ...f,
+      ...(patch.region       !== undefined ? { region:     patch.region }       : {}),
+      ...(patch.provinceId   !== undefined ? { provinceId: patch.provinceId }   : {}),
+      ...(patch.districtId   !== undefined ? { districtId: patch.districtId }   : {}),
+      ...(patch.facilityId   !== undefined ? { facilityId: patch.facilityId }   : {}),
+    }));
   }, []);
 
   const openDetail = (title: string, params: Record<string, string>, subtitle?: string) => {
@@ -633,9 +729,8 @@ function NationalDashboard() {
       {/* Location Filter Bar */}
       <LocationFilterBar
         scope={locationScope}
-        onProvinceChange={handleProvinceChange}
-        onDistrictChange={handleDistrictChange}
-        showProvince={true}
+        onChange={handleLocationChange}
+        showRegionProvince={true}
       />
 
       {/* Filter Strip */}
@@ -1017,16 +1112,23 @@ function ProvincialDashboard() {
       setFilters(EMPTY_FILTERS);
       setLocationScope(EMPTY_LOCATION);
     } else if (key === "districtId") {
-      setFilters(f => ({ ...f, districtId: null }));
-      setLocationScope(s => ({ ...s, districtId: null, districtName: null }));
+      setFilters(f => ({ ...f, districtId: null, facilityId: null }));
+      setLocationScope(s => ({ ...s, districtId: null, districtName: null, facilityId: null, facilityName: null }));
+    } else if (key === "facilityId") {
+      setFilters(f => ({ ...f, facilityId: null }));
+      setLocationScope(s => ({ ...s, facilityId: null, facilityName: null }));
     } else {
       setFilters(f => ({ ...f, [key]: null }));
     }
   }, []);
 
-  const handleDistrictChange = useCallback((id: string | null, name: string | null) => {
-    setFilters(f => ({ ...f, districtId: id }));
-    setLocationScope(s => ({ ...s, districtId: id, districtName: name }));
+  const handleLocationChange = useCallback((patch: Partial<LocationScope> & Partial<DashFilters>) => {
+    setLocationScope(s => ({ ...s, ...patch }));
+    setFilters(f => ({
+      ...f,
+      ...(patch.districtId !== undefined ? { districtId: patch.districtId } : {}),
+      ...(patch.facilityId !== undefined ? { facilityId: patch.facilityId } : {}),
+    }));
   }, []);
 
   useEffect(() => {
@@ -1078,12 +1180,11 @@ function ProvincialDashboard() {
         </div>
       </div>
 
-      {/* Location Filter Bar — district scope selector */}
+      {/* Location Filter Bar — district + facility scope selector */}
       <LocationFilterBar
         scope={locationScope}
-        onProvinceChange={() => {}}
-        onDistrictChange={handleDistrictChange}
-        showProvince={false}
+        onChange={handleLocationChange}
+        showRegionProvince={false}
         fixedProvinceId={d?.province?.id}
       />
 

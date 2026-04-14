@@ -52,28 +52,28 @@ async function main() {
 
   // --- PROVINCES (All 22 PNG Provinces with local flag files) ---
   const provinceData = [
-    { provinceCode: "CP",  provinceName: "Central Province",                    flagUrl: "/flags/central.svg",             themeAccentColor: "#1E40AF" },
-    { provinceCode: "CH",  provinceName: "Chimbu (Simbu) Province",             flagUrl: "/flags/chimbu.svg",              themeAccentColor: "#B91C1C" },
-    { provinceCode: "EH",  provinceName: "Eastern Highlands Province",          flagUrl: "/flags/eastern_highlands.svg",   themeAccentColor: "#065F46" },
-    { provinceCode: "ENB", provinceName: "East New Britain Province",           flagUrl: "/flags/east_new_britain.svg",    themeAccentColor: "#7C3AED" },
-    { provinceCode: "ES",  provinceName: "East Sepik Province",                 flagUrl: "/flags/east_sepik.png",          themeAccentColor: "#0369A1" },
-    { provinceCode: "EN",  provinceName: "Enga Province",                       flagUrl: "/flags/enga.png",                themeAccentColor: "#CA8A04" },
-    { provinceCode: "GU",  provinceName: "Gulf Province",                       flagUrl: "/flags/gulf.png",                themeAccentColor: "#0F766E" },
-    { provinceCode: "HE",  provinceName: "Hela Province",                       flagUrl: "/flags/hela.svg",                themeAccentColor: "#92400E" },
-    { provinceCode: "JI",  provinceName: "Jiwaka Province",                     flagUrl: "/flags/jiwaka.svg",              themeAccentColor: "#1D4ED8" },
-    { provinceCode: "MA",  provinceName: "Manus Province",                      flagUrl: "/flags/manus.svg",               themeAccentColor: "#0284C7" },
-    { provinceCode: "MB",  provinceName: "Milne Bay Province",                  flagUrl: "/flags/milne_bay.svg",           themeAccentColor: "#047857" },
-    { provinceCode: "MO",  provinceName: "Morobe Province",                     flagUrl: "/flags/morobe.png",              themeAccentColor: "#1E3A8A" },
-    { provinceCode: "NCD", provinceName: "National Capital District",           flagUrl: "/flags/ncd.svg",                 themeAccentColor: "#DC2626" },
-    { provinceCode: "NI",  provinceName: "New Ireland Province",                flagUrl: "/flags/new_ireland.svg",         themeAccentColor: "#9D174D" },
-    { provinceCode: "NO",  provinceName: "Northern (Oro) Province",             flagUrl: "/flags/northern.png",            themeAccentColor: "#166534" },
-    { provinceCode: "AB",  provinceName: "Autonomous Region of Bougainville",   flagUrl: "/flags/bougainville.svg",        themeAccentColor: "#1E3A5F" },
-    { provinceCode: "SA",  provinceName: "Sandaun (West Sepik) Province",       flagUrl: "/flags/sandaun.svg",             themeAccentColor: "#6D28D9" },
-    { provinceCode: "SH",  provinceName: "Southern Highlands Province",         flagUrl: "/flags/southern_highlands.svg",  themeAccentColor: "#B45309" },
-    { provinceCode: "WS",  provinceName: "Western Province",                    flagUrl: "/flags/western.svg",             themeAccentColor: "#047857" },
-    { provinceCode: "WHP", provinceName: "Western Highlands Province",          flagUrl: "/flags/western_highlands.svg",   themeAccentColor: "#7C2D12" },
-    { provinceCode: "WNB", provinceName: "West New Britain Province",           flagUrl: "/flags/west_new_britain.svg",    themeAccentColor: "#064E3B" },
-    { provinceCode: "MD",  provinceName: "Madang Province",                     flagUrl: "/flags/madang.svg",              themeAccentColor: "#312E81" },
+    { provinceCode: "CP",  provinceName: "Central Province",                    flagUrl: "/flags/central.svg",             themeAccentColor: "#1E40AF", region: "Southern" },
+    { provinceCode: "CH",  provinceName: "Chimbu (Simbu) Province",             flagUrl: "/flags/chimbu.svg",              themeAccentColor: "#B91C1C", region: "Highlands" },
+    { provinceCode: "EH",  provinceName: "Eastern Highlands Province",          flagUrl: "/flags/eastern_highlands.svg",   themeAccentColor: "#065F46", region: "Highlands" },
+    { provinceCode: "ENB", provinceName: "East New Britain Province",           flagUrl: "/flags/east_new_britain.svg",    themeAccentColor: "#7C3AED", region: "Islands" },
+    { provinceCode: "ES",  provinceName: "East Sepik Province",                 flagUrl: "/flags/east_sepik.png",          themeAccentColor: "#0369A1", region: "Momase" },
+    { provinceCode: "EN",  provinceName: "Enga Province",                       flagUrl: "/flags/enga.png",                themeAccentColor: "#CA8A04", region: "Highlands" },
+    { provinceCode: "GU",  provinceName: "Gulf Province",                       flagUrl: "/flags/gulf.png",                themeAccentColor: "#0F766E", region: "Southern" },
+    { provinceCode: "HE",  provinceName: "Hela Province",                       flagUrl: "/flags/hela.svg",                themeAccentColor: "#92400E", region: "Highlands" },
+    { provinceCode: "JI",  provinceName: "Jiwaka Province",                     flagUrl: "/flags/jiwaka.svg",              themeAccentColor: "#1D4ED8", region: "Highlands" },
+    { provinceCode: "MA",  provinceName: "Manus Province",                      flagUrl: "/flags/manus.svg",               themeAccentColor: "#0284C7", region: "Islands" },
+    { provinceCode: "MB",  provinceName: "Milne Bay Province",                  flagUrl: "/flags/milne_bay.svg",           themeAccentColor: "#047857", region: "Southern" },
+    { provinceCode: "MO",  provinceName: "Morobe Province",                     flagUrl: "/flags/morobe.png",              themeAccentColor: "#1E3A8A", region: "Momase" },
+    { provinceCode: "NCD", provinceName: "National Capital District",           flagUrl: "/flags/ncd.svg",                 themeAccentColor: "#DC2626", region: "Southern" },
+    { provinceCode: "NI",  provinceName: "New Ireland Province",                flagUrl: "/flags/new_ireland.svg",         themeAccentColor: "#9D174D", region: "Islands" },
+    { provinceCode: "NO",  provinceName: "Northern (Oro) Province",             flagUrl: "/flags/northern.png",            themeAccentColor: "#166534", region: "Southern" },
+    { provinceCode: "AB",  provinceName: "Autonomous Region of Bougainville",   flagUrl: "/flags/bougainville.svg",        themeAccentColor: "#1E3A5F", region: "Islands" },
+    { provinceCode: "SA",  provinceName: "Sandaun (West Sepik) Province",       flagUrl: "/flags/sandaun.svg",             themeAccentColor: "#6D28D9", region: "Momase" },
+    { provinceCode: "SH",  provinceName: "Southern Highlands Province",         flagUrl: "/flags/southern_highlands.svg",  themeAccentColor: "#B45309", region: "Highlands" },
+    { provinceCode: "WS",  provinceName: "Western Province",                    flagUrl: "/flags/western.svg",             themeAccentColor: "#047857", region: "Southern" },
+    { provinceCode: "WHP", provinceName: "Western Highlands Province",          flagUrl: "/flags/western_highlands.svg",   themeAccentColor: "#7C2D12", region: "Highlands" },
+    { provinceCode: "WNB", provinceName: "West New Britain Province",           flagUrl: "/flags/west_new_britain.svg",    themeAccentColor: "#064E3B", region: "Islands" },
+    { provinceCode: "MD",  provinceName: "Madang Province",                     flagUrl: "/flags/madang.svg",              themeAccentColor: "#312E81", region: "Momase" },
   ];
 
   const provinceMap: Record<string, string> = {};
@@ -81,7 +81,7 @@ async function main() {
     const [row] = await db
       .insert(provinces)
       .values({ ...p, tenantId: tenant.id })
-      .onConflictDoUpdate({ target: provinces.provinceCode, set: { provinceName: p.provinceName, flagUrl: p.flagUrl, themeAccentColor: p.themeAccentColor } })
+      .onConflictDoUpdate({ target: provinces.provinceCode, set: { provinceName: p.provinceName, flagUrl: p.flagUrl, themeAccentColor: p.themeAccentColor, region: p.region } })
       .returning();
     provinceMap[p.provinceCode] = row.id;
   }

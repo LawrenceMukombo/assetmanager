@@ -1,9 +1,45 @@
 import { Router } from "express";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, isNotNull } from "drizzle-orm";
 import { db, provinces, districts, facilities, assets, assetTransfers, users, userScope } from "@workspace/db";
 import { requireAuth } from "../lib/auth";
 
 const router = Router();
+
+// ─── REGIONS ─────────────────────────────────────────────────────────────────
+
+router.get("/v1/locations/regions", requireAuth, async (req, res) => {
+  try {
+    const rows = await db
+      .select({
+        region:       provinces.region,
+        province_id:  provinces.id,
+        province_name: provinces.provinceName,
+        province_code: provinces.provinceCode,
+      })
+      .from(provinces)
+      .where(and(eq(provinces.active, true), isNotNull(provinces.region)))
+      .orderBy(provinces.region, provinces.provinceName);
+
+    // Group by region
+    const regionMap: Record<string, { name: string; provinces: { id: string; provinceName: string; provinceCode: string }[] }> = {};
+    for (const row of rows) {
+      const rName = row.region!;
+      if (!regionMap[rName]) regionMap[rName] = { name: rName, provinces: [] };
+      regionMap[rName].provinces.push({ id: row.province_id, provinceName: row.province_name, provinceCode: row.province_code });
+    }
+
+    const regionOrder = ["Southern", "Highlands", "Momase", "Islands"];
+    const data = regionOrder
+      .filter(r => regionMap[r])
+      .map(r => regionMap[r])
+      .concat(Object.keys(regionMap).filter(r => !regionOrder.includes(r)).map(r => regionMap[r]));
+
+    res.json({ success: true, message: "Regions retrieved", data });
+  } catch (err) {
+    req.log.error({ err }, "Regions error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
 
 // ─── PROVINCES ───────────────────────────────────────────────────────────────
 

@@ -1,15 +1,17 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, Printer, RefreshCw, FileDown } from "lucide-react";
+import { FileText, Download, Printer, RefreshCw, FileDown, MapPin, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Papa from "papaparse";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { apiFetch } from "@/lib/api-fetch";
+import { apiFetch, apiFetchJson } from "@/lib/api-fetch";
 import { statusBadgeClass } from "@/lib/status";
 
 interface AssetReportRow {
@@ -52,6 +54,74 @@ export default function Reports() {
   const [loadingAssets, setLoadingAssets] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(false);
 
+  // Location scope state (national users only)
+  const [regionName, setRegionName] = useState("");
+  const [provinceId, setProvinceId] = useState("");
+  const [districtId, setDistrictId] = useState("");
+  const [facilityId, setFacilityId] = useState("");
+
+  const { data: regionsData } = useQuery({
+    queryKey: ["regions-list"],
+    queryFn: () => apiFetchJson("/api/v1/locations/regions"),
+    staleTime: 600_000,
+    enabled: isNational,
+  });
+
+  const { data: provincesData } = useQuery({
+    queryKey: ["provinces-list"],
+    queryFn: () => apiFetchJson("/api/v1/locations/provinces"),
+    staleTime: 600_000,
+    enabled: isNational,
+  });
+
+  const { data: districtsData } = useQuery({
+    queryKey: ["districts-list", provinceId],
+    queryFn: () => apiFetchJson(`/api/v1/locations/provinces/${provinceId}/districts`),
+    staleTime: 600_000,
+    enabled: !!provinceId,
+  });
+
+  const { data: facilitiesData } = useQuery({
+    queryKey: ["facilities-list", districtId],
+    queryFn: () => apiFetchJson(`/api/v1/locations/districts/${districtId}/facilities`),
+    staleTime: 600_000,
+    enabled: !!districtId,
+  });
+
+  type RegionEntry = { name: string; provinces: { id: string; provinceName: string; provinceCode: string }[] };
+  type ProvRow = { id: string; provinceName: string; provinceCode?: string };
+  type DistRow = { id: string; districtName: string };
+  type FacRow  = { id: string; facilityName: string };
+
+  const regionsList: RegionEntry[] = (regionsData?.data as RegionEntry[]) ?? [];
+  const allProvinces: ProvRow[] = (provincesData?.data as ProvRow[]) ?? [];
+  const districtsList: DistRow[] = (districtsData?.data as DistRow[]) ?? [];
+  const facilitiesList: FacRow[] = (facilitiesData?.data as FacRow[]) ?? [];
+
+  const filteredProvinces = useMemo(() => {
+    if (!regionName) return allProvinces;
+    const rEntry = regionsList.find(r => r.name === regionName);
+    if (!rEntry) return allProvinces;
+    const codes = new Set(rEntry.provinces.map(p => p.provinceCode));
+    return allProvinces.filter(p => codes.has(p.provinceCode ?? ""));
+  }, [allProvinces, regionsList, regionName]);
+
+  // Build location query string for API calls
+  const locationParams = useMemo(() => {
+    const p = new URLSearchParams();
+    if (provinceId) p.set("province_id", provinceId);
+    if (districtId) p.set("district_id", districtId);
+    if (facilityId) p.set("facility_id", facilityId);
+    const s = p.toString();
+    return s ? `?${s}` : "";
+  }, [provinceId, districtId, facilityId]);
+
+  const hasLocationScope = !!(regionName || provinceId || districtId || facilityId);
+
+  const resetLocation = () => {
+    setRegionName(""); setProvinceId(""); setDistrictId(""); setFacilityId("");
+  };
+
 
   const downloadCSV = (data: object[], filename: string) => {
     const csv = Papa.unparse(data);
@@ -69,7 +139,7 @@ export default function Reports() {
   const fetchAndExportAssets = async () => {
     setLoadingAssets(true);
     try {
-      const res = await apiFetch("/api/v1/reports/assets");
+      const res = await apiFetch(`/api/v1/reports/assets${locationParams}`);
       const body = await res.json();
       if (!res.ok) throw new Error(body.message ?? "Failed to fetch");
       const items: AssetReportRow[] = body.data?.items ?? body.data ?? [];
@@ -91,7 +161,7 @@ export default function Reports() {
   const fetchAndExportSummary = async () => {
     setLoadingSummary(true);
     try {
-      const res = await apiFetch("/api/v1/reports/summary");
+      const res = await apiFetch(`/api/v1/reports/summary${locationParams}`);
       const body = await res.json();
       if (!res.ok) throw new Error(body.message ?? "Failed to fetch");
       const rows: SummaryRow[] = Array.isArray(body.data) ? body.data : [body.data];
@@ -113,7 +183,7 @@ export default function Reports() {
   const fetchAndExportProvinceComparison = async () => {
     setLoadingSummary(true);
     try {
-      const res = await apiFetch("/api/v1/reports/summary");
+      const res = await apiFetch(`/api/v1/reports/summary${locationParams}`);
       const body = await res.json();
       if (!res.ok) throw new Error(body.message ?? "Failed to fetch");
       const rows: SummaryRow[] = Array.isArray(body.data) ? body.data : [body.data];
@@ -135,7 +205,7 @@ export default function Reports() {
   const loadPreviewData = async () => {
     setLoadingAssets(true);
     try {
-      const res = await apiFetch("/api/v1/reports/assets");
+      const res = await apiFetch(`/api/v1/reports/assets${locationParams}`);
       const body = await res.json();
       if (!res.ok) throw new Error(body.message ?? "Failed to fetch");
       const items: AssetReportRow[] = body.data?.items ?? body.data ?? [];
@@ -156,7 +226,7 @@ export default function Reports() {
   const downloadPDF = async () => {
     setLoadingAssets(true);
     try {
-      const res = await apiFetch("/api/v1/reports/assets");
+      const res = await apiFetch(`/api/v1/reports/assets${locationParams}`);
       const body = await res.json();
       if (!res.ok) throw new Error(body.message ?? "Failed to fetch");
       const items: AssetReportRow[] = body.data?.items ?? body.data ?? [];
@@ -219,6 +289,55 @@ export default function Reports() {
         <h2 className="text-3xl font-bold tracking-tight">Reports & Exports</h2>
         <p className="text-muted-foreground">Generate, preview, and download asset reports.</p>
       </div>
+
+      {/* Location Scope Filter — national users only */}
+      {isNational && (
+        <Card className="border-dashed bg-muted/30">
+          <CardContent className="py-3 px-4 flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground shrink-0">
+              <MapPin className="w-4 h-4" /> Report Scope
+            </div>
+
+            <Select value={regionName || "_none"} onValueChange={v => { if (v === "_none") { setRegionName(""); setProvinceId(""); setDistrictId(""); setFacilityId(""); } else { setRegionName(v); setProvinceId(""); setDistrictId(""); setFacilityId(""); } }}>
+              <SelectTrigger className="h-8 w-[150px] text-sm"><SelectValue placeholder="All Regions" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">All Regions</SelectItem>
+                {regionsList.map(r => <SelectItem key={r.name} value={r.name}>{r.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
+            <Select value={provinceId || "_none"} onValueChange={v => { if (v === "_none") { setProvinceId(""); setDistrictId(""); setFacilityId(""); } else { setProvinceId(v); setDistrictId(""); setFacilityId(""); } }}>
+              <SelectTrigger className="h-8 w-[190px] text-sm"><SelectValue placeholder="All Provinces" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">All Provinces</SelectItem>
+                {filteredProvinces.map(p => <SelectItem key={p.id} value={p.id}>{p.provinceName}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
+            <Select value={districtId || "_none"} onValueChange={v => { if (v === "_none") { setDistrictId(""); setFacilityId(""); } else { setDistrictId(v); setFacilityId(""); } }} disabled={!provinceId}>
+              <SelectTrigger className="h-8 w-[180px] text-sm"><SelectValue placeholder={!provinceId ? "Select province first" : "All Districts"} /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">All Districts</SelectItem>
+                {districtsList.map(d => <SelectItem key={d.id} value={d.id}>{d.districtName}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
+            <Select value={facilityId || "_none"} onValueChange={v => { if (v === "_none") { setFacilityId(""); } else { setFacilityId(v); } }} disabled={!districtId}>
+              <SelectTrigger className="h-8 w-[180px] text-sm"><SelectValue placeholder={!districtId ? "Select district first" : "All Facilities"} /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">All Facilities</SelectItem>
+                {facilitiesList.map(f => <SelectItem key={f.id} value={f.id}>{f.facilityName}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
+            {hasLocationScope && (
+              <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={resetLocation}>
+                <X className="w-3 h-3 mr-1" /> Reset
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card>
