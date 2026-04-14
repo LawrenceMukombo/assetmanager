@@ -137,29 +137,17 @@ export default function GISPage() {
 
   // ── Province dot (circle marker) styles ────────────────────────────────────
   const refreshCircleStyles = useCallback(() => {
-    const sel = selectedProvinceRef.current;
     const selRegion = selectedRegionRef.current;
     const map = mapRef.current;
     if (!map) return;
     circlesRef.current.forEach((circle, provId) => {
-      if (sel) {
-        // Province selected: keep only that province's dot on the map
-        if (provId === sel.id) {
-          circle.setStyle({ fillOpacity: 0.88, weight: 2, opacity: 1 });
-          if (!map.hasLayer(circle)) circle.addTo(map);
-        } else {
-          if (map.hasLayer(circle)) map.removeLayer(circle);
-        }
+      const p = PNG_PROVINCES.find((pr) => pr.id === provId);
+      const dimmed = !!(selRegion && p && p.region !== selRegion);
+      if (dimmed) {
+        if (map.hasLayer(circle)) map.removeLayer(circle);
       } else {
-        // No province selected: apply region filter logic
-        const p = PNG_PROVINCES.find((pr) => pr.id === provId);
-        const dimmed = !!(selRegion && p && p.region !== selRegion);
-        if (dimmed) {
-          if (map.hasLayer(circle)) map.removeLayer(circle);
-        } else {
-          if (!map.hasLayer(circle)) circle.addTo(map);
-          circle.setStyle({ fillOpacity: 0.88, weight: 2, opacity: 1 });
-        }
+        if (!map.hasLayer(circle)) circle.addTo(map);
+        circle.setStyle({ fillOpacity: 0.88, weight: 2, opacity: 1 });
       }
     });
   }, []);
@@ -178,14 +166,9 @@ export default function GISPage() {
       if (!prov || !visibleProvinceIds.has(prov.id)) return;
 
       const isSelected = selProv?.id === prov.id;
-      const isDimmed = !!(selRegion && prov.region !== selRegion && !isSelected);
+      const isDimmed = !!(selRegion && prov.region !== selRegion && !isSelected)
+                    || !!(selProv && !isSelected);
       const color = getProvinceColor(prov);
-
-      // When a province is selected, fully hide all others
-      if (selProv && !isSelected) {
-        pl.setStyle({ fillOpacity: 0, opacity: 0, weight: 0 });
-        return;
-      }
 
       pl.setStyle({
         fillColor: color,
@@ -222,24 +205,19 @@ export default function GISPage() {
       const isRegionDimmed = !!(selRegion && prov.region !== selRegion);
       const color = getProvinceColor(prov);
 
-      // When a province is selected, fully hide districts of all other provinces
-      if (selProv && !isInSelected) {
-        pl.setStyle({ fillOpacity: 0, opacity: 0, weight: 0 });
-        return;
-      }
-
       // Keep selected district in its highlighted style
       if (pl === selectedDistrictLayerRef.current) {
         pl.setStyle({ fillColor: color, fillOpacity: 0.5, color, weight: 2.5, opacity: 1 });
         return;
       }
 
+      const isProvDimmed = !!(selProv && !isInSelected);
       pl.setStyle({
         fillColor: color,
-        fillOpacity: isRegionDimmed ? 0.02 : isInSelected ? 0.16 : 0.07,
-        color: isInSelected ? hexToRgba(color, 0.6) : hexToRgba(color, 0.25),
-        weight: isInSelected ? 0.8 : 0.5,
-        opacity: isRegionDimmed ? 0.15 : 0.9,
+        fillOpacity: isRegionDimmed ? 0.02 : isInSelected ? 0.16 : isProvDimmed ? 0.03 : 0.07,
+        color: isInSelected ? hexToRgba(color, 0.6) : hexToRgba(color, 0.15),
+        weight: isInSelected ? 0.8 : 0.4,
+        opacity: (isRegionDimmed || isProvDimmed) ? 0.2 : 0.9,
       });
     });
   }, [visibleProvinceIds]);
@@ -342,25 +320,20 @@ export default function GISPage() {
             );
 
             layer.on("mouseover", () => {
-              const sel = selectedProvinceRef.current;
-              if (sel && sel.id !== prov.id) return; // invisible — don't reveal on hover
-              if (sel?.id === prov.id) return;        // already selected — keep selected style
+              if (selectedProvinceRef.current?.id === prov.id) return; // keep selected style
               pl.setStyle({ fillOpacity: 0.38, weight: 2, color: getProvinceColor(prov) });
               (layer as L.Path & { bringToFront(): void }).bringToFront();
             });
             layer.on("mouseout", () => {
+              if (selectedProvinceRef.current?.id === prov.id) return; // keep selected style
               const sel = selectedProvinceRef.current;
-              if (sel?.id === prov.id) return; // keep selected style
-              if (sel && sel.id !== prov.id) {
-                // Another province is selected — keep this one hidden
-                pl.setStyle({ fillOpacity: 0, opacity: 0, weight: 0 });
-                return;
-              }
-              const isDimmed = selectedRegionRef.current !== null && prov.region !== selectedRegionRef.current;
+              const isDimmed = !!(selectedRegionRef.current !== null && prov.region !== selectedRegionRef.current)
+                            || !!(sel && sel.id !== prov.id);
               pl.setStyle({
                 fillOpacity: isDimmed ? 0.05 : 0.18,
                 weight: isDimmed ? 0.5 : 1.2,
                 color: isDimmed ? "#94a3b8" : "#ffffff",
+                opacity: isDimmed ? 0.3 : 1,
               });
             });
             layer.on("click", () => selectProvince(prov));
@@ -421,29 +394,23 @@ export default function GISPage() {
 
           layer.on("mouseover", () => {
             if (!showDistrictsRef.current) return;
-            const sel = selectedProvinceRef.current;
-            if (sel && sel.id !== prov.id) return;
-            // Don't override selected district style
-            if (pl === selectedDistrictLayerRef.current) return;
+            if (pl === selectedDistrictLayerRef.current) return; // keep selected style
             pl.setStyle({ fillOpacity: 0.3, weight: 1.2, color });
             (layer as L.Path & { bringToFront(): void }).bringToFront();
           });
 
           layer.on("mouseout", () => {
             if (!showDistrictsRef.current) return;
+            if (pl === selectedDistrictLayerRef.current) return; // keep selected style
             const sel = selectedProvinceRef.current;
             const isInSelected = sel?.id === prov.id;
-            if (sel && !isInSelected) {
-              pl.setStyle({ fillOpacity: 0, opacity: 0, weight: 0 });
-              return;
-            }
-            // Keep selected district highlighted
-            if (pl === selectedDistrictLayerRef.current) return;
+            const isProvDimmed = !!(sel && !isInSelected);
             const isRegionDimmed = selectedRegionRef.current !== null && prov.region !== selectedRegionRef.current;
             pl.setStyle({
-              fillOpacity: isRegionDimmed ? 0.02 : isInSelected ? 0.16 : 0.07,
-              color: isInSelected ? hexToRgba(color, 0.6) : hexToRgba(color, 0.25),
-              weight: isInSelected ? 0.8 : 0.5,
+              fillOpacity: isRegionDimmed ? 0.02 : isInSelected ? 0.16 : isProvDimmed ? 0.03 : 0.07,
+              color: isInSelected ? hexToRgba(color, 0.6) : hexToRgba(color, 0.15),
+              weight: isInSelected ? 0.8 : 0.4,
+              opacity: (isRegionDimmed || isProvDimmed) ? 0.2 : 0.9,
             });
           });
 
@@ -516,14 +483,10 @@ export default function GISPage() {
       );
       circle.on("click", () => selectProvince(prov));
       circle.on("mouseover", function (this: L.CircleMarker) {
-        const sel = selectedProvinceRef.current;
-        if (sel && sel.id !== prov.id) return; // hidden — don't reveal on hover
         if (selectedRegionRef.current && selectedRegionRef.current !== prov.region) return;
         this.setStyle({ weight: 3.5, fillOpacity: 1 });
       });
       circle.on("mouseout", function (this: L.CircleMarker) {
-        const sel = selectedProvinceRef.current;
-        if (sel && sel.id !== prov.id) return; // keep hidden
         if (selectedRegionRef.current && selectedRegionRef.current !== prov.region) return;
         this.setStyle({ weight: 2, fillOpacity: 0.88 });
       });
