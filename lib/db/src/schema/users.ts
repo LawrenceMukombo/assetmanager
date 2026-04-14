@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, boolean, timestamp, unique } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, text, boolean, timestamp, date, unique } from "drizzle-orm/pg-core";
 import { roles } from "./roles";
 import { provinces } from "./provinces";
 import { districts } from "./districts";
@@ -10,6 +10,10 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   phoneNumber: varchar("phone_number", { length: 50 }),
+  department: varchar("department", { length: 255 }),
+  jobTitle: varchar("job_title", { length: 255 }),
+  gender: varchar("gender", { length: 20 }),
+  dateOfBirth: date("date_of_birth"),
   active: boolean("active").notNull().default(true),
   lastLogin: timestamp("last_login"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

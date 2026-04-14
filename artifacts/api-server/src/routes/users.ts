@@ -60,6 +60,10 @@ router.get("/v1/users", requireAuth, async (req, res) => {
         fullName: users.fullName,
         email: users.email,
         phoneNumber: users.phoneNumber,
+        department: users.department,
+        jobTitle: users.jobTitle,
+        gender: users.gender,
+        dateOfBirth: users.dateOfBirth,
         active: users.active,
         lastLogin: users.lastLogin,
         createdAt: users.createdAt,
@@ -109,7 +113,7 @@ router.get("/v1/users", requireAuth, async (req, res) => {
 router.post("/v1/users", requireAuth, requireUserAdmin, async (req, res) => {
   if (!req.user) return;
 
-  const { full_name, email, password, phone_number, role_id, province_id, district_id, facility_id } = req.body;
+  const { full_name, email, password, phone_number, department, job_title, gender, date_of_birth, role_id, province_id, district_id, facility_id } = req.body;
 
   if (!full_name || !email || !password || !role_id) {
     res.status(400).json({ success: false, message: "full_name, email, password, role_id are required", data: null });
@@ -149,7 +153,16 @@ router.post("/v1/users", requireAuth, requireUserAdmin, async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 10);
     const [user] = await db
       .insert(users)
-      .values({ fullName: full_name, email, passwordHash, phoneNumber: phone_number })
+      .values({
+        fullName: full_name,
+        email,
+        passwordHash,
+        phoneNumber: phone_number ?? null,
+        department: department ?? null,
+        jobTitle: job_title ?? null,
+        gender: gender ?? null,
+        dateOfBirth: date_of_birth ?? null,
+      })
       .returning();
 
     await db.insert(userRoles).values({ userId: user.id, roleId: role_id });
@@ -179,6 +192,10 @@ router.get("/v1/users/:id", requireAuth, async (req, res) => {
         fullName: users.fullName,
         email: users.email,
         phoneNumber: users.phoneNumber,
+        department: users.department,
+        jobTitle: users.jobTitle,
+        gender: users.gender,
+        dateOfBirth: users.dateOfBirth,
         active: users.active,
         lastLogin: users.lastLogin,
         createdAt: users.createdAt,
@@ -253,7 +270,7 @@ router.put("/v1/users/:id", requireAuth, requireUserAdmin, async (req, res) => {
       return;
     }
 
-    const { full_name, phone_number, role_id, province_id, district_id, facility_id } = req.body;
+    const { full_name, phone_number, department, job_title, gender, date_of_birth, role_id, province_id, district_id, facility_id } = req.body;
 
     const newProvinceId: string | null | undefined = province_id !== undefined ? (province_id as string | null) : existingScope?.provinceId;
     const newDistrictId: string | null | undefined = district_id !== undefined ? (district_id as string | null) : existingScope?.districtId;
@@ -299,7 +316,11 @@ router.put("/v1/users/:id", requireAuth, requireUserAdmin, async (req, res) => {
       .update(users)
       .set({
         ...(full_name !== undefined && { fullName: full_name as string }),
-        ...(phone_number !== undefined && { phoneNumber: phone_number as string }),
+        ...(phone_number !== undefined && { phoneNumber: phone_number as string | null }),
+        ...(department !== undefined && { department: department as string | null }),
+        ...(job_title !== undefined && { jobTitle: job_title as string | null }),
+        ...(gender !== undefined && { gender: gender as string | null }),
+        ...(date_of_birth !== undefined && { dateOfBirth: date_of_birth as string | null }),
         updatedAt: new Date(),
       })
       .where(eq(users.id, targetId))

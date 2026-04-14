@@ -113,6 +113,11 @@ const userSchema = z.object({
   full_name: z.string().min(1, "Full name is required"),
   email: z.string().email("Valid email required"),
   password: z.string().min(8, "Password must be at least 8 characters"),
+  phone_number: z.string().optional(),
+  department: z.string().optional(),
+  job_title: z.string().optional(),
+  gender: z.string().optional(),
+  date_of_birth: z.string().optional(),
   role_id: z.string().min(1, "Role is required"),
   province_id: z.string().optional(),
   district_id: z.string().optional(),
@@ -124,6 +129,11 @@ interface UserRow {
   id?: string;
   fullName?: string | null;
   email?: string | null;
+  phoneNumber?: string | null;
+  department?: string | null;
+  jobTitle?: string | null;
+  gender?: string | null;
+  dateOfBirth?: string | null;
   active?: boolean | null;
   role?: { id?: string | null; roleName?: string | null; scopeLevel?: string | null } | null;
   scope?: { provinceId?: string | null; districtId?: string | null; facilityId?: string | null } | null;
@@ -203,7 +213,11 @@ export default function Users() {
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),
-    defaultValues: { full_name: "", email: "", password: "", role_id: "", province_id: "", district_id: "" },
+    defaultValues: {
+      full_name: "", email: "", password: "", phone_number: "",
+      department: "", job_title: "", gender: "", date_of_birth: "",
+      role_id: "", province_id: "", district_id: "",
+    },
   });
 
   if (!isAdmin) return <Redirect to="/dashboard" />;
@@ -215,6 +229,11 @@ export default function Users() {
       password: values.password,
       role_id: values.role_id,
     };
+    if (values.phone_number) payload.phone_number = values.phone_number;
+    if (values.department) payload.department = values.department;
+    if (values.job_title) payload.job_title = values.job_title;
+    if (values.gender) payload.gender = values.gender;
+    if (values.date_of_birth) payload.date_of_birth = values.date_of_birth;
     if (values.province_id) payload.province_id = values.province_id;
     if (values.district_id) payload.district_id = values.district_id;
     createMutation.mutate({ data: payload as UserFormValues });
@@ -286,10 +305,10 @@ export default function Users() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Full Name</TableHead>
+                  <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Department / Title</TableHead>
                   <TableHead>Role</TableHead>
-                  <TableHead>Scope Level</TableHead>
                   <TableHead>Province</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Active</TableHead>
@@ -311,10 +330,20 @@ export default function Users() {
                     className="cursor-pointer hover:bg-muted/50 transition-colors"
                     onClick={() => openEditUser(u)}
                   >
-                    <TableCell className="font-medium">{u.fullName}</TableCell>
+                    <TableCell>
+                      <div className="font-medium">{u.fullName}</div>
+                      {u.gender && <div className="text-xs text-muted-foreground capitalize">{u.gender}</div>}
+                    </TableCell>
                     <TableCell className="text-sm">{u.email}</TableCell>
+                    <TableCell>
+                      {u.department || u.jobTitle ? (
+                        <div>
+                          {u.department && <div className="text-sm font-medium">{u.department}</div>}
+                          {u.jobTitle && <div className="text-xs text-muted-foreground">{u.jobTitle}</div>}
+                        </div>
+                      ) : <span className="text-muted-foreground text-xs">—</span>}
+                    </TableCell>
                     <TableCell><Badge variant="outline">{u.role?.roleName}</Badge></TableCell>
-                    <TableCell className="capitalize text-sm">{u.role?.scopeLevel ?? "N/A"}</TableCell>
                     <TableCell>{u.provinceName || "National"}</TableCell>
                     <TableCell>
                       <Badge className={u.active ? "bg-green-600 hover:bg-green-700" : "bg-gray-500 hover:bg-gray-600"}>
@@ -336,7 +365,7 @@ export default function Users() {
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <Button variant="ghost" size="sm" onClick={() => openEditUser(u)}>
-                        <Pencil className="w-3 h-3 mr-1" /> Edit Role
+                        <Pencil className="w-3 h-3 mr-1" /> Edit
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -379,17 +408,20 @@ export default function Users() {
       </Tabs>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Add New User</DialogTitle>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-y-auto pr-1">
+              <div className="space-y-4 py-2">
+              <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Account Details</p>
+              <div className="grid grid-cols-2 gap-3">
               <FormField
                 control={form.control}
                 name="full_name"
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem className="col-span-2">
                     <FormLabel>Full Name</FormLabel>
                     <FormControl><Input {...field} /></FormControl>
                     <FormMessage />
@@ -400,7 +432,7 @@ export default function Users() {
                 control={form.control}
                 name="email"
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem className="col-span-2">
                     <FormLabel>Email Address</FormLabel>
                     <FormControl><Input type="email" autoComplete="off" {...field} /></FormControl>
                     <FormMessage />
@@ -411,13 +443,83 @@ export default function Users() {
                 control={form.control}
                 name="password"
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem className="col-span-2">
                     <FormLabel>Temporary Password</FormLabel>
                     <FormControl><Input type="password" autoComplete="new-password" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+              <FormField
+                control={form.control}
+                name="phone_number"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone Number</FormLabel>
+                    <FormControl><Input placeholder="+675 xxx xxxx" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="gender"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Gender</FormLabel>
+                    <Select onValueChange={v => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="_none">— Not specified —</SelectItem>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              </div>
+
+              <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wider pt-2">Professional Details</p>
+              <div className="grid grid-cols-2 gap-3">
+              <FormField
+                control={form.control}
+                name="department"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Department</FormLabel>
+                    <FormControl><Input placeholder="e.g. Finance" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="job_title"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Job Title</FormLabel>
+                    <FormControl><Input placeholder="e.g. Asset Officer" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="date_of_birth"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date of Birth</FormLabel>
+                    <FormControl><Input type="date" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              </div>
+
+              <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wider pt-2">System Access</p>
               <FormField
                 control={form.control}
                 name="role_id"
@@ -503,7 +605,8 @@ export default function Users() {
                   )}
                 />
               )}
-              <DialogFooter>
+              </div>
+              <DialogFooter className="pt-4">
                 <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
                 <Button type="submit" disabled={createMutation.isPending}>
                   {createMutation.isPending ? "Creating..." : "Create User"}

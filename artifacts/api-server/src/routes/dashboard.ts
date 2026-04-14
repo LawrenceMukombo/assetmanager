@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, and, isNull, sql, desc } from "drizzle-orm";
-import { db, assets, assetCategories, provinces, districts, facilities, users } from "@workspace/db";
+import { db, assets, assetCategories, provinces, districts, facilities } from "@workspace/db";
 import { requireAuth, requireNational } from "../lib/auth";
 
 const router = Router();
@@ -25,6 +25,8 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
         total_assets: sql<number>`count(*)::int`,
         active_assets: sql<number>`sum(case when ${assets.status} = 'active' then 1 else 0 end)::int`,
         missing_assets: sql<number>`sum(case when ${assets.status} = 'missing' then 1 else 0 end)::int`,
+        disposed_assets: sql<number>`sum(case when ${assets.status} = 'disposed' then 1 else 0 end)::int`,
+        maintenance_assets: sql<number>`sum(case when ${assets.status} = 'under_maintenance' then 1 else 0 end)::int`,
         total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
       })
       .from(assets)
@@ -34,6 +36,7 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
       .select({
         category_name: assetCategories.categoryName,
         count: sql<number>`count(*)::int`,
+        total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
       })
       .from(assets)
       .leftJoin(assetCategories, eq(assets.categoryId, assetCategories.id))
@@ -49,7 +52,46 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
       })
       .from(assets)
       .where(baseWhere)
-      .groupBy(assets.condition);
+      .groupBy(assets.condition)
+      .orderBy(assets.condition);
+
+    const byStatus = await db
+      .select({
+        status: assets.status,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(assets)
+      .where(baseWhere)
+      .groupBy(assets.status)
+      .orderBy(desc(sql`count(*)`));
+
+    // District breakdown for this province
+    const byDistrict = await db
+      .select({
+        district_id: districts.id,
+        district_name: districts.districtName,
+        total_assets: sql<number>`count(${assets.id})::int`,
+        missing_assets: sql<number>`sum(case when ${assets.status} = 'missing' then 1 else 0 end)::int`,
+        total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+      })
+      .from(districts)
+      .leftJoin(assets, and(eq(assets.districtId, districts.id), isNull(assets.deletedAt)))
+      .where(eq(districts.provinceId, provinceId))
+      .groupBy(districts.id, districts.districtName)
+      .orderBy(desc(sql`count(${assets.id})`));
+
+    // Acquisition trend: last 12 months
+    const acquisitionTrend = await db
+      .select({
+        month: sql<string>`to_char(date_trunc('month', ${assets.createdAt}), 'Mon YYYY')`,
+        month_key: sql<string>`to_char(date_trunc('month', ${assets.createdAt}), 'YYYY-MM')`,
+        count: sql<number>`count(*)::int`,
+        total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+      })
+      .from(assets)
+      .where(and(baseWhere, sql`${assets.createdAt} >= now() - interval '12 months'`))
+      .groupBy(sql`date_trunc('month', ${assets.createdAt})`)
+      .orderBy(sql`date_trunc('month', ${assets.createdAt})`);
 
     const recentAssets = await db
       .select({
@@ -67,10 +109,20 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
       .leftJoin(facilities, eq(assets.facilityId, facilities.id))
       .where(baseWhere)
       .orderBy(desc(assets.createdAt))
-      .limit(5);
+      .limit(8);
 
     const [province] = await db
-      .select({ provinceName: provinces.provinceName, flagUrl: provinces.flagUrl, themeAccentColor: provinces.themeAccentColor })
+      .select({
+        id: provinces.id,
+        provinceName: provinces.provinceName,
+        flagUrl: provinces.flagUrl,
+        themeAccentColor: provinces.themeAccentColor,
+        flagColors: provinces.flagColors,
+        capitalCity: provinces.capitalCity,
+        region: provinces.region,
+        population: provinces.population,
+        areaKm2: provinces.areaKm2,
+      })
       .from(provinces)
       .where(eq(provinces.id, provinceId))
       .limit(1);
@@ -83,9 +135,14 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
         total_assets: totals.total_assets ?? 0,
         active_assets: totals.active_assets ?? 0,
         missing_assets: totals.missing_assets ?? 0,
+        disposed_assets: totals.disposed_assets ?? 0,
+        maintenance_assets: totals.maintenance_assets ?? 0,
         total_value: totals.total_value ?? "0",
         assets_by_category: byCategory,
         assets_by_condition: byCondition,
+        assets_by_status: byStatus,
+        assets_by_district: byDistrict,
+        acquisition_trend: acquisitionTrend,
         recent_assets: recentAssets,
       },
     });
@@ -100,6 +157,8 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
     const [totals] = await db
       .select({
         total_assets: sql<number>`count(*)::int`,
+        active_assets: sql<number>`sum(case when ${assets.status} = 'active' then 1 else 0 end)::int`,
+        missing_assets: sql<number>`sum(case when ${assets.status} = 'missing' then 1 else 0 end)::int`,
         total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
       })
       .from(assets)
@@ -120,6 +179,7 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
         total_assets: sql<number>`count(${assets.id})::int`,
         total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
         missing_assets: sql<number>`sum(case when ${assets.status} = 'missing' then 1 else 0 end)::int`,
+        active_assets: sql<number>`sum(case when ${assets.status} = 'active' then 1 else 0 end)::int`,
       })
       .from(provinces)
       .leftJoin(assets, and(eq(assets.provinceId, provinces.id), isNull(assets.deletedAt)))
@@ -131,6 +191,7 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
       .select({
         category_name: assetCategories.categoryName,
         count: sql<number>`count(*)::int`,
+        total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
       })
       .from(assets)
       .leftJoin(assetCategories, eq(assets.categoryId, assetCategories.id))
@@ -139,15 +200,53 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
       .orderBy(desc(sql`count(*)`))
       .limit(7);
 
+    const byCondition = await db
+      .select({
+        condition: assets.condition,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(assets)
+      .where(isNull(assets.deletedAt))
+      .groupBy(assets.condition)
+      .orderBy(assets.condition);
+
+    const byStatus = await db
+      .select({
+        status: assets.status,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(assets)
+      .where(isNull(assets.deletedAt))
+      .groupBy(assets.status)
+      .orderBy(desc(sql`count(*)`));
+
+    // Acquisition trend: last 12 months (national)
+    const acquisitionTrend = await db
+      .select({
+        month: sql<string>`to_char(date_trunc('month', ${assets.createdAt}), 'Mon YYYY')`,
+        month_key: sql<string>`to_char(date_trunc('month', ${assets.createdAt}), 'YYYY-MM')`,
+        count: sql<number>`count(*)::int`,
+        total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+      })
+      .from(assets)
+      .where(and(isNull(assets.deletedAt), sql`${assets.createdAt} >= now() - interval '12 months'`))
+      .groupBy(sql`date_trunc('month', ${assets.createdAt})`)
+      .orderBy(sql`date_trunc('month', ${assets.createdAt})`);
+
     res.json({
       success: true,
       message: "National dashboard retrieved",
       data: {
         total_assets: totals.total_assets ?? 0,
+        active_assets: totals.active_assets ?? 0,
+        missing_assets: totals.missing_assets ?? 0,
         total_value: totals.total_value ?? "0",
         provinces_count: provinceCount.count ?? 0,
         assets_by_province: byProvince,
         top_categories: topCategories,
+        assets_by_condition: byCondition,
+        assets_by_status: byStatus,
+        acquisition_trend: acquisitionTrend,
       },
     });
   } catch (err) {
