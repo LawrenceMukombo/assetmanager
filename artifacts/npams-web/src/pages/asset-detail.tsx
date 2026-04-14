@@ -71,7 +71,7 @@ type WorkflowAction = {
 };
 
 function buildQRPayload(asset: AssetDetail): string {
-  return `${window.location.origin}/assets/${asset.id}`;
+  return `${window.location.origin}/public/asset/${asset.id}`;
 }
 
 const ADMIN_ROLES = ["Super Admin", "National Asset Controller", "Provincial Admin", "Provincial Asset Officer"];

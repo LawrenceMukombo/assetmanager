@@ -9,6 +9,7 @@ import { ProvinceBrandingProvider } from "@/hooks/use-province-branding";
 import Login from "@/pages/login";
 import { AppShell } from "@/components/layout/app-shell";
 
+import PublicAsset from "@/pages/public-asset";
 import Dashboard from "@/pages/dashboard";
 import Assets from "@/pages/assets";
 import AssetDetail from "@/pages/asset-detail";
@@ -77,6 +78,8 @@ function AuthGuard({ children, requiredRoles }: { children: ReactNode; requiredR
 function Router() {
   return (
     <Switch>
+      <Route path="/public/asset/:id" component={PublicAsset} />
+
       <Route path="/login" component={Login} />
       <Route path="/">
         <Redirect to="/dashboard" />

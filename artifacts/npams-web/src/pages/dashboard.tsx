@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import DashboardMap from "@/components/dashboard/dashboard-map";
 import { useAuth } from "@/hooks/use-auth";
 import { useProvinceBranding } from "@/hooks/use-province-branding";
 import { useQuery } from "@tanstack/react-query";
@@ -120,13 +121,14 @@ interface LocationScope {
   region:       string | null;
   provinceId:   string | null;
   provinceName: string | null;
+  provinceCode: string | null;
   districtId:   string | null;
   districtName: string | null;
   facilityId:   string | null;
   facilityName: string | null;
 }
 const EMPTY_LOCATION: LocationScope = {
-  region: null, provinceId: null, provinceName: null,
+  region: null, provinceId: null, provinceName: null, provinceCode: null,
   districtId: null, districtName: null, facilityId: null, facilityName: null,
 };
 
@@ -231,7 +233,7 @@ function LocationFilterBar({
                 onChange({ provinceId: null, provinceName: null, districtId: null, districtName: null, facilityId: null, facilityName: null });
               } else {
                 const p = filteredProvinces.find(x => x.id === v);
-                onChange({ provinceId: v, provinceName: p?.provinceName ?? null, districtId: null, districtName: null, facilityId: null, facilityName: null });
+                onChange({ provinceId: v, provinceName: p?.provinceName ?? null, provinceCode: p?.provinceCode ?? null, districtId: null, districtName: null, facilityId: null, facilityName: null });
               }
             }}
           >
@@ -765,6 +767,30 @@ function NationalDashboard() {
           onClick={() => openDetail("All Assets by Value", {}, "Full national portfolio")}
         />
       </div>
+
+      {/* Interactive Map */}
+      <DashboardMap
+        assetsByProvince={d?.assets_by_province ?? []}
+        selectedRegion={filters.region ?? undefined}
+        selectedProvinceCode={locationScope.provinceCode ?? undefined}
+        onProvinceClick={(code, name, id) => {
+          if (code === "__clearRegion__") {
+            handleLocationChange({ region: null, provinceId: null, districtId: null, facilityId: null,
+              provinceCode: null, provinceName: null, districtName: null, facilityName: null });
+          } else if (code === "__region__") {
+            handleLocationChange({ region: name, provinceId: null, districtId: null, facilityId: null,
+              provinceCode: null, provinceName: null, districtName: null, facilityName: null });
+          } else {
+            if (locationScope.provinceId === id) {
+              handleLocationChange({ provinceId: null, provinceCode: null, provinceName: null,
+                districtId: null, districtName: null, facilityId: null, facilityName: null });
+            } else {
+              handleLocationChange({ provinceId: id, provinceCode: code, provinceName: name,
+                districtId: null, districtName: null, facilityId: null, facilityName: null });
+            }
+          }
+        }}
+      />
 
       {/* Pivot + Charts Row */}
       <div className="flex items-center justify-between">
