@@ -147,6 +147,12 @@ export default function GISPage() {
       const isDimmed = !!(selRegion && prov.region !== selRegion && !isSelected);
       const color = getProvinceColor(prov);
 
+      // When a province is selected, fully hide all others
+      if (selProv && !isSelected) {
+        pl.setStyle({ fillOpacity: 0, opacity: 0, weight: 0 });
+        return;
+      }
+
       pl.setStyle({
         fillColor: color,
         fillOpacity: isSelected ? 0.45 : isDimmed ? 0.05 : 0.18,
@@ -182,12 +188,15 @@ export default function GISPage() {
       const isRegionDimmed = !!(selRegion && prov.region !== selRegion);
       const color = getProvinceColor(prov);
 
+      // When a province is selected, fully hide districts of all other provinces
+      if (selProv && !isInSelected) {
+        pl.setStyle({ fillOpacity: 0, opacity: 0, weight: 0 });
+        return;
+      }
+
       pl.setStyle({
         fillColor: color,
-        fillOpacity: isRegionDimmed ? 0.02
-                   : isInSelected   ? 0.16
-                   : selProv        ? 0.04
-                   : 0.07,
+        fillOpacity: isRegionDimmed ? 0.02 : isInSelected ? 0.16 : 0.07,
         color: isInSelected ? hexToRgba(color, 0.6) : hexToRgba(color, 0.25),
         weight: isInSelected ? 0.8 : 0.5,
         opacity: isRegionDimmed ? 0.15 : 0.9,
@@ -286,12 +295,20 @@ export default function GISPage() {
             );
 
             layer.on("mouseover", () => {
-              if (selectedProvinceRef.current?.id === prov.id) return;
+              const sel = selectedProvinceRef.current;
+              if (sel && sel.id !== prov.id) return; // invisible — don't reveal on hover
+              if (sel?.id === prov.id) return;        // already selected — keep selected style
               pl.setStyle({ fillOpacity: 0.38, weight: 2, color: getProvinceColor(prov) });
               (layer as L.Path & { bringToFront(): void }).bringToFront();
             });
             layer.on("mouseout", () => {
-              if (selectedProvinceRef.current?.id === prov.id) return;
+              const sel = selectedProvinceRef.current;
+              if (sel?.id === prov.id) return; // keep selected style
+              if (sel && sel.id !== prov.id) {
+                // Another province is selected — keep this one hidden
+                pl.setStyle({ fillOpacity: 0, opacity: 0, weight: 0 });
+                return;
+              }
               const isDimmed = selectedRegionRef.current !== null && prov.region !== selectedRegionRef.current;
               pl.setStyle({
                 fillOpacity: isDimmed ? 0.05 : 0.18,
@@ -354,15 +371,23 @@ export default function GISPage() {
 
           layer.on("mouseover", () => {
             if (!showDistrictsRef.current) return;
+            const sel = selectedProvinceRef.current;
+            if (sel && sel.id !== prov.id) return; // hidden — don't reveal on hover
             pl.setStyle({ fillOpacity: 0.3, weight: 1.2, color });
             (layer as L.Path & { bringToFront(): void }).bringToFront();
           });
           layer.on("mouseout", () => {
             if (!showDistrictsRef.current) return;
-            const isInSelected = selectedProvinceRef.current?.id === prov.id;
+            const sel = selectedProvinceRef.current;
+            const isInSelected = sel?.id === prov.id;
+            // If another province is selected, keep this district hidden
+            if (sel && !isInSelected) {
+              pl.setStyle({ fillOpacity: 0, opacity: 0, weight: 0 });
+              return;
+            }
             const isRegionDimmed = selectedRegionRef.current !== null && prov.region !== selectedRegionRef.current;
             pl.setStyle({
-              fillOpacity: isRegionDimmed ? 0.02 : isInSelected ? 0.16 : selectedProvinceRef.current ? 0.04 : 0.07,
+              fillOpacity: isRegionDimmed ? 0.02 : isInSelected ? 0.16 : 0.07,
               color: isInSelected ? hexToRgba(color, 0.6) : hexToRgba(color, 0.25),
               weight: isInSelected ? 0.8 : 0.5,
             });
