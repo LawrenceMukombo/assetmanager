@@ -1,78 +1,305 @@
 import type { ComponentType } from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProvinceBranding } from "@/hooks/use-province-branding";
-import { useGetNationalDashboard, useGetProvincialDashboard, getGetNationalDashboardQueryKey, getGetProvincialDashboardQueryKey } from "@workspace/api-client-react";
-import type { ProvinceAssetSummary } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetchJson } from "@/lib/api-fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Box, AlertTriangle, Wrench, DollarSign, Map,
   ArrowUpDown, ArrowUp, ArrowDown, Activity, TrendingUp,
-  CheckCircle, XCircle, Clock,
+  CheckCircle, XCircle, X, Filter, ChevronRight, ExternalLink,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, LineChart, Line, AreaChart, Area,
+  PieChart, Pie, Cell, Legend, LineChart, Line, AreaChart, Area, LabelList,
 } from "recharts";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useLocation } from "wouter";
 
-const COLORS = [
-  'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))',
-  'hsl(var(--chart-4))', 'hsl(var(--chart-5))',
-  '#6366f1', '#f59e0b', '#10b981',
-];
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const STATUS_COLORS: Record<string, string> = {
-  active: '#22c55e',
-  missing: '#ef4444',
-  under_maintenance: '#f59e0b',
-  disposed: '#94a3b8',
-  transferred: '#6366f1',
+  active:            "#22c55e",
+  missing:           "#ef4444",
+  under_maintenance: "#f59e0b",
+  disposed:          "#94a3b8",
+  transferred:       "#6366f1",
 };
 
 const CONDITION_COLORS: Record<string, string> = {
-  new: '#22c55e',
-  good: '#84cc16',
-  fair: '#f59e0b',
-  poor: '#ef4444',
-  unserviceable: '#94a3b8',
+  new:           "#22c55e",
+  good:          "#84cc16",
+  fair:          "#f59e0b",
+  poor:          "#ef4444",
+  unserviceable: "#94a3b8",
 };
 
-function fmt(n: number | string | null | undefined): string {
-  if (n == null) return "0";
-  const num = typeof n === "string" ? parseFloat(n) : n;
-  if (isNaN(num)) return "0";
-  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
-  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
-  return num.toLocaleString();
-}
+const CATEGORY_COLORS = [
+  "#6366f1","#f59e0b","#10b981","#3b82f6","#ec4899",
+  "#8b5cf6","#14b8a6","#f97316","#ef4444","#84cc16",
+  "#06b6d4","#a855f7",
+];
 
-function fmtKina(v: string | null | undefined): string {
-  const n = parseFloat(v ?? "0");
+const STATUS_LABELS: Record<string, string> = {
+  active:            "Active",
+  missing:           "Missing",
+  under_maintenance: "Under Maintenance",
+  disposed:          "Disposed",
+  transferred:       "Transferred",
+};
+
+const CONDITION_LABELS: Record<string, string> = {
+  new:           "New",
+  good:          "Good",
+  fair:          "Fair",
+  poor:          "Poor",
+  unserviceable: "Unserviceable",
+};
+
+// ─── Utility ──────────────────────────────────────────────────────────────────
+
+function fmtKina(v: string | number | null | undefined): string {
+  const n = typeof v === "string" ? parseFloat(v) : (v ?? 0);
   if (isNaN(n)) return "K 0";
   if (n >= 1_000_000) return `K ${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `K ${(n / 1_000).toFixed(1)}K`;
+  if (n >= 1_000)     return `K ${(n / 1_000).toFixed(1)}K`;
   return `K ${n.toLocaleString()}`;
 }
+
+function fmtNum(n: number | null | undefined): string {
+  if (n == null || isNaN(n)) return "0";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}K`;
+  return n.toLocaleString();
+}
+
+function capitalize(s: string) {
+  return s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// ─── Filter State ─────────────────────────────────────────────────────────────
+
+interface DashFilters {
+  status:       string | null;
+  condition:    string | null;
+  categoryName: string | null;
+  districtId:   string | null;
+  provinceId:   string | null;  // national only — clicking province row
+}
+
+const EMPTY_FILTERS: DashFilters = {
+  status: null, condition: null, categoryName: null, districtId: null, provinceId: null,
+};
+
+function buildParams(filters: DashFilters, extra?: Record<string, string>): string {
+  const p = new URLSearchParams();
+  if (filters.status)       p.set("status", filters.status);
+  if (filters.condition)    p.set("condition", filters.condition);
+  if (filters.categoryName) p.set("category_name", filters.categoryName);
+  if (filters.districtId)   p.set("district_id", filters.districtId);
+  if (filters.provinceId)   p.set("province_id", filters.provinceId);
+  if (extra) Object.entries(extra).forEach(([k, v]) => p.set(k, v));
+  const s = p.toString();
+  return s ? `?${s}` : "";
+}
+
+// ─── Active Filter Strip ──────────────────────────────────────────────────────
+
+function FilterStrip({ filters, onClear, total, filteredTotal }: {
+  filters: DashFilters;
+  onClear: (key: keyof DashFilters | "all") => void;
+  total: number;
+  filteredTotal: number;
+}) {
+  const chips: { key: keyof DashFilters; label: string }[] = [];
+  if (filters.status)       chips.push({ key: "status",       label: STATUS_LABELS[filters.status] ?? capitalize(filters.status) });
+  if (filters.condition)    chips.push({ key: "condition",    label: CONDITION_LABELS[filters.condition] ?? capitalize(filters.condition) });
+  if (filters.categoryName) chips.push({ key: "categoryName", label: filters.categoryName });
+  if (filters.districtId)   chips.push({ key: "districtId",   label: "District filter" });
+  if (filters.provinceId)   chips.push({ key: "provinceId",   label: "Province filter" });
+
+  if (chips.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+      <Filter className="w-4 h-4 text-primary shrink-0" />
+      <span className="text-sm text-muted-foreground">Filtering:</span>
+      {chips.map(c => (
+        <Badge key={c.key} variant="secondary" className="gap-1 cursor-pointer pr-1" onClick={() => onClear(c.key)}>
+          {c.label}
+          <X className="w-3 h-3 ml-0.5" />
+        </Badge>
+      ))}
+      <span className="text-sm font-medium ml-2">
+        {filteredTotal.toLocaleString()} of {total.toLocaleString()} assets match
+      </span>
+      <Button variant="ghost" size="sm" className="ml-auto h-6 text-xs" onClick={() => onClear("all")}>
+        Clear all
+      </Button>
+    </div>
+  );
+}
+
+// ─── Asset Detail Sheet ───────────────────────────────────────────────────────
+
+interface AssetItem {
+  id: string;
+  assetTag: string;
+  assetName: string;
+  status: string;
+  condition: string;
+  purchaseCost?: string | null;
+  createdAt: string;
+  category?:  { categoryName?: string | null } | null;
+  facility?:  { facilityName?: string | null } | null;
+  district?:  { districtName?: string | null } | null;
+  province?:  { provinceName?: string | null } | null;
+}
+
+interface DetailSheetProps {
+  title: string;
+  subtitle?: string;
+  params: Record<string, string>;
+  open: boolean;
+  onClose: () => void;
+}
+
+function DetailSheet({ title, subtitle, params, open, onClose }: DetailSheetProps) {
+  const [, setLocation] = useLocation();
+  const [page, setPage] = useState(1);
+
+  const qParams = new URLSearchParams({ ...params, page: String(page), limit: "15" }).toString();
+  const { data, isLoading } = useQuery({
+    queryKey: ["asset-detail-sheet", params, page],
+    queryFn: () => apiFetchJson(`/api/v1/assets?${qParams}`),
+    enabled: open,
+  });
+
+  type AssetResp = { items: AssetItem[]; pagination: { total: number } };
+  const respData = data?.data as AssetResp | null;
+  const items: AssetItem[] = respData?.items ?? [];
+  const total: number = respData?.pagination?.total ?? 0;
+  const pageCount = Math.ceil(total / 15);
+
+  useEffect(() => { if (open) setPage(1); }, [open, params]);
+
+  return (
+    <Sheet open={open} onOpenChange={v => !v && onClose()}>
+      <SheetContent side="right" className="w-full sm:max-w-2xl flex flex-col">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">{title}</SheetTitle>
+          {subtitle && <SheetDescription>{subtitle}</SheetDescription>}
+        </SheetHeader>
+
+        <div className="flex items-center justify-between text-sm text-muted-foreground mt-2">
+          <span>{total.toLocaleString()} asset{total !== 1 ? "s" : ""}</span>
+          {pageCount > 1 && (
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Prev</Button>
+              <span>Page {page} / {pageCount}</span>
+              <Button variant="ghost" size="sm" disabled={page >= pageCount} onClick={() => setPage(p => p + 1)}>Next</Button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto mt-2">
+          {isLoading ? (
+            <div className="space-y-2">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+          ) : items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
+              <Box className="w-10 h-10 mb-2 opacity-30" />
+              <p className="text-sm">No assets match this filter</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tag</TableHead>
+                  <TableHead>Asset</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Condition</TableHead>
+                  <TableHead className="text-right">Value</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map(asset => (
+                  <TableRow
+                    key={asset.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => { setLocation(`/assets/${asset.id}`); onClose(); }}
+                  >
+                    <TableCell className="font-mono text-xs">{asset.assetTag}</TableCell>
+                    <TableCell>
+                      <div className="font-medium text-sm">{asset.assetName}</div>
+                      {asset.category?.categoryName && <div className="text-xs text-muted-foreground">{asset.category.categoryName}</div>}
+                      {(asset.facility?.facilityName || asset.district?.districtName) && (
+                        <div className="text-xs text-muted-foreground">
+                          {[asset.facility?.facilityName, asset.district?.districtName].filter(Boolean).join(" · ")}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium text-white"
+                        style={{ backgroundColor: STATUS_COLORS[asset.status] ?? "#94a3b8" }}>
+                        {STATUS_LABELS[asset.status] ?? capitalize(asset.status)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs capitalize">{asset.condition}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-sm">
+                      {asset.purchaseCost ? fmtKina(asset.purchaseCost) : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ─── Clickable Stat Card ──────────────────────────────────────────────────────
 
 interface StatCardProps {
   title: string;
   value: string | number;
   icon: ComponentType<{ className?: string }>;
   description?: string;
-  trend?: { value: number; label: string };
   accent?: string;
+  onClick?: () => void;
+  active?: boolean;
+  dim?: boolean;
+  testId?: string;
 }
 
-function StatCard({ title, value, icon: Icon, description, accent }: StatCardProps) {
+function StatCard({ title, value, icon: Icon, description, accent, onClick, active, dim, testId }: StatCardProps) {
   return (
-    <Card>
+    <Card
+      className={[
+        "transition-all",
+        onClick ? "cursor-pointer hover:shadow-md hover:-translate-y-0.5 select-none" : "",
+        active  ? "ring-2 ring-primary shadow-md"  : "",
+        dim     ? "opacity-50"                      : "",
+      ].join(" ")}
+      onClick={onClick}
+      data-testid={testId}
+      aria-label={onClick ? `${title}: ${value}. Click to view details` : undefined}
+    >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
+        <div className="flex items-center gap-1">
+          {onClick && <ChevronRight className="w-3 h-3 text-muted-foreground" />}
+          <Icon className="h-4 w-4 text-muted-foreground" />
+        </div>
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold" style={accent ? { color: accent } : undefined}>{value}</div>
@@ -82,10 +309,88 @@ function StatCard({ title, value, icon: Icon, description, accent }: StatCardPro
   );
 }
 
+// ─── Filter Chips ─────────────────────────────────────────────────────────────
+
+interface ChipItem { name: string; label: string; value: number; fill?: string; id?: string }
+
+function FilterChips({ items, activeKey, activeValue, onToggle, useId = false }: {
+  items: ChipItem[];
+  activeKey?: string | null;
+  activeValue?: string | null;
+  onToggle: (name: string) => void;
+  useId?: boolean;
+}) {
+  const getActive = (item: ChipItem) => useId ? item.id === activeKey : item.name === activeValue;
+  const anyActive = items.some(item => getActive(item));
+
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t" aria-label="Filter options">
+      {items.map(item => {
+        const isActive = getActive(item);
+        return (
+          <button
+            key={item.id ?? item.name}
+            aria-pressed={isActive}
+            aria-label={`Filter by ${item.label}: ${item.value} assets`}
+            onClick={() => onToggle(useId ? (item.id ?? item.name) : item.name)}
+            className={[
+              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all select-none",
+              isActive
+                ? "ring-2 ring-primary border-primary bg-primary/10 font-semibold"
+                : anyActive
+                ? "opacity-40 border-border hover:opacity-70 hover:bg-muted"
+                : "border-border hover:bg-muted cursor-pointer",
+            ].join(" ")}
+          >
+            {item.fill && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.fill }} />}
+            <span>{item.label}</span>
+            <span className="text-muted-foreground ml-0.5">{item.value.toLocaleString()}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Pivot Control ────────────────────────────────────────────────────────────
+
+type Pivot = "status" | "condition" | "category" | "district";
+
+function PivotControl({ value, onChange, includeDistrict = true }: {
+  value: Pivot; onChange: (v: Pivot) => void; includeDistrict?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">View by</span>
+      <ToggleGroup type="single" value={value} onValueChange={v => v && onChange(v as Pivot)} size="sm" variant="outline">
+        <ToggleGroupItem value="status"    className="text-xs">Status</ToggleGroupItem>
+        <ToggleGroupItem value="condition" className="text-xs">Condition</ToggleGroupItem>
+        <ToggleGroupItem value="category"  className="text-xs">Category</ToggleGroupItem>
+        {includeDistrict && <ToggleGroupItem value="district" className="text-xs">District</ToggleGroupItem>}
+      </ToggleGroup>
+    </div>
+  );
+}
+
+// ─── Custom Tooltip ───────────────────────────────────────────────────────────
+
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { value: number; name: string; payload: { value: string } }[]; label?: string }) => {
+  if (!active || !payload?.length) return null;
+  const p = payload[0];
+  return (
+    <div className="bg-popover border rounded-lg shadow-lg p-3 text-sm">
+      <p className="font-medium mb-1">{label ?? p.name}</p>
+      <p className="text-muted-foreground">{p.value?.toLocaleString()} assets</p>
+      {p.payload?.value && <p className="text-muted-foreground">{fmtKina(p.payload.value)}</p>}
+    </div>
+  );
+};
+
+// ═══════════════ ENTRY POINT ═══════════════
+
 export default function Dashboard() {
   const { user } = useAuth();
   const isNational = user?.scope_level === "national";
-
   if (isNational) return <NationalDashboard />;
   return <ProvincialDashboard />;
 }
@@ -95,11 +400,11 @@ export default function Dashboard() {
 type SortKey = "province_name" | "total_assets" | "missing_assets" | "total_value";
 type SortDir = "asc" | "desc";
 
-function SortableHeader({ label, col, sortKey, sortDir, onSort, right }: { label: string; col: SortKey; sortKey: SortKey; sortDir: SortDir; onSort: (k: SortKey) => void; right?: boolean }) {
+function SortableHead({ label, col, sortKey, sortDir, onSort, right }: { label: string; col: SortKey; sortKey: SortKey; sortDir: SortDir; onSort: (k: SortKey) => void; right?: boolean }) {
   const active = sortKey === col;
   return (
     <TableHead className={right ? "text-right" : ""}>
-      <Button variant="ghost" size="sm" className={`-ml-3 h-8 font-medium ${right ? "ml-auto flex-row-reverse" : ""}`} onClick={() => onSort(col)}>
+      <Button variant="ghost" size="sm" className="-ml-2 h-7 px-2 font-medium" onClick={() => onSort(col)}>
         {label}
         {active ? (sortDir === "asc" ? <ArrowUp className="ml-1 h-3 w-3" /> : <ArrowDown className="ml-1 h-3 w-3" />) : <ArrowUpDown className="ml-1 h-3 w-3 opacity-40" />}
       </Button>
@@ -107,116 +412,319 @@ function SortableHeader({ label, col, sortKey, sortDir, onSort, right }: { label
   );
 }
 
+interface NationalDashData {
+  total_assets: number; active_assets: number; missing_assets: number;
+  total_value: string; provinces_count: number;
+  filtered_total: number; filtered_value: string; has_filters: boolean;
+  assets_by_province: { province_id: string; province_name: string; province_code: string; flag_url: string; theme_accent_color: string; total_assets: number; total_value: string; missing_assets: number; active_assets: number }[];
+  top_categories: { category_id: string; category_name: string | null; count: number; total_value: string }[];
+  assets_by_condition: { condition: string; count: number; value: string }[];
+  assets_by_status: { status: string; count: number; value: string }[];
+  acquisition_trend: { month: string; month_key: string; count: number; total_value: string }[];
+}
+
 function NationalDashboard() {
+  const [filters, setFilters] = useState<DashFilters>(EMPTY_FILTERS);
+  const [pivot, setPivot] = useState<Pivot>("status");
   const [sortKey, setSortKey] = useState<SortKey>("total_assets");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [drawer, setDrawer] = useState<{ title: string; subtitle?: string; params: Record<string, string> } | null>(null);
 
-  const { data, isLoading } = useGetNationalDashboard({ query: { queryKey: getGetNationalDashboardQueryKey() } });
+  const qKey = useMemo(() => ["national-dashboard", filters], [filters]);
+  const { data: raw, isLoading } = useQuery({
+    queryKey: qKey,
+    queryFn:  () => apiFetchJson(`/api/v1/dashboard/national${buildParams(filters)}`),
+    staleTime: 30_000,
+  });
+  const d = raw?.data as NationalDashData | undefined;
 
-  if (isLoading) return <DashboardSkeleton />;
+  const toggleFilter = useCallback((key: keyof DashFilters, value: string) => {
+    setFilters(f => ({ ...f, [key]: f[key] === value ? null : value }));
+  }, []);
 
-  const dashData = data?.data as {
-    total_assets: number;
-    active_assets: number;
-    missing_assets: number;
-    total_value: string;
-    provinces_count: number;
-    assets_by_province: ProvinceAssetSummary[];
-    top_categories: { category_name: string | null; count: number; total_value: string }[];
-    assets_by_condition: { condition: string; count: number }[];
-    assets_by_status: { status: string; count: number }[];
-    acquisition_trend: { month: string; month_key: string; count: number; total_value: string }[];
-  } | undefined;
+  const clearFilter = useCallback((key: keyof DashFilters | "all") => {
+    if (key === "all") setFilters(EMPTY_FILTERS);
+    else setFilters(f => ({ ...f, [key]: null }));
+  }, []);
+
+  const openDetail = (title: string, params: Record<string, string>, subtitle?: string) => {
+    setDrawer({ title, subtitle, params });
+  };
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir("desc"); }
   };
 
-  const sortedProvinces = [...(dashData?.assets_by_province ?? [])].sort((a, b) => {
-    const mult = sortDir === "asc" ? 1 : -1;
-    if (sortKey === "province_name") return mult * (a.province_name ?? "").localeCompare(b.province_name ?? "");
-    if (sortKey === "total_value") return mult * ((parseFloat(a.total_value ?? "0") || 0) - (parseFloat(b.total_value ?? "0") || 0));
-    const aVal = (a[sortKey] ?? 0) as number;
-    const bVal = (b[sortKey] ?? 0) as number;
-    return mult * (aVal - bVal);
-  });
+  const sortedProvinces = useMemo(() => {
+    return [...(d?.assets_by_province ?? [])].sort((a, b) => {
+      const m = sortDir === "asc" ? 1 : -1;
+      if (sortKey === "province_name") return m * (a.province_name ?? "").localeCompare(b.province_name ?? "");
+      if (sortKey === "total_value")   return m * ((parseFloat(a.total_value ?? "0") || 0) - (parseFloat(b.total_value ?? "0") || 0));
+      const av = (a as unknown as Record<string, number>)[sortKey] ?? 0;
+      const bv = (b as unknown as Record<string, number>)[sortKey] ?? 0;
+      return m * (av - bv);
+    });
+  }, [d?.assets_by_province, sortKey, sortDir]);
 
-  const statusData = (dashData?.assets_by_status ?? []).map(s => ({
-    name: s.status?.replace(/_/g, " ") ?? "unknown",
-    value: s.count,
-    fill: STATUS_COLORS[s.status ?? ""] ?? "#94a3b8",
-  }));
+  // Chart data
+  const statusData  = (d?.assets_by_status  ?? []).map(s => ({ name: s.status,    label: STATUS_LABELS[s.status] ?? capitalize(s.status),    value: s.count, fill: STATUS_COLORS[s.status]    ?? "#94a3b8", raw: s.value }));
+  const condData    = (d?.assets_by_condition ?? []).map(c => ({ name: c.condition, label: CONDITION_LABELS[c.condition] ?? capitalize(c.condition), value: c.count, fill: CONDITION_COLORS[c.condition] ?? "#94a3b8", raw: c.value }));
+  const catData     = (d?.top_categories     ?? []).filter(c => c.category_name).map((c, i) => ({ name: c.category_name!, value: c.count, fill: CATEGORY_COLORS[i % CATEGORY_COLORS.length], raw: c.total_value }));
+  const trendData   = d?.acquisition_trend  ?? [];
 
-  const conditionData = (dashData?.assets_by_condition ?? []).map(c => ({
-    name: c.condition ? (c.condition.charAt(0).toUpperCase() + c.condition.slice(1)) : "Unknown",
-    value: c.count,
-    fill: CONDITION_COLORS[c.condition ?? ""] ?? "#94a3b8",
-  }));
+  const cellOpacity = (active: boolean | null, dim: boolean) =>
+    dim ? 0.25 : 1;
 
-  const categoryData = (dashData?.top_categories ?? []).filter(c => c.category_name).map(c => ({
-    name: c.category_name ?? "Unknown",
-    count: c.count,
-    value: parseFloat(c.total_value ?? "0"),
-  }));
+  if (isLoading) return <DashboardSkeleton />;
 
-  const trendData = dashData?.acquisition_trend ?? [];
+  const drawerBaseParams: Record<string, string> = {};
+  if (filters.status)       drawerBaseParams.status       = filters.status;
+  if (filters.condition)    drawerBaseParams.condition    = filters.condition;
+  if (filters.categoryName) drawerBaseParams.category_name = filters.categoryName;
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center gap-4">
         <div className="w-12 h-12 rounded-full overflow-hidden border-2 flex-shrink-0" style={{ borderColor: "#CE1126" }}>
           <img src="/flags/png_national.svg" alt="Papua New Guinea" className="w-full h-full object-cover" />
         </div>
         <div>
           <h2 className="text-3xl font-bold tracking-tight">National Overview</h2>
-          <p className="text-muted-foreground">High-level view of all public assets across Papua New Guinea.</p>
+          <p className="text-muted-foreground text-sm">Click any chart element or KPI card to cross-filter. Click again to deselect.</p>
         </div>
       </div>
 
+      {/* Filter Strip */}
+      <FilterStrip
+        filters={filters}
+        onClear={clearFilter}
+        total={d?.total_assets ?? 0}
+        filteredTotal={d?.filtered_total ?? d?.total_assets ?? 0}
+      />
+
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Assets" value={(dashData?.total_assets ?? 0).toLocaleString()} icon={Box} description="All provinces combined" />
-        <StatCard title="Active Assets" value={(dashData?.active_assets ?? 0).toLocaleString()} icon={CheckCircle} description="In service" accent="#22c55e" />
-        <StatCard title="Missing Assets" value={(dashData?.missing_assets ?? 0).toLocaleString()} icon={AlertTriangle} description="Flagged across all provinces" accent={dashData?.missing_assets ? "#ef4444" : undefined} />
-        <StatCard title="Total Asset Value" value={fmtKina(dashData?.total_value)} icon={DollarSign} description="Estimated portfolio value" />
+        <StatCard
+          title="Total Assets" value={fmtNum(d?.total_assets)} icon={Box}
+          description="Click to browse all assets" testId="kpi-total-assets"
+          onClick={() => openDetail("All Assets", {}, `${d?.total_assets?.toLocaleString()} assets nationally`)}
+        />
+        <StatCard
+          title="Active Assets" value={fmtNum(d?.active_assets)} icon={CheckCircle}
+          description="In service — click to view list" accent="#22c55e" testId="kpi-active-assets"
+          onClick={() => openDetail("Active Assets", { status: "active" }, "Assets currently in service")}
+        />
+        <StatCard
+          title="Missing Assets" value={fmtNum(d?.missing_assets)} icon={AlertTriangle}
+          description="Flagged as missing — click to view" accent={d?.missing_assets ? "#ef4444" : undefined} testId="kpi-missing-assets"
+          onClick={() => openDetail("Missing Assets", { status: "missing" }, "Assets flagged as missing across all provinces")}
+        />
+        <StatCard
+          title="Total Asset Value" value={fmtKina(d?.total_value)} icon={DollarSign}
+          description="Estimated portfolio — click to browse" testId="kpi-total-value"
+          onClick={() => openDetail("All Assets by Value", {}, "Full national portfolio")}
+        />
       </div>
 
-      {/* Charts row 1: Status + Condition */}
+      {/* Pivot + Charts Row */}
+      <div className="flex items-center justify-between">
+        <PivotControl value={pivot} onChange={setPivot} includeDistrict={false} />
+        {d?.has_filters && (
+          <span className="text-sm text-primary font-medium">
+            Showing {d.filtered_total?.toLocaleString()} filtered assets
+          </span>
+        )}
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
+        {/* Primary pivot chart */}
         <Card>
-          <CardHeader><CardTitle>Assets by Status</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center justify-between">
+              {pivot === "status" ? "Assets by Status" : pivot === "condition" ? "Asset Condition" : "Assets by Category"}
+              <span className="text-xs text-muted-foreground font-normal">Click to filter</span>
+            </CardTitle>
+          </CardHeader>
           <CardContent>
-            <div className="h-[260px]">
+            <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={statusData} cx="50%" cy="50%" innerRadius={55} outerRadius={95} paddingAngle={2} dataKey="value" label={({ name, value }) => `${value}`} labelLine={false}>
-                    {statusData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-                  </Pie>
-                  <Tooltip formatter={(v: number, name: string) => [v.toLocaleString(), name]} />
-                  <Legend formatter={(v) => v.replace(/_/g, " ")} />
-                </PieChart>
+                {pivot === "status" ? (
+                  <PieChart>
+                    <Pie data={statusData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="value"
+                      cursor="pointer">
+                      {statusData.map((e, i) => (
+                        <Cell key={i} fill={e.fill}
+                          opacity={filters.status && filters.status !== e.name ? 0.25 : 1}
+                          strokeWidth={filters.status === e.name ? 2 : 0} stroke="#fff"
+                          onClick={() => toggleFilter("status", e.name)} style={{ cursor: "pointer" }} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const p = payload[0].payload as { label: string; value: number; raw: string };
+                      return (
+                        <div className="bg-popover border rounded-lg shadow-lg p-3 text-sm">
+                          <p className="font-medium">{p.label}</p>
+                          <p className="text-muted-foreground">{p.value.toLocaleString()} assets</p>
+                          <p className="text-muted-foreground">{fmtKina(p.raw)}</p>
+                        </div>
+                      );
+                    }} />
+                    <Legend formatter={(v: string) => STATUS_LABELS[v] ?? capitalize(v)} />
+                  </PieChart>
+                ) : pivot === "condition" ? (
+                  <BarChart data={condData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                    onClick={(e: { activePayload?: { payload: { name: string } }[] }) => { const n = e?.activePayload?.[0]?.payload?.name; if (n) toggleFilter("condition", n); }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const p = payload[0].payload as { label: string; value: number; raw: string };
+                      return (
+                        <div className="bg-popover border rounded-lg shadow-lg p-3 text-sm">
+                          <p className="font-medium">{p.label}</p>
+                          <p>{p.value.toLocaleString()} assets · {fmtKina(p.raw)}</p>
+                        </div>
+                      );
+                    }} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]} cursor="pointer"
+                      onClick={(data: { name: string }) => toggleFilter("condition", data.name)}>
+                      {condData.map((e, i) => (
+                        <Cell key={i} fill={e.fill}
+                          opacity={filters.condition && filters.condition !== e.name ? 0.25 : 1} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                ) : (
+                  <BarChart data={catData} layout="vertical" margin={{ top: 5, right: 60, left: 10, bottom: 5 }}
+                    onClick={(e: { activePayload?: { payload: { name: string } }[] }) => { const n = e?.activePayload?.[0]?.payload?.name; if (n) toggleFilter("categoryName", n); }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 11 }} />
+                    <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 10 }} />
+                    <Tooltip content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const p = payload[0].payload as { name: string; value: number; raw: string };
+                      return (
+                        <div className="bg-popover border rounded-lg shadow-lg p-3 text-sm">
+                          <p className="font-medium">{p.name}</p>
+                          <p>{p.value.toLocaleString()} assets · {fmtKina(p.raw)}</p>
+                        </div>
+                      );
+                    }} />
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]} cursor="pointer"
+                      onClick={(data: { name: string }) => toggleFilter("categoryName", data.name)}>
+                      {catData.map((e, i) => (
+                        <Cell key={i} fill={e.fill}
+                          opacity={filters.categoryName && filters.categoryName !== e.name ? 0.25 : 1} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                )}
               </ResponsiveContainer>
             </div>
+            {/* Clickable filter chips — accessible fallback for SVG chart clicks */}
+            {pivot === "status" && statusData.length > 0 && (
+              <FilterChips
+                items={statusData.map(s => ({ name: s.name, label: s.label, value: s.value, fill: s.fill }))}
+                activeValue={filters.status}
+                onToggle={name => toggleFilter("status", name)}
+              />
+            )}
+            {pivot === "condition" && condData.length > 0 && (
+              <FilterChips
+                items={condData.map(c => ({ name: c.name, label: c.label, value: c.value, fill: c.fill }))}
+                activeValue={filters.condition}
+                onToggle={name => toggleFilter("condition", name)}
+              />
+            )}
+            {pivot === "category" && catData.length > 0 && (
+              <FilterChips
+                items={catData.map(c => ({ name: c.name, label: c.name, value: c.value, fill: c.fill }))}
+                activeValue={filters.categoryName}
+                onToggle={name => toggleFilter("categoryName", name)}
+              />
+            )}
           </CardContent>
         </Card>
 
+        {/* Secondary chart — always condition when pivot=status and vice versa */}
         <Card>
-          <CardHeader><CardTitle>Asset Condition</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center justify-between">
+              {pivot !== "condition" ? "Asset Condition" : "Assets by Status"}
+              <span className="text-xs text-muted-foreground font-normal">Click to filter</span>
+            </CardTitle>
+          </CardHeader>
           <CardContent>
-            <div className="h-[260px]">
+            <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={conditionData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                    {conditionData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-                  </Bar>
-                </BarChart>
+                {pivot !== "condition" ? (
+                  <BarChart data={condData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                    onClick={(e: { activePayload?: { payload: { name: string } }[] }) => { const n = e?.activePayload?.[0]?.payload?.name; if (n) toggleFilter("condition", n); }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const p = payload[0].payload as { label: string; value: number; raw: string };
+                      return (
+                        <div className="bg-popover border rounded-lg shadow-lg p-3 text-sm">
+                          <p className="font-medium">{p.label}</p>
+                          <p>{p.value.toLocaleString()} assets · {fmtKina(p.raw)}</p>
+                        </div>
+                      );
+                    }} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]} cursor="pointer"
+                      onClick={(data: { name: string }) => toggleFilter("condition", data.name)}>
+                      {condData.map((e, i) => (
+                        <Cell key={i} fill={e.fill}
+                          opacity={filters.condition && filters.condition !== e.name ? 0.25 : 1} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                ) : (
+                  <PieChart>
+                    <Pie data={statusData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="value"
+                      cursor="pointer">
+                      {statusData.map((e, i) => (
+                        <Cell key={i} fill={e.fill}
+                          opacity={filters.status && filters.status !== e.name ? 0.25 : 1}
+                          strokeWidth={filters.status === e.name ? 2 : 0} stroke="#fff"
+                          onClick={() => toggleFilter("status", e.name)} style={{ cursor: "pointer" }} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const p = payload[0].payload as { label: string; value: number; raw: string };
+                      return (
+                        <div className="bg-popover border rounded-lg shadow-lg p-3 text-sm">
+                          <p className="font-medium">{p.label}</p>
+                          <p>{p.value.toLocaleString()} assets · {fmtKina(p.raw)}</p>
+                        </div>
+                      );
+                    }} />
+                    <Legend formatter={(v: string) => STATUS_LABELS[v] ?? capitalize(v)} />
+                  </PieChart>
+                )}
               </ResponsiveContainer>
             </div>
+            {/* Clickable filter chips for secondary chart */}
+            {pivot !== "condition" ? (
+              <FilterChips
+                items={condData.map(c => ({ name: c.name, label: c.label, value: c.value, fill: c.fill }))}
+                activeValue={filters.condition}
+                onToggle={name => toggleFilter("condition", name)}
+              />
+            ) : (
+              <FilterChips
+                items={statusData.map(s => ({ name: s.name, label: s.label, value: s.value, fill: s.fill }))}
+                activeValue={filters.status}
+                onToggle={name => toggleFilter("status", name)}
+              />
+            )}
           </CardContent>
         </Card>
       </div>
@@ -224,47 +732,27 @@ function NationalDashboard() {
       {/* Acquisition Trend */}
       {trendData.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><TrendingUp className="w-4 h-4" />Asset Acquisition Trend (Last 12 Months)</CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <TrendingUp className="w-4 h-4" />Asset Acquisition Trend (Last 12 Months)
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[220px]">
+            <div className="h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    <linearGradient id="natTrend" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}   />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
                   <Tooltip formatter={(v: number) => [v.toLocaleString(), "Assets Added"]} />
-                  <Area type="monotone" dataKey="count" stroke="hsl(var(--primary))" fill="url(#trendGrad)" strokeWidth={2} dot={{ r: 3 }} name="Assets Added" />
+                  <Area type="monotone" dataKey="count" stroke="hsl(var(--primary))" fill="url(#natTrend)" strokeWidth={2} dot={{ r: 3 }} name="Assets Added" />
                 </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Top Categories */}
-      {categoryData.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Assets by Category</CardTitle></CardHeader>
-          <CardContent>
-            <div className="h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={categoryData} layout="vertical" margin={{ top: 5, right: 80, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 11 }} />
-                  <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v: number) => [v.toLocaleString(), "Assets"]} />
-                  <Bar dataKey="count" radius={[0, 4, 4, 0]} fill="hsl(var(--primary))">
-                    {categoryData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Bar>
-                </BarChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
@@ -273,28 +761,40 @@ function NationalDashboard() {
 
       {/* Province Table */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Map className="w-4 h-4" />Province Comparison ({dashData?.provinces_count ?? 0} provinces)</CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-2">
+              <Map className="w-4 h-4" />
+              Province Breakdown ({d?.provinces_count ?? 0} provinces)
+            </div>
+            <span className="text-xs text-muted-foreground font-normal">Click row to drill into province</span>
+          </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <SortableHeader label="Province" col="province_name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortableHeader label="Total Assets" col="total_assets" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} right />
-                  <SortableHeader label="Missing" col="missing_assets" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} right />
-                  <SortableHeader label="Total Value" col="total_value" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} right />
-                  <TableHead className="text-right">Status</TableHead>
+                  <SortableHead label="Province"     col="province_name"  sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Total Assets" col="total_assets"   sortKey={sortKey} sortDir={sortDir} onSort={handleSort} right />
+                  <SortableHead label="Missing"      col="missing_assets" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} right />
+                  <SortableHead label="Total Value"  col="total_value"    sortKey={sortKey} sortDir={sortDir} onSort={handleSort} right />
+                  <TableHead className="text-right">Health</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedProvinces.map((p: ProvinceAssetSummary) => {
+                {sortedProvinces.map(p => {
                   const missingRate = p.total_assets ? ((p.missing_assets ?? 0) / p.total_assets) : 0;
-                  const statusLabel = missingRate > 0.05 ? "At Risk" : missingRate > 0 ? "Monitor" : "Good";
+                  const statusLabel   = missingRate > 0.05 ? "At Risk"  : missingRate > 0 ? "Monitor" : "Good";
                   const statusVariant = missingRate > 0.05 ? "destructive" : missingRate > 0 ? "secondary" : "outline";
                   return (
-                    <TableRow key={p.province_id}>
+                    <TableRow key={p.province_id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => openDetail(
+                        `${p.province_name} Assets`,
+                        { ...drawerBaseParams, province_id: p.province_id },
+                        `${p.total_assets?.toLocaleString()} assets · ${fmtKina(p.total_value)}`
+                      )}>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           {p.flag_url && <img src={p.flag_url} alt="" className="w-6 h-4 object-cover rounded-sm border" />}
@@ -304,223 +804,437 @@ function NationalDashboard() {
                       <TableCell className="text-right">{p.total_assets?.toLocaleString() ?? "—"}</TableCell>
                       <TableCell className="text-right text-destructive">{p.missing_assets?.toLocaleString() ?? "0"}</TableCell>
                       <TableCell className="text-right">{fmtKina(p.total_value)}</TableCell>
-                      <TableCell className="text-right"><Badge variant={statusVariant}>{statusLabel}</Badge></TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={statusVariant as "destructive" | "secondary" | "outline"}>{statusLabel}</Badge>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
-                {!dashData?.assets_by_province?.length && (
-                  <TableRow><TableCell colSpan={5} className="text-center py-4 text-muted-foreground">No data available</TableCell></TableRow>
+                {!sortedProvinces.length && (
+                  <TableRow><TableCell colSpan={5} className="text-center py-4 text-muted-foreground">No data</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
         </CardContent>
       </Card>
+
+      {/* Detail Drawer */}
+      {drawer && (
+        <DetailSheet
+          open={!!drawer}
+          title={drawer.title}
+          subtitle={drawer.subtitle}
+          params={drawer.params}
+          onClose={() => setDrawer(null)}
+        />
+      )}
     </div>
   );
 }
 
 // ═══════════════ PROVINCIAL DASHBOARD ═══════════════
 
+interface ProvDashData {
+  province?: { provinceName?: string; flagUrl?: string; themeAccentColor?: string; flagColors?: string[]; capitalCity?: string; region?: string };
+  total_assets: number; active_assets: number; missing_assets: number;
+  disposed_assets: number; maintenance_assets: number; total_value: string;
+  filtered_total: number; filtered_value: string; has_filters: boolean;
+  assets_by_category: { category_id: string; category_name: string | null; count: number; value: string }[];
+  assets_by_condition: { condition: string; count: number; value: string }[];
+  assets_by_status: { status: string; count: number; value: string }[];
+  assets_by_district: { district_id: string; district_name: string; total_assets: number; missing_assets: number; active_assets: number; total_value: string }[];
+  acquisition_trend: { month: string; month_key: string; count: number; total_value: string }[];
+  recent_assets: { id: string; assetTag: string; assetName: string; status: string; condition: string; purchaseCost?: string; createdAt: string; categoryName?: string | null; facilityName?: string | null; districtName?: string | null }[];
+}
+
 function ProvincialDashboard() {
   const { applyBranding } = useProvinceBranding();
-  const { data, isLoading } = useGetProvincialDashboard(undefined, { query: { queryKey: getGetProvincialDashboardQueryKey() } });
+  const [, setLocation] = useLocation();
 
-  const dashData = data?.data as {
-    province?: { provinceName?: string; flagUrl?: string; themeAccentColor?: string; flagColors?: string[]; capitalCity?: string; region?: string };
-    total_assets: number;
-    active_assets: number;
-    missing_assets: number;
-    disposed_assets: number;
-    maintenance_assets: number;
-    total_value: string;
-    assets_by_category: { category_name: string | null; count: number; total_value: string }[];
-    assets_by_condition: { condition: string; count: number }[];
-    assets_by_status: { status: string; count: number }[];
-    assets_by_district: { district_id: string; district_name: string; total_assets: number; missing_assets: number; total_value: string }[];
-    acquisition_trend: { month: string; month_key: string; count: number; total_value: string }[];
-    recent_assets: { id: string; assetTag: string; assetName: string; status: string; condition: string; createdAt: string; categoryName: string | null; facilityName: string | null }[];
-  } | undefined;
+  const [filters, setFilters] = useState<DashFilters>(EMPTY_FILTERS);
+  const [pivot, setPivot] = useState<Pivot>("status");
+  const [drawer, setDrawer] = useState<{ title: string; subtitle?: string; params: Record<string, string> } | null>(null);
+
+  const qKey = useMemo(() => ["provincial-dashboard", filters], [filters]);
+  const { data: raw, isLoading } = useQuery({
+    queryKey: qKey,
+    queryFn:  () => apiFetchJson(`/api/v1/dashboard/provincial${buildParams(filters)}`),
+    staleTime: 30_000,
+  });
+  const d = raw?.data as ProvDashData | undefined;
+
+  const toggleFilter = useCallback((key: keyof DashFilters, value: string) => {
+    setFilters(f => ({ ...f, [key]: f[key] === value ? null : value }));
+  }, []);
+
+  const clearFilter = useCallback((key: keyof DashFilters | "all") => {
+    if (key === "all") setFilters(EMPTY_FILTERS);
+    else setFilters(f => ({ ...f, [key]: null }));
+  }, []);
 
   useEffect(() => {
-    if (dashData?.province) {
-      const province = dashData.province;
+    if (d?.province) {
       applyBranding({
-        provinceName: province.provinceName ?? null,
-        flagUrl: province.flagUrl ?? null,
-        themeAccentColor: province.themeAccentColor ?? null,
-        flagColors: Array.isArray(province.flagColors) ? province.flagColors : [],
+        provinceName:     d.province.provinceName     ?? null,
+        flagUrl:          d.province.flagUrl          ?? null,
+        themeAccentColor: d.province.themeAccentColor ?? null,
+        flagColors:       Array.isArray(d.province.flagColors) ? d.province.flagColors : [],
       });
     }
-  }, [dashData?.province, applyBranding]);
+  }, [d?.province, applyBranding]);
+
+  const openDetail = (title: string, params: Record<string, string>, subtitle?: string) => {
+    setDrawer({ title, subtitle, params });
+  };
+
+  // Chart data
+  const statusData  = (d?.assets_by_status    ?? []).map(s => ({ name: s.status,     label: STATUS_LABELS[s.status]        ?? capitalize(s.status),     value: s.count, fill: STATUS_COLORS[s.status]     ?? "#94a3b8", raw: s.value }));
+  const condData    = (d?.assets_by_condition  ?? []).map(c => ({ name: c.condition, label: CONDITION_LABELS[c.condition]   ?? capitalize(c.condition),  value: c.count, fill: CONDITION_COLORS[c.condition] ?? "#94a3b8", raw: c.value }));
+  const catData     = (d?.assets_by_category   ?? []).filter(c => c.category_name).map((c, i) => ({ name: c.category_name!, value: c.count, fill: CATEGORY_COLORS[i % CATEGORY_COLORS.length], raw: c.value }));
+  const distData    = (d?.assets_by_district   ?? []).map(dist => ({ name: dist.district_name, id: dist.district_id, assets: dist.total_assets, missing: dist.missing_assets, value: dist.total_value }));
+  const trendData   = d?.acquisition_trend    ?? [];
 
   if (isLoading) return <DashboardSkeleton />;
 
-  const conditionData = (dashData?.assets_by_condition ?? []).map(c => ({
-    name: c.condition ? (c.condition.charAt(0).toUpperCase() + c.condition.slice(1)) : "Unknown",
-    value: c.count,
-    fill: CONDITION_COLORS[c.condition ?? ""] ?? "#94a3b8",
-  }));
-
-  const categoryData = (dashData?.assets_by_category ?? []).filter(c => c.category_name).map((c, i) => ({
-    name: c.category_name ?? "Unknown",
-    value: c.count,
-    fill: COLORS[i % COLORS.length],
-  }));
-
-  const statusData = (dashData?.assets_by_status ?? []).map(s => ({
-    name: s.status?.replace(/_/g, " ") ?? "unknown",
-    value: s.count,
-    fill: STATUS_COLORS[s.status ?? ""] ?? "#94a3b8",
-  }));
-
-  const districtData = (dashData?.assets_by_district ?? []).map(d => ({
-    name: d.district_name,
-    assets: d.total_assets,
-    missing: d.missing_assets,
-  }));
-
-  const trendData = dashData?.acquisition_trend ?? [];
-  const provinceName = dashData?.province?.provinceName;
+  const drawerBaseParams: Record<string, string> = {};
+  if (filters.status)       drawerBaseParams.status        = filters.status;
+  if (filters.condition)    drawerBaseParams.condition     = filters.condition;
+  if (filters.categoryName) drawerBaseParams.category_name = filters.categoryName;
+  if (filters.districtId)   drawerBaseParams.district_id   = filters.districtId;
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center gap-3">
-        {dashData?.province?.flagUrl && (
-          <img src={dashData.province.flagUrl} alt={`${provinceName ?? ""} flag`} className="h-8 w-12 object-cover rounded-sm border" />
+        {d?.province?.flagUrl && (
+          <img src={d.province.flagUrl} alt={`${d.province.provinceName ?? ""} flag`} className="h-8 w-12 object-cover rounded-sm border" />
         )}
         <div>
           <h2 className="text-3xl font-bold tracking-tight">
-            {provinceName ? `${provinceName} Dashboard` : "Provincial Dashboard"}
+            {d?.province?.provinceName ? `${d.province.provinceName} Dashboard` : "Provincial Dashboard"}
           </h2>
-          <p className="text-muted-foreground">
-            {dashData?.province?.region ? `${dashData.province.region} Region` : "Overview of assets in your jurisdiction."}
-            {dashData?.province?.capitalCity ? ` · Capital: ${dashData.province.capitalCity}` : ""}
+          <p className="text-muted-foreground text-sm">
+            {d?.province?.region ? `${d.province.region} Region` : ""}
+            {d?.province?.capitalCity ? ` · ${d.province.capitalCity}` : ""}
+            {" "}· Click any chart or card to cross-filter
           </p>
         </div>
       </div>
 
-      {/* KPI cards */}
+      {/* Filter strip */}
+      <FilterStrip
+        filters={filters}
+        onClear={clearFilter}
+        total={d?.total_assets ?? 0}
+        filteredTotal={d?.filtered_total ?? d?.total_assets ?? 0}
+      />
+
+      {/* Primary KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Assets" value={(dashData?.total_assets ?? 0).toLocaleString()} icon={Box} description="All registered assets" />
-        <StatCard title="Active" value={(dashData?.active_assets ?? 0).toLocaleString()} icon={CheckCircle} description="In service" accent="#22c55e" />
-        <StatCard title="Missing" value={(dashData?.missing_assets ?? 0).toLocaleString()} icon={AlertTriangle} description="Flagged as missing" accent={dashData?.missing_assets ? "#ef4444" : undefined} />
-        <StatCard title="Total Value" value={fmtKina(dashData?.total_value)} icon={DollarSign} description="Estimated portfolio" />
+        <StatCard title="Total Assets" value={fmtNum(d?.total_assets)} icon={Box}
+          description="Click to browse all assets" testId="kpi-total-assets"
+          onClick={() => openDetail("All Province Assets", {}, `${d?.total_assets?.toLocaleString()} total assets`)} />
+        <StatCard title="Active Assets" value={fmtNum(d?.active_assets)} icon={CheckCircle}
+          description="In service — click to view" accent="#22c55e" testId="kpi-active-assets"
+          onClick={() => openDetail("Active Assets", { status: "active" }, "Assets currently in service")} />
+        <StatCard title="Missing Assets" value={fmtNum(d?.missing_assets)} icon={AlertTriangle}
+          description="Flagged as missing — click to view" accent={d?.missing_assets ? "#ef4444" : undefined} testId="kpi-missing-assets"
+          onClick={() => openDetail("Missing Assets", { status: "missing" }, "Assets flagged as missing")} />
+        <StatCard title="Portfolio Value" value={fmtKina(d?.total_value)} icon={DollarSign}
+          description="Estimated portfolio — click to browse" testId="kpi-portfolio-value"
+          onClick={() => openDetail("All Assets by Value", {}, "Full portfolio")} />
       </div>
 
       {/* Secondary KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard title="Under Maintenance" value={(dashData?.maintenance_assets ?? 0).toLocaleString()} icon={Wrench} description="Currently being serviced" accent={dashData?.maintenance_assets ? "#f59e0b" : undefined} />
-        <StatCard title="Disposed" value={(dashData?.disposed_assets ?? 0).toLocaleString()} icon={XCircle} description="Decommissioned assets" />
-        <StatCard title="Acquisition Trend" value={trendData.length > 0 ? `+${trendData[trendData.length - 1]?.count ?? 0} this month` : "—"} icon={Activity} description="Assets added in last recorded month" />
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard title="Under Maintenance" value={fmtNum(d?.maintenance_assets)} icon={Wrench}
+          description="Being serviced — click to view" accent={d?.maintenance_assets ? "#f59e0b" : undefined}
+          onClick={() => openDetail("Under Maintenance", { status: "under_maintenance" }, "Assets being serviced")} />
+        <StatCard title="Disposed" value={fmtNum(d?.disposed_assets)} icon={XCircle}
+          description="Decommissioned — click to view"
+          onClick={() => openDetail("Disposed Assets", { status: "disposed" }, "Decommissioned assets")} />
+        <StatCard title="Filtered View" value={d?.has_filters ? fmtNum(d.filtered_total) : "—"} icon={Filter}
+          description={d?.has_filters ? `${fmtKina(d.filtered_value)} filtered value — click to browse` : "Apply filters via charts to see subset"}
+          onClick={d?.has_filters ? () => openDetail("Filtered Assets", drawerBaseParams, "Assets matching active filters") : undefined}
+          accent={d?.has_filters ? "hsl(var(--primary))" : undefined} />
       </div>
 
-      {/* Charts row 1: Condition bar + Status pie */}
+      {/* Pivot + Charts */}
+      <div className="flex items-center justify-between">
+        <PivotControl value={pivot} onChange={setPivot} />
+        {d?.has_filters && (
+          <span className="text-sm text-primary font-medium">
+            Showing {d.filtered_total.toLocaleString()} of {d.total_assets.toLocaleString()} assets
+          </span>
+        )}
+      </div>
+
+      {/* Main chart */}
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
-          <CardHeader><CardTitle>Asset Condition</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center justify-between">
+              {pivot === "status" ? "Assets by Status" : pivot === "condition" ? "Asset Condition" : pivot === "category" ? "Assets by Category" : "District Breakdown"}
+              <span className="text-xs text-muted-foreground font-normal">Click to cross-filter</span>
+            </CardTitle>
+          </CardHeader>
           <CardContent>
-            <div className="h-[260px]">
+            <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={conditionData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                    {conditionData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-                  </Bar>
-                </BarChart>
+                {pivot === "status" ? (
+                  <PieChart>
+                    <Pie data={statusData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="value"
+                      cursor="pointer">
+                      {statusData.map((e, i) => (
+                        <Cell key={i} fill={e.fill}
+                          opacity={filters.status && filters.status !== e.name ? 0.25 : 1}
+                          strokeWidth={filters.status === e.name ? 2 : 0} stroke="#fff"
+                          onClick={() => toggleFilter("status", e.name)} style={{ cursor: "pointer" }} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const p = payload[0].payload as { label: string; value: number; raw: string };
+                      return (
+                        <div className="bg-popover border rounded-lg shadow-lg p-3 text-sm">
+                          <p className="font-medium">{p.label}</p>
+                          <p className="text-muted-foreground">{p.value.toLocaleString()} assets</p>
+                          <p className="text-muted-foreground">{fmtKina(p.raw)}</p>
+                          <p className="text-xs text-primary mt-1">Click to filter</p>
+                        </div>
+                      );
+                    }} />
+                    <Legend formatter={(v: string) => STATUS_LABELS[v] ?? capitalize(v)} />
+                  </PieChart>
+                ) : pivot === "condition" ? (
+                  <BarChart data={condData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                    onClick={(e: { activePayload?: { payload: { name: string } }[] }) => { const n = e?.activePayload?.[0]?.payload?.name; if (n) toggleFilter("condition", n); }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const p = payload[0].payload as { label: string; value: number; raw: string };
+                      return (
+                        <div className="bg-popover border rounded-lg shadow-lg p-3 text-sm">
+                          <p className="font-medium">{p.label}</p>
+                          <p>{p.value.toLocaleString()} assets · {fmtKina(p.raw)}</p>
+                          <p className="text-xs text-primary mt-1">Click to filter</p>
+                        </div>
+                      );
+                    }} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]} cursor="pointer"
+                      onClick={(data: { name: string }) => toggleFilter("condition", data.name)}>
+                      {condData.map((e, i) => (
+                        <Cell key={i} fill={e.fill}
+                          opacity={filters.condition && filters.condition !== e.name ? 0.25 : 1} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                ) : pivot === "category" ? (
+                  <BarChart data={catData} layout="vertical" margin={{ top: 5, right: 60, left: 10, bottom: 5 }}
+                    onClick={(e: { activePayload?: { payload: { name: string } }[] }) => { const n = e?.activePayload?.[0]?.payload?.name; if (n) toggleFilter("categoryName", n); }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 11 }} />
+                    <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 10 }} />
+                    <Tooltip content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const p = payload[0].payload as { name: string; value: number; raw: string };
+                      return (
+                        <div className="bg-popover border rounded-lg shadow-lg p-3 text-sm">
+                          <p className="font-medium">{p.name}</p>
+                          <p>{p.value.toLocaleString()} assets · {fmtKina(p.raw)}</p>
+                          <p className="text-xs text-primary mt-1">Click to filter</p>
+                        </div>
+                      );
+                    }} />
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]} cursor="pointer"
+                      onClick={(data: { name: string }) => toggleFilter("categoryName", data.name)}>
+                      {catData.map((e, i) => (
+                        <Cell key={i} fill={e.fill}
+                          opacity={filters.categoryName && filters.categoryName !== e.name ? 0.25 : 1} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                ) : (
+                  <BarChart data={distData} margin={{ top: 10, right: 10, left: -20, bottom: 40 }}
+                    onClick={(e: { activePayload?: { payload: { id: string } }[] }) => { const id = e?.activePayload?.[0]?.payload?.id; if (id) toggleFilter("districtId", id); }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" interval={0} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const p = payload[0].payload as { name: string; assets: number; missing: number; value: string };
+                      return (
+                        <div className="bg-popover border rounded-lg shadow-lg p-3 text-sm">
+                          <p className="font-medium">{p.name}</p>
+                          <p>{p.assets.toLocaleString()} total · {p.missing} missing</p>
+                          <p className="text-muted-foreground">{fmtKina(p.value)}</p>
+                          <p className="text-xs text-primary mt-1">Click to filter</p>
+                        </div>
+                      );
+                    }} />
+                    <Bar dataKey="assets" name="Total" radius={[4, 4, 0, 0]} cursor="pointer"
+                      onClick={(data: { id: string }) => toggleFilter("districtId", data.id)}>
+                      {distData.map((e, i) => (
+                        <Cell key={i} fill="hsl(var(--primary))"
+                          opacity={filters.districtId && filters.districtId !== e.id ? 0.25 : 1} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                )}
               </ResponsiveContainer>
             </div>
+            {/* Clickable filter chips — accessible filter controls */}
+            {pivot === "status" && statusData.length > 0 && (
+              <FilterChips
+                items={statusData.map(s => ({ name: s.name, label: s.label, value: s.value, fill: s.fill }))}
+                activeValue={filters.status}
+                onToggle={name => toggleFilter("status", name)}
+              />
+            )}
+            {pivot === "condition" && condData.length > 0 && (
+              <FilterChips
+                items={condData.map(c => ({ name: c.name, label: c.label, value: c.value, fill: c.fill }))}
+                activeValue={filters.condition}
+                onToggle={name => toggleFilter("condition", name)}
+              />
+            )}
+            {pivot === "category" && catData.length > 0 && (
+              <FilterChips
+                items={catData.map(c => ({ name: c.name, label: c.name, value: c.value, fill: c.fill }))}
+                activeValue={filters.categoryName}
+                onToggle={name => toggleFilter("categoryName", name)}
+              />
+            )}
+            {pivot === "district" && distData.length > 0 && (
+              <FilterChips
+                items={distData.map(d => ({ name: d.id, label: d.name, value: d.assets, id: d.id }))}
+                activeKey={filters.districtId}
+                onToggle={id => toggleFilter("districtId", id)}
+                useId
+              />
+            )}
           </CardContent>
         </Card>
 
+        {/* Cross-filter secondary chart */}
         <Card>
-          <CardHeader><CardTitle>Assets by Category</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center justify-between">
+              {pivot === "status" ? "Asset Condition" : "Assets by Status"}
+              <span className="text-xs text-muted-foreground font-normal">Click to cross-filter</span>
+            </CardTitle>
+          </CardHeader>
           <CardContent>
-            <div className="h-[260px]">
+            <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={categoryData} cx="50%" cy="50%" innerRadius={55} outerRadius={95} paddingAngle={2} dataKey="value">
-                    {categoryData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-                  </Pie>
-                  <Tooltip />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                </PieChart>
+                {pivot !== "condition" ? (
+                  <BarChart data={condData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                    onClick={(e: { activePayload?: { payload: { name: string } }[] }) => { const n = e?.activePayload?.[0]?.payload?.name; if (n) toggleFilter("condition", n); }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const p = payload[0].payload as { label: string; value: number; raw: string };
+                      return (
+                        <div className="bg-popover border rounded-lg shadow-lg p-3 text-sm">
+                          <p className="font-medium">{p.label}</p>
+                          <p>{p.value.toLocaleString()} assets · {fmtKina(p.raw)}</p>
+                        </div>
+                      );
+                    }} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]} cursor="pointer"
+                      onClick={(data: { name: string }) => toggleFilter("condition", data.name)}>
+                      {condData.map((e, i) => (
+                        <Cell key={i} fill={e.fill}
+                          opacity={filters.condition && filters.condition !== e.name ? 0.25 : 1} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                ) : (
+                  <PieChart>
+                    <Pie data={statusData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="value"
+                      cursor="pointer">
+                      {statusData.map((e, i) => (
+                        <Cell key={i} fill={e.fill}
+                          opacity={filters.status && filters.status !== e.name ? 0.25 : 1}
+                          strokeWidth={filters.status === e.name ? 2 : 0} stroke="#fff"
+                          onClick={() => toggleFilter("status", e.name)} style={{ cursor: "pointer" }} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const p = payload[0].payload as { label: string; value: number; raw: string };
+                      return (
+                        <div className="bg-popover border rounded-lg shadow-lg p-3 text-sm">
+                          <p className="font-medium">{p.label}</p>
+                          <p>{p.value.toLocaleString()} assets · {fmtKina(p.raw)}</p>
+                        </div>
+                      );
+                    }} />
+                    <Legend formatter={(v: string) => STATUS_LABELS[v] ?? capitalize(v)} />
+                  </PieChart>
+                )}
               </ResponsiveContainer>
             </div>
+            {/* Clickable filter chips for secondary chart */}
+            {pivot !== "condition" ? (
+              <FilterChips
+                items={condData.map(c => ({ name: c.name, label: c.label, value: c.value, fill: c.fill }))}
+                activeValue={filters.condition}
+                onToggle={name => toggleFilter("condition", name)}
+              />
+            ) : (
+              <FilterChips
+                items={statusData.map(s => ({ name: s.name, label: s.label, value: s.value, fill: s.fill }))}
+                activeValue={filters.status}
+                onToggle={name => toggleFilter("status", name)}
+              />
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Status donut */}
-      {statusData.length > 0 && (
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader><CardTitle>Assets by Status</CardTitle></CardHeader>
-            <CardContent>
-              <div className="h-[220px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={statusData} cx="50%" cy="50%" outerRadius={80} paddingAngle={2} dataKey="value">
-                      {statusData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-                    </Pie>
-                    <Tooltip formatter={(v: number, name: string) => [v, name.replace(/_/g, " ")]} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} formatter={v => v.replace(/_/g, " ")} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Acquisition trend */}
-          {trendData.length > 0 && (
-            <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2"><TrendingUp className="w-4 h-4" />Acquisition Trend (12 Months)</CardTitle></CardHeader>
-              <CardContent>
-                <div className="h-[220px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={trendData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip formatter={(v: number) => [v, "Assets Added"]} />
-                      <Line type="monotone" dataKey="count" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} name="Assets Added" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
-
-      {/* District breakdown */}
-      {districtData.length > 0 && (
+      {/* Acquisition Trend */}
+      {trendData.length > 0 && (
         <Card>
-          <CardHeader><CardTitle>District Breakdown</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <TrendingUp className="w-4 h-4" />Acquisition Trend (Last 12 Months)
+            </CardTitle>
+          </CardHeader>
           <CardContent>
-            <div className="h-[220px]">
+            <div className="h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={districtData} margin={{ top: 10, right: 10, left: -20, bottom: 30 }}>
+                <LineChart data={trendData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-25} textAnchor="end" interval={0} />
+                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Bar dataKey="assets" name="Total Assets" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="missing" name="Missing" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                </BarChart>
+                  <Tooltip formatter={(v: number) => [v.toLocaleString(), "Assets Added"]} />
+                  <Line type="monotone" dataKey="count" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} name="Assets Added" />
+                </LineChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Recent Assets */}
+      {/* Recent / Filtered Assets */}
       <Card>
-        <CardHeader><CardTitle>Recent Assets</CardTitle></CardHeader>
-        <CardContent>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center justify-between text-sm">
+            {d?.has_filters ? "Matching Assets (Recent)" : "Recently Added Assets"}
+            {d?.has_filters && (
+              <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => openDetail("Filtered Assets", drawerBaseParams)}>
+                View all {d.filtered_total.toLocaleString()} <ExternalLink className="w-3 h-3 ml-1" />
+              </Button>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
@@ -529,39 +1243,63 @@ function ProvincialDashboard() {
                 <TableHead>Category</TableHead>
                 <TableHead>Condition</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="text-right">Value</TableHead>
                 <TableHead>Added</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {dashData?.recent_assets?.map(asset => (
-                <TableRow key={asset.id}>
+              {d?.recent_assets?.map(asset => (
+                <TableRow key={asset.id} className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => setLocation(`/assets/${asset.id}`)}>
                   <TableCell className="font-mono text-xs">{asset.assetTag}</TableCell>
-                  <TableCell className="font-medium">{asset.assetName}</TableCell>
-                  <TableCell>{asset.categoryName ?? "—"}</TableCell>
-                  <TableCell><Badge variant="outline" className="capitalize">{asset.condition}</Badge></TableCell>
-                  <TableCell><Badge className="capitalize" style={{ backgroundColor: STATUS_COLORS[asset.status ?? ""] ?? undefined }}>{asset.status?.replace(/_/g, " ")}</Badge></TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
+                  <TableCell>
+                    <div className="font-medium text-sm">{asset.assetName}</div>
+                    {asset.districtName && <div className="text-xs text-muted-foreground">{asset.districtName}</div>}
+                  </TableCell>
+                  <TableCell className="text-sm">{asset.categoryName ?? "—"}</TableCell>
+                  <TableCell><Badge variant="outline" className="capitalize text-xs">{asset.condition}</Badge></TableCell>
+                  <TableCell>
+                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium text-white"
+                      style={{ backgroundColor: STATUS_COLORS[asset.status] ?? "#94a3b8" }}>
+                      {STATUS_LABELS[asset.status] ?? capitalize(asset.status)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right text-sm">{asset.purchaseCost ? fmtKina(asset.purchaseCost) : "—"}</TableCell>
+                  <TableCell className="text-muted-foreground text-xs">
                     {asset.createdAt ? new Date(asset.createdAt).toLocaleDateString("en-PG", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
                   </TableCell>
                 </TableRow>
               ))}
-              {!dashData?.recent_assets?.length && (
-                <TableRow><TableCell colSpan={6} className="text-center py-4 text-muted-foreground">No recent assets</TableCell></TableRow>
+              {!d?.recent_assets?.length && (
+                <TableRow><TableCell colSpan={7} className="text-center py-4 text-muted-foreground">No assets</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      {/* Detail Drawer */}
+      {drawer && (
+        <DetailSheet
+          open={!!drawer}
+          title={drawer.title}
+          subtitle={drawer.subtitle}
+          params={drawer.params}
+          onClose={() => setDrawer(null)}
+        />
+      )}
     </div>
   );
 }
 
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <Skeleton className="h-10 w-[250px]" />
-        <Skeleton className="h-4 w-[350px]" />
+      <div className="flex items-center gap-3">
+        <Skeleton className="h-12 w-12 rounded-full" />
+        <div className="space-y-2"><Skeleton className="h-8 w-[260px]" /><Skeleton className="h-4 w-[200px]" /></div>
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {[1, 2, 3, 4].map(i => (
@@ -569,10 +1307,10 @@ function DashboardSkeleton() {
         ))}
       </div>
       <div className="grid gap-4 md:grid-cols-2">
-        <Skeleton className="h-[300px] w-full rounded-xl" />
-        <Skeleton className="h-[300px] w-full rounded-xl" />
+        <Skeleton className="h-[320px] rounded-xl" />
+        <Skeleton className="h-[320px] rounded-xl" />
       </div>
-      <Skeleton className="h-[240px] w-full rounded-xl" />
+      <Skeleton className="h-[220px] rounded-xl" />
     </div>
   );
 }

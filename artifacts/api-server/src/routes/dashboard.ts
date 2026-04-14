@@ -1,9 +1,11 @@
 import { Router } from "express";
-import { eq, and, isNull, sql, desc } from "drizzle-orm";
+import { eq, and, isNull, sql, desc, inArray } from "drizzle-orm";
 import { db, assets, assetCategories, provinces, districts, facilities } from "@workspace/db";
 import { requireAuth, requireNational } from "../lib/auth";
 
 const router = Router();
+
+// ─── PROVINCIAL DASHBOARD (supports cross-filter params) ─────────────────────
 
 router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
   if (!req.user) return;
@@ -17,133 +19,186 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
     return;
   }
 
+  // Cross-filter params
+  const statusFilter    = (req.query.status as string | undefined)?.toLowerCase() || undefined;
+  const conditionFilter = (req.query.condition as string | undefined)?.toLowerCase() || undefined;
+  const categoryName    = (req.query.category_name as string | undefined) || undefined;
+  const districtId      = (req.query.district_id as string | undefined) || undefined;
+
+  const VALID_STATUSES   = ["active", "missing", "under_maintenance", "disposed", "transferred"];
+  const VALID_CONDITIONS = ["new", "good", "fair", "poor", "unserviceable"];
+
+  const safeStatus    = statusFilter    && VALID_STATUSES.includes(statusFilter)    ? statusFilter    : undefined;
+  const safeCondition = conditionFilter && VALID_CONDITIONS.includes(conditionFilter) ? conditionFilter : undefined;
+
   try {
-    const baseWhere = and(isNull(assets.deletedAt), eq(assets.provinceId, provinceId));
+    const baseConditions = [isNull(assets.deletedAt), eq(assets.provinceId, provinceId)];
 
-    const [totals] = await db
-      .select({
-        total_assets: sql<number>`count(*)::int`,
-        active_assets: sql<number>`sum(case when ${assets.status} = 'active' then 1 else 0 end)::int`,
-        missing_assets: sql<number>`sum(case when ${assets.status} = 'missing' then 1 else 0 end)::int`,
-        disposed_assets: sql<number>`sum(case when ${assets.status} = 'disposed' then 1 else 0 end)::int`,
-        maintenance_assets: sql<number>`sum(case when ${assets.status} = 'under_maintenance' then 1 else 0 end)::int`,
-        total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
-      })
-      .from(assets)
-      .where(baseWhere);
+    // Resolve category_id from name (for cross-filter)
+    let categoryId: string | undefined;
+    if (categoryName) {
+      const [cat] = await db.select({ id: assetCategories.id })
+        .from(assetCategories)
+        .where(eq(assetCategories.categoryName, categoryName))
+        .limit(1);
+      categoryId = cat?.id;
+    }
 
-    const byCategory = await db
-      .select({
-        category_name: assetCategories.categoryName,
-        count: sql<number>`count(*)::int`,
-        total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
-      })
-      .from(assets)
+    // Build cross-filter extra conditions (applied to filtered charts)
+    const filterConditions = [...baseConditions];
+    if (safeStatus)    filterConditions.push(eq(assets.status, safeStatus));
+    if (safeCondition) filterConditions.push(eq(assets.condition, safeCondition));
+    if (categoryId)    filterConditions.push(eq(assets.categoryId, categoryId));
+    if (districtId)    filterConditions.push(eq(assets.districtId, districtId));
+
+    const baseWhere     = and(...baseConditions);
+    const filteredWhere = and(...filterConditions);
+    const hasFilters    = filterConditions.length > baseConditions.length;
+
+    // Totals — always unfiltered for the KPI cards
+    const [totals] = await db.select({
+      total_assets:       sql<number>`count(*)::int`,
+      active_assets:      sql<number>`sum(case when ${assets.status} = 'active' then 1 else 0 end)::int`,
+      missing_assets:     sql<number>`sum(case when ${assets.status} = 'missing' then 1 else 0 end)::int`,
+      disposed_assets:    sql<number>`sum(case when ${assets.status} = 'disposed' then 1 else 0 end)::int`,
+      maintenance_assets: sql<number>`sum(case when ${assets.status} = 'under_maintenance' then 1 else 0 end)::int`,
+      total_value:        sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+    }).from(assets).where(baseWhere);
+
+    // Filtered totals (for cross-filter summary bar)
+    const [filteredTotals] = await db.select({
+      total_assets: sql<number>`count(*)::int`,
+      total_value:  sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+    }).from(assets).where(filteredWhere);
+
+    // By Status — filter by condition/category/district if set (but NOT status itself)
+    const statusConditions = [...baseConditions];
+    if (safeCondition) statusConditions.push(eq(assets.condition, safeCondition));
+    if (categoryId)    statusConditions.push(eq(assets.categoryId, categoryId));
+    if (districtId)    statusConditions.push(eq(assets.districtId, districtId));
+
+    const byStatus = await db.select({
+      status: assets.status,
+      count:  sql<number>`count(*)::int`,
+      value:  sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+    }).from(assets).where(and(...statusConditions)).groupBy(assets.status).orderBy(desc(sql`count(*)`));
+
+    // By Condition — filter by status/category/district if set (but NOT condition itself)
+    const conditionConditions = [...baseConditions];
+    if (safeStatus)  conditionConditions.push(eq(assets.status, safeStatus));
+    if (categoryId)  conditionConditions.push(eq(assets.categoryId, categoryId));
+    if (districtId)  conditionConditions.push(eq(assets.districtId, districtId));
+
+    const byCondition = await db.select({
+      condition: assets.condition,
+      count:     sql<number>`count(*)::int`,
+      value:     sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+    }).from(assets).where(and(...conditionConditions)).groupBy(assets.condition).orderBy(assets.condition);
+
+    // By Category — filter by status/condition/district if set
+    const categoryConditions = [...baseConditions];
+    if (safeStatus)    categoryConditions.push(eq(assets.status, safeStatus));
+    if (safeCondition) categoryConditions.push(eq(assets.condition, safeCondition));
+    if (districtId)    categoryConditions.push(eq(assets.districtId, districtId));
+
+    const byCategory = await db.select({
+      category_id:   assetCategories.id,
+      category_name: assetCategories.categoryName,
+      count:         sql<number>`count(*)::int`,
+      value:         sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+    }).from(assets)
       .leftJoin(assetCategories, eq(assets.categoryId, assetCategories.id))
-      .where(baseWhere)
-      .groupBy(assetCategories.categoryName)
+      .where(and(...categoryConditions))
+      .groupBy(assetCategories.id, assetCategories.categoryName)
       .orderBy(desc(sql`count(*)`))
-      .limit(10);
+      .limit(12);
 
-    const byCondition = await db
-      .select({
-        condition: assets.condition,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(assets)
-      .where(baseWhere)
-      .groupBy(assets.condition)
-      .orderBy(assets.condition);
+    // By District — filter by status/condition/category if set
+    const districtConditions = [...baseConditions];
+    if (safeStatus)    districtConditions.push(eq(assets.status, safeStatus));
+    if (safeCondition) districtConditions.push(eq(assets.condition, safeCondition));
+    if (categoryId)    districtConditions.push(eq(assets.categoryId, categoryId));
 
-    const byStatus = await db
-      .select({
-        status: assets.status,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(assets)
-      .where(baseWhere)
-      .groupBy(assets.status)
-      .orderBy(desc(sql`count(*)`));
-
-    // District breakdown for this province
-    const byDistrict = await db
-      .select({
-        district_id: districts.id,
-        district_name: districts.districtName,
-        total_assets: sql<number>`count(${assets.id})::int`,
-        missing_assets: sql<number>`sum(case when ${assets.status} = 'missing' then 1 else 0 end)::int`,
-        total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
-      })
-      .from(districts)
-      .leftJoin(assets, and(eq(assets.districtId, districts.id), isNull(assets.deletedAt)))
+    const byDistrict = await db.select({
+      district_id:    districts.id,
+      district_name:  districts.districtName,
+      total_assets:   sql<number>`count(${assets.id})::int`,
+      missing_assets: sql<number>`sum(case when ${assets.status} = 'missing' then 1 else 0 end)::int`,
+      active_assets:  sql<number>`sum(case when ${assets.status} = 'active' then 1 else 0 end)::int`,
+      total_value:    sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+    }).from(districts)
+      .leftJoin(assets, and(eq(assets.districtId, districts.id), isNull(assets.deletedAt),
+        ...(safeStatus    ? [eq(assets.status, safeStatus)]      : []),
+        ...(safeCondition ? [eq(assets.condition, safeCondition)]: []),
+        ...(categoryId    ? [eq(assets.categoryId, categoryId)]  : []),
+      ))
       .where(eq(districts.provinceId, provinceId))
       .groupBy(districts.id, districts.districtName)
       .orderBy(desc(sql`count(${assets.id})`));
 
-    // Acquisition trend: last 12 months
-    const acquisitionTrend = await db
-      .select({
-        month: sql<string>`to_char(date_trunc('month', ${assets.createdAt}), 'Mon YYYY')`,
-        month_key: sql<string>`to_char(date_trunc('month', ${assets.createdAt}), 'YYYY-MM')`,
-        count: sql<number>`count(*)::int`,
-        total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
-      })
-      .from(assets)
+    // Acquisition trend (always unfiltered)
+    const acquisitionTrend = await db.select({
+      month:       sql<string>`to_char(date_trunc('month', ${assets.createdAt}), 'Mon YYYY')`,
+      month_key:   sql<string>`to_char(date_trunc('month', ${assets.createdAt}), 'YYYY-MM')`,
+      count:       sql<number>`count(*)::int`,
+      total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+    }).from(assets)
       .where(and(baseWhere, sql`${assets.createdAt} >= now() - interval '12 months'`))
       .groupBy(sql`date_trunc('month', ${assets.createdAt})`)
       .orderBy(sql`date_trunc('month', ${assets.createdAt})`);
 
-    const recentAssets = await db
-      .select({
-        id: assets.id,
-        assetTag: assets.assetTag,
-        assetName: assets.assetName,
-        status: assets.status,
-        condition: assets.condition,
-        createdAt: assets.createdAt,
-        categoryName: assetCategories.categoryName,
-        facilityName: facilities.facilityName,
-      })
-      .from(assets)
+    // Recent assets (filtered)
+    const recentAssets = await db.select({
+      id:           assets.id,
+      assetTag:     assets.assetTag,
+      assetName:    assets.assetName,
+      status:       assets.status,
+      condition:    assets.condition,
+      purchaseCost: assets.purchaseCost,
+      createdAt:    assets.createdAt,
+      categoryName: assetCategories.categoryName,
+      facilityName: facilities.facilityName,
+      districtName: districts.districtName,
+    }).from(assets)
       .leftJoin(assetCategories, eq(assets.categoryId, assetCategories.id))
       .leftJoin(facilities, eq(assets.facilityId, facilities.id))
-      .where(baseWhere)
+      .leftJoin(districts, eq(assets.districtId, districts.id))
+      .where(filteredWhere)
       .orderBy(desc(assets.createdAt))
-      .limit(8);
+      .limit(10);
 
-    const [province] = await db
-      .select({
-        id: provinces.id,
-        provinceName: provinces.provinceName,
-        flagUrl: provinces.flagUrl,
-        themeAccentColor: provinces.themeAccentColor,
-        flagColors: provinces.flagColors,
-        capitalCity: provinces.capitalCity,
-        region: provinces.region,
-        population: provinces.population,
-        areaKm2: provinces.areaKm2,
-      })
-      .from(provinces)
-      .where(eq(provinces.id, provinceId))
-      .limit(1);
+    const [province] = await db.select({
+      id:               provinces.id,
+      provinceName:     provinces.provinceName,
+      flagUrl:          provinces.flagUrl,
+      themeAccentColor: provinces.themeAccentColor,
+      flagColors:       provinces.flagColors,
+      capitalCity:      provinces.capitalCity,
+      region:           provinces.region,
+      population:       provinces.population,
+      areaKm2:          provinces.areaKm2,
+    }).from(provinces).where(eq(provinces.id, provinceId)).limit(1);
 
     res.json({
       success: true,
       message: "Provincial dashboard retrieved",
       data: {
         province,
-        total_assets: totals.total_assets ?? 0,
-        active_assets: totals.active_assets ?? 0,
-        missing_assets: totals.missing_assets ?? 0,
-        disposed_assets: totals.disposed_assets ?? 0,
+        total_assets:       totals.total_assets       ?? 0,
+        active_assets:      totals.active_assets      ?? 0,
+        missing_assets:     totals.missing_assets     ?? 0,
+        disposed_assets:    totals.disposed_assets    ?? 0,
         maintenance_assets: totals.maintenance_assets ?? 0,
-        total_value: totals.total_value ?? "0",
+        total_value:        totals.total_value        ?? "0",
+        filtered_total:     filteredTotals.total_assets ?? 0,
+        filtered_value:     filteredTotals.total_value  ?? "0",
+        has_filters:        hasFilters,
         assets_by_category: byCategory,
         assets_by_condition: byCondition,
-        assets_by_status: byStatus,
+        assets_by_status:   byStatus,
         assets_by_district: byDistrict,
-        acquisition_trend: acquisitionTrend,
-        recent_assets: recentAssets,
+        acquisition_trend:  acquisitionTrend,
+        recent_assets:      recentAssets,
       },
     });
   } catch (err) {
@@ -152,101 +207,148 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
   }
 });
 
+// ─── NATIONAL DASHBOARD (supports cross-filter params) ───────────────────────
+
 router.get("/v1/dashboard/national", requireNational, async (req, res) => {
+  const statusFilter    = (req.query.status as string | undefined)?.toLowerCase() || undefined;
+  const conditionFilter = (req.query.condition as string | undefined)?.toLowerCase() || undefined;
+  const categoryName    = (req.query.category_name as string | undefined) || undefined;
+
+  const VALID_STATUSES   = ["active", "missing", "under_maintenance", "disposed", "transferred"];
+  const VALID_CONDITIONS = ["new", "good", "fair", "poor", "unserviceable"];
+
+  const safeStatus    = statusFilter    && VALID_STATUSES.includes(statusFilter)    ? statusFilter    : undefined;
+  const safeCondition = conditionFilter && VALID_CONDITIONS.includes(conditionFilter) ? conditionFilter : undefined;
+
   try {
-    const [totals] = await db
-      .select({
-        total_assets: sql<number>`count(*)::int`,
-        active_assets: sql<number>`sum(case when ${assets.status} = 'active' then 1 else 0 end)::int`,
-        missing_assets: sql<number>`sum(case when ${assets.status} = 'missing' then 1 else 0 end)::int`,
-        total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
-      })
-      .from(assets)
-      .where(isNull(assets.deletedAt));
+    let categoryId: string | undefined;
+    if (categoryName) {
+      const [cat] = await db.select({ id: assetCategories.id })
+        .from(assetCategories).where(eq(assetCategories.categoryName, categoryName)).limit(1);
+      categoryId = cat?.id;
+    }
 
-    const [provinceCount] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(provinces)
-      .where(eq(provinces.active, true));
+    const baseWhere = isNull(assets.deletedAt);
 
-    const byProvince = await db
-      .select({
-        province_id: provinces.id,
-        province_name: provinces.provinceName,
-        province_code: provinces.provinceCode,
-        flag_url: provinces.flagUrl,
-        theme_accent_color: provinces.themeAccentColor,
-        total_assets: sql<number>`count(${assets.id})::int`,
-        total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
-        missing_assets: sql<number>`sum(case when ${assets.status} = 'missing' then 1 else 0 end)::int`,
-        active_assets: sql<number>`sum(case when ${assets.status} = 'active' then 1 else 0 end)::int`,
-      })
-      .from(provinces)
-      .leftJoin(assets, and(eq(assets.provinceId, provinces.id), isNull(assets.deletedAt)))
+    // Unfiltered global totals
+    const [totals] = await db.select({
+      total_assets:   sql<number>`count(*)::int`,
+      active_assets:  sql<number>`sum(case when ${assets.status} = 'active' then 1 else 0 end)::int`,
+      missing_assets: sql<number>`sum(case when ${assets.status} = 'missing' then 1 else 0 end)::int`,
+      total_value:    sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+    }).from(assets).where(baseWhere);
+
+    const [provinceCount] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(provinces).where(eq(provinces.active, true));
+
+    // Province breakdown — filtered by status/condition/category for "missing" etc columns
+    const byProvinceConditions: ReturnType<typeof eq>[] = [];
+    if (safeStatus)    byProvinceConditions.push(eq(assets.status, safeStatus) as ReturnType<typeof eq>);
+    if (safeCondition) byProvinceConditions.push(eq(assets.condition, safeCondition) as ReturnType<typeof eq>);
+    if (categoryId)    byProvinceConditions.push(eq(assets.categoryId, categoryId) as ReturnType<typeof eq>);
+
+    const byProvince = await db.select({
+      province_id:        provinces.id,
+      province_name:      provinces.provinceName,
+      province_code:      provinces.provinceCode,
+      flag_url:           provinces.flagUrl,
+      theme_accent_color: provinces.themeAccentColor,
+      total_assets:       sql<number>`count(${assets.id})::int`,
+      total_value:        sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+      missing_assets:     sql<number>`sum(case when ${assets.status} = 'missing' then 1 else 0 end)::int`,
+      active_assets:      sql<number>`sum(case when ${assets.status} = 'active' then 1 else 0 end)::int`,
+    }).from(provinces)
+      .leftJoin(assets, and(
+        eq(assets.provinceId, provinces.id),
+        isNull(assets.deletedAt),
+        ...(safeStatus    ? [eq(assets.status, safeStatus)]      : []),
+        ...(safeCondition ? [eq(assets.condition, safeCondition)]: []),
+        ...(categoryId    ? [eq(assets.categoryId, categoryId)]  : []),
+      ))
       .where(eq(provinces.active, true))
       .groupBy(provinces.id, provinces.provinceName, provinces.provinceCode, provinces.flagUrl, provinces.themeAccentColor)
       .orderBy(desc(sql`count(${assets.id})`));
 
-    const topCategories = await db
-      .select({
-        category_name: assetCategories.categoryName,
-        count: sql<number>`count(*)::int`,
-        total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
-      })
-      .from(assets)
+    // Status breakdown — filtered by condition/category but NOT status
+    const statusConditions = [baseWhere];
+    if (safeCondition) statusConditions.push(eq(assets.condition, safeCondition) as ReturnType<typeof eq>);
+    if (categoryId)    statusConditions.push(eq(assets.categoryId, categoryId) as ReturnType<typeof eq>);
+
+    const byStatus = await db.select({
+      status: assets.status,
+      count:  sql<number>`count(*)::int`,
+      value:  sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+    }).from(assets).where(and(...statusConditions)).groupBy(assets.status).orderBy(desc(sql`count(*)`));
+
+    // Condition breakdown — filtered by status/category but NOT condition
+    const conditionConditions = [baseWhere];
+    if (safeStatus)  conditionConditions.push(eq(assets.status, safeStatus) as ReturnType<typeof eq>);
+    if (categoryId)  conditionConditions.push(eq(assets.categoryId, categoryId) as ReturnType<typeof eq>);
+
+    const byCondition = await db.select({
+      condition: assets.condition,
+      count:     sql<number>`count(*)::int`,
+      value:     sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+    }).from(assets).where(and(...conditionConditions)).groupBy(assets.condition).orderBy(assets.condition);
+
+    // Category breakdown — filtered by status/condition but NOT category
+    const categoryConditions = [baseWhere];
+    if (safeStatus)    categoryConditions.push(eq(assets.status, safeStatus) as ReturnType<typeof eq>);
+    if (safeCondition) categoryConditions.push(eq(assets.condition, safeCondition) as ReturnType<typeof eq>);
+
+    const topCategories = await db.select({
+      category_id:   assetCategories.id,
+      category_name: assetCategories.categoryName,
+      count:         sql<number>`count(*)::int`,
+      total_value:   sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+    }).from(assets)
       .leftJoin(assetCategories, eq(assets.categoryId, assetCategories.id))
-      .where(isNull(assets.deletedAt))
-      .groupBy(assetCategories.categoryName)
+      .where(and(...categoryConditions))
+      .groupBy(assetCategories.id, assetCategories.categoryName)
       .orderBy(desc(sql`count(*)`))
-      .limit(7);
+      .limit(8);
 
-    const byCondition = await db
-      .select({
-        condition: assets.condition,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(assets)
-      .where(isNull(assets.deletedAt))
-      .groupBy(assets.condition)
-      .orderBy(assets.condition);
-
-    const byStatus = await db
-      .select({
-        status: assets.status,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(assets)
-      .where(isNull(assets.deletedAt))
-      .groupBy(assets.status)
-      .orderBy(desc(sql`count(*)`));
-
-    // Acquisition trend: last 12 months (national)
-    const acquisitionTrend = await db
-      .select({
-        month: sql<string>`to_char(date_trunc('month', ${assets.createdAt}), 'Mon YYYY')`,
-        month_key: sql<string>`to_char(date_trunc('month', ${assets.createdAt}), 'YYYY-MM')`,
-        count: sql<number>`count(*)::int`,
-        total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
-      })
-      .from(assets)
-      .where(and(isNull(assets.deletedAt), sql`${assets.createdAt} >= now() - interval '12 months'`))
+    // Acquisition trend (always unfiltered)
+    const acquisitionTrend = await db.select({
+      month:       sql<string>`to_char(date_trunc('month', ${assets.createdAt}), 'Mon YYYY')`,
+      month_key:   sql<string>`to_char(date_trunc('month', ${assets.createdAt}), 'YYYY-MM')`,
+      count:       sql<number>`count(*)::int`,
+      total_value: sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+    }).from(assets)
+      .where(and(baseWhere, sql`${assets.createdAt} >= now() - interval '12 months'`))
       .groupBy(sql`date_trunc('month', ${assets.createdAt})`)
       .orderBy(sql`date_trunc('month', ${assets.createdAt})`);
+
+    const hasFilters = !!(safeStatus || safeCondition || categoryId);
+
+    // Filtered global totals
+    const filterConds = [baseWhere];
+    if (safeStatus)    filterConds.push(eq(assets.status, safeStatus) as ReturnType<typeof eq>);
+    if (safeCondition) filterConds.push(eq(assets.condition, safeCondition) as ReturnType<typeof eq>);
+    if (categoryId)    filterConds.push(eq(assets.categoryId, categoryId) as ReturnType<typeof eq>);
+
+    const [filteredTotals] = await db.select({
+      total_assets: sql<number>`count(*)::int`,
+      total_value:  sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+    }).from(assets).where(and(...filterConds));
 
     res.json({
       success: true,
       message: "National dashboard retrieved",
       data: {
-        total_assets: totals.total_assets ?? 0,
-        active_assets: totals.active_assets ?? 0,
-        missing_assets: totals.missing_assets ?? 0,
-        total_value: totals.total_value ?? "0",
-        provinces_count: provinceCount.count ?? 0,
+        total_assets:       totals.total_assets   ?? 0,
+        active_assets:      totals.active_assets  ?? 0,
+        missing_assets:     totals.missing_assets ?? 0,
+        total_value:        totals.total_value    ?? "0",
+        provinces_count:    provinceCount.count   ?? 0,
+        filtered_total:     filteredTotals.total_assets ?? 0,
+        filtered_value:     filteredTotals.total_value  ?? "0",
+        has_filters:        hasFilters,
         assets_by_province: byProvince,
-        top_categories: topCategories,
+        top_categories:     topCategories,
         assets_by_condition: byCondition,
-        assets_by_status: byStatus,
-        acquisition_trend: acquisitionTrend,
+        assets_by_status:   byStatus,
+        acquisition_trend:  acquisitionTrend,
       },
     });
   } catch (err) {
