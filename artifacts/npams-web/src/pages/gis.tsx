@@ -103,8 +103,13 @@ export default function GISPage() {
   const showDistrictsRef = useRef(true);
   const baseLayers = useRef<Record<string, L.TileLayer>>({});
   const currentLayer = useRef<L.TileLayer | null>(null);
+  // District selection
+  const selectedDistrictMetaRef = useRef<{ key: string; name: string; prov: ProvinceProfile } | null>(null);
+  const selectedDistrictLayerRef = useRef<L.Path | null>(null);
+  const districtLayersMapRef = useRef<Map<string, L.Path>>(new Map());
 
   const [selectedProvince, setSelectedProvince] = useState<ProvinceProfile | null>(null);
+  const [selectedDistrictKey, setSelectedDistrictKey] = useState<string | null>(null);
   const [showDistricts, setShowDistricts] = useState(true);
   const [mapStyle, setMapStyle] = useState<"osm" | "satellite" | "topo">("osm");
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
@@ -223,6 +228,12 @@ export default function GISPage() {
         return;
       }
 
+      // Keep selected district in its highlighted style
+      if (pl === selectedDistrictLayerRef.current) {
+        pl.setStyle({ fillColor: color, fillOpacity: 0.5, color, weight: 2.5, opacity: 1 });
+        return;
+      }
+
       pl.setStyle({
         fillColor: color,
         fillOpacity: isRegionDimmed ? 0.02 : isInSelected ? 0.16 : 0.07,
@@ -251,6 +262,12 @@ export default function GISPage() {
 
   const selectProvince = useCallback(
     (prov: ProvinceProfile) => {
+      // Clear district selection when province changes
+      if (selectedProvinceRef.current?.id !== prov.id) {
+        selectedDistrictMetaRef.current = null;
+        selectedDistrictLayerRef.current = null;
+        setSelectedDistrictKey(null);
+      }
       selectedProvinceRef.current = prov;
       setSelectedProvince(prov);
       mapRef.current?.setView([prov.lat, prov.lng], 8, { animate: true, duration: 0.7 });
@@ -393,6 +410,9 @@ export default function GISPage() {
             .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
           const color = getProvinceColor(prov);
 
+          const distKey = `${prov.id}::${districtName}`;
+          districtLayersMapRef.current.set(distKey, pl);
+
           layer.bindTooltip(
             `<div style="font-weight:bold;font-size:12px">${districtName} District</div>
              <div style="font-size:11px">${prov.name}</div>`,
@@ -402,19 +422,23 @@ export default function GISPage() {
           layer.on("mouseover", () => {
             if (!showDistrictsRef.current) return;
             const sel = selectedProvinceRef.current;
-            if (sel && sel.id !== prov.id) return; // hidden — don't reveal on hover
+            if (sel && sel.id !== prov.id) return;
+            // Don't override selected district style
+            if (pl === selectedDistrictLayerRef.current) return;
             pl.setStyle({ fillOpacity: 0.3, weight: 1.2, color });
             (layer as L.Path & { bringToFront(): void }).bringToFront();
           });
+
           layer.on("mouseout", () => {
             if (!showDistrictsRef.current) return;
             const sel = selectedProvinceRef.current;
             const isInSelected = sel?.id === prov.id;
-            // If another province is selected, keep this district hidden
             if (sel && !isInSelected) {
               pl.setStyle({ fillOpacity: 0, opacity: 0, weight: 0 });
               return;
             }
+            // Keep selected district highlighted
+            if (pl === selectedDistrictLayerRef.current) return;
             const isRegionDimmed = selectedRegionRef.current !== null && prov.region !== selectedRegionRef.current;
             pl.setStyle({
               fillOpacity: isRegionDimmed ? 0.02 : isInSelected ? 0.16 : 0.07,
@@ -422,16 +446,50 @@ export default function GISPage() {
               weight: isInSelected ? 0.8 : 0.5,
             });
           });
+
           layer.on("click", () => {
-            selectProvince(prov);
+            const prev = selectedDistrictMetaRef.current;
+            const prevLayer = selectedDistrictLayerRef.current;
+
+            // Restore previous district to normal style
+            if (prev && prevLayer) {
+              const prevColor = getProvinceColor(prev.prov);
+              const prevInProv = selectedProvinceRef.current?.id === prev.prov.id;
+              prevLayer.setStyle({
+                fillOpacity: prevInProv ? 0.16 : 0.07,
+                fillColor: prevColor,
+                color: prevInProv ? hexToRgba(prevColor, 0.6) : hexToRgba(prevColor, 0.25),
+                weight: prevInProv ? 0.8 : 0.5,
+              });
+            }
+
+            // Toggle off if clicking the same district
+            if (prev?.key === distKey) {
+              selectedDistrictMetaRef.current = null;
+              selectedDistrictLayerRef.current = null;
+              setSelectedDistrictKey(null);
+              return;
+            }
+
+            // Select this district
+            selectedDistrictMetaRef.current = { key: distKey, name: districtName, prov };
+            selectedDistrictLayerRef.current = pl;
+            setSelectedDistrictKey(distKey);
+            pl.setStyle({ fillColor: color, fillOpacity: 0.5, color, weight: 2.5, opacity: 1 });
+            (layer as L.Path & { bringToFront(): void }).bringToFront();
+
+            // Select parent province if not already
+            if (!selectedProvinceRef.current || selectedProvinceRef.current.id !== prov.id) {
+              selectProvince(prov);
+            }
+
+            // Zoom to district
             const matchName = districtName.toLowerCase();
             const distData = prov.districts.find(
               (d) => d.name.toLowerCase().includes(matchName.split(" ")[0])
             );
             if (distData) {
-              setTimeout(() => {
-                map.setView([distData.lat, distData.lng], 10, { animate: true, duration: 0.6 });
-              }, 400);
+              map.setView([distData.lat, distData.lng], 10, { animate: true, duration: 0.6 });
             }
           });
         });
@@ -557,6 +615,11 @@ export default function GISPage() {
   };
 
   const handleProvinceClick = (prov: ProvinceProfile) => {
+    if (selectedProvinceRef.current?.id !== prov.id) {
+      selectedDistrictMetaRef.current = null;
+      selectedDistrictLayerRef.current = null;
+      setSelectedDistrictKey(null);
+    }
     selectedProvinceRef.current = prov;
     setSelectedProvince(prov);
     const map = mapRef.current;
@@ -744,17 +807,69 @@ export default function GISPage() {
 
                   <TabsContent value="districts" className="mt-3">
                     <div className="space-y-1.5">
-                      {prov.districts.map((d) => (
-                        <div
-                          key={d.name}
-                          className="border rounded-lg px-3 py-2 text-xs cursor-pointer hover:bg-muted/50 transition-colors"
-                          onClick={() => mapRef.current?.setView([d.lat, d.lng], 10, { animate: true })}
-                        >
-                          <p className="font-semibold">{d.name}</p>
-                          <p className="text-muted-foreground">Capital: {d.capital}</p>
-                          <p className="text-muted-foreground font-mono">{d.lat.toFixed(3)}°S, {d.lng.toFixed(3)}°E</p>
-                        </div>
-                      ))}
+                      {prov.districts.map((d) => {
+                        const baseName = d.name.replace(/ District$/i, "").trim();
+                        // Try to find matching polygon key (GADM names may differ slightly)
+                        const matchKey = Array.from(districtLayersMapRef.current.keys()).find(
+                          (k) => k.startsWith(prov.id + "::") &&
+                            k.toLowerCase().includes(baseName.toLowerCase().split("-")[0].split(" ")[0])
+                        ) ?? `${prov.id}::${baseName}`;
+                        const isSelected = selectedDistrictKey === matchKey;
+                        const provColor = getProvinceColor(prov);
+                        return (
+                          <div
+                            key={d.name}
+                            className={`border rounded-lg px-3 py-2 text-xs cursor-pointer transition-colors ${
+                              isSelected ? "border-2" : "hover:bg-muted/50"
+                            }`}
+                            style={isSelected ? {
+                              borderColor: provColor,
+                              backgroundColor: hexToRgba(provColor, 0.08),
+                            } : {}}
+                            onClick={() => {
+                              mapRef.current?.setView([d.lat, d.lng], 10, { animate: true });
+                              // Highlight matching polygon if found
+                              const targetLayer = districtLayersMapRef.current.get(matchKey);
+                              const prev = selectedDistrictMetaRef.current;
+                              const prevLayer = selectedDistrictLayerRef.current;
+                              if (prev && prevLayer) {
+                                const prevColor = getProvinceColor(prev.prov);
+                                const prevInProv = selectedProvinceRef.current?.id === prev.prov.id;
+                                prevLayer.setStyle({
+                                  fillOpacity: prevInProv ? 0.16 : 0.07,
+                                  fillColor: prevColor,
+                                  color: prevInProv ? hexToRgba(prevColor, 0.6) : hexToRgba(prevColor, 0.25),
+                                  weight: prevInProv ? 0.8 : 0.5,
+                                });
+                              }
+                              if (prev?.key === matchKey) {
+                                selectedDistrictMetaRef.current = null;
+                                selectedDistrictLayerRef.current = null;
+                                setSelectedDistrictKey(null);
+                              } else {
+                                selectedDistrictMetaRef.current = { key: matchKey, name: baseName, prov };
+                                selectedDistrictLayerRef.current = targetLayer ?? null;
+                                setSelectedDistrictKey(matchKey);
+                                if (targetLayer) {
+                                  targetLayer.setStyle({ fillColor: provColor, fillOpacity: 0.5, color: provColor, weight: 2.5, opacity: 1 });
+                                  (targetLayer as L.Path & { bringToFront(): void }).bringToFront();
+                                }
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-between mb-0.5">
+                              <p className="font-semibold">{d.name}</p>
+                              {isSelected && (
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: hexToRgba(provColor, 0.15), color: provColor }}>
+                                  Selected
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-muted-foreground">Capital: {d.capital}</p>
+                            <p className="text-muted-foreground font-mono">{d.lat.toFixed(3)}°S, {d.lng.toFixed(3)}°E</p>
+                          </div>
+                        );
+                      })}
                     </div>
                   </TabsContent>
 
