@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq, and, isNull, ilike, or, sql, desc, lte, gte, isNotNull } from "drizzle-orm";
+import { eq, and, isNull, ilike, or, sql, desc, lte, gte, isNotNull, inArray } from "drizzle-orm";
 import { db, assets, assetCategories, provinces, districts, facilities, users, activityLogs, notifications, assetTransfers } from "@workspace/db";
 import { requireAuth, enforceScopeFilter, requireAssetAdmin, isWithinAssetScope } from "../lib/auth";
 
@@ -85,8 +85,24 @@ router.get("/v1/assets", requireAuth, enforceScopeFilter, async (req, res) => {
     if (effectiveDistrictId) conditions.push(eq(assets.districtId, effectiveDistrictId));
     if (effectiveFacilityId) conditions.push(eq(assets.facilityId, effectiveFacilityId));
     if (category_id) conditions.push(eq(assets.categoryId, category_id));
-    if (status) conditions.push(eq(assets.status, status as "active" | "disposed" | "missing" | "under_maintenance"));
-    if (condition) conditions.push(eq(assets.condition, condition as "excellent" | "good" | "fair" | "poor"));
+    const VALID_STATUSES = ["active", "disposed", "missing", "under_maintenance"] as const;
+    const VALID_CONDITIONS = ["excellent", "good", "fair", "poor"] as const;
+    if (status) {
+      const statusValues = status.split(",").map((s) => s.trim()).filter((s): s is typeof VALID_STATUSES[number] => (VALID_STATUSES as readonly string[]).includes(s));
+      if (statusValues.length === 1) {
+        conditions.push(eq(assets.status, statusValues[0]));
+      } else if (statusValues.length > 1) {
+        conditions.push(inArray(assets.status, statusValues));
+      }
+    }
+    if (condition) {
+      const conditionValues = condition.split(",").map((c) => c.trim()).filter((c): c is typeof VALID_CONDITIONS[number] => (VALID_CONDITIONS as readonly string[]).includes(c));
+      if (conditionValues.length === 1) {
+        conditions.push(eq(assets.condition, conditionValues[0]));
+      } else if (conditionValues.length > 1) {
+        conditions.push(inArray(assets.condition, conditionValues));
+      }
+    }
     if (search) {
       conditions.push(
         or(
