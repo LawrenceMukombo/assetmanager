@@ -108,9 +108,9 @@ export const PNG_PROVINCES: ProvinceProfile[] = [
     districts: [
       { name: "Abau District", capital: "Abau", lat: -10.06, lng: 148.7 },
       { name: "Goilala District", capital: "Tapini", lat: -8.32, lng: 147.0 },
-      { name: "Kairuku-Hiri District", capital: "Bereina", lat: -8.59, lng: 146.46 },
+      { name: "Kairuku District", capital: "Bereina", lat: -8.59, lng: 146.46 },
+      { name: "Hiri District", capital: "Hiri", lat: -9.1, lng: 147.15 },
       { name: "Rigo District", capital: "Kwikila", lat: -9.67, lng: 147.77 },
-      { name: "Guari District", capital: "Guari", lat: -8.15, lng: 147.18 },
     ],
     languages: ["Motu", "Koiari", "Fuyuge", "Tok Pisin", "English"],
     main_industries: ["Agriculture", "Fishing", "Tourism", "Public Service"],
