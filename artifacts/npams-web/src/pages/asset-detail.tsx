@@ -71,7 +71,7 @@ type WorkflowAction = {
 };
 
 function buildQRPayload(asset: AssetDetail): string {
-  return JSON.stringify({ id: asset.id, tag: asset.assetTag });
+  return `${window.location.origin}/assets/${asset.id}`;
 }
 
 const ADMIN_ROLES = ["Super Admin", "National Asset Controller", "Provincial Admin", "Provincial Asset Officer"];
@@ -583,22 +583,111 @@ export default function AssetDetailPage() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Asset Tag QR</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Printer className="w-4 h-4" /> Asset Label
+              </CardTitle>
             </CardHeader>
-            <CardContent className="flex flex-col items-center">
-              <div className="bg-white p-4 rounded-lg mb-4" ref={qrRef}>
-                <QRCode value={buildQRPayload(asset as AssetDetail)} size={180} />
-              </div>
-              <p className="font-mono text-center font-semibold mb-4">{asset.assetTag}</p>
+            <CardContent className="space-y-4">
+              {/* Printable label — captured by qrRef for download */}
+              <div
+                ref={qrRef}
+                className="border-2 border-dashed rounded-lg p-4 bg-white text-black space-y-3"
+              >
+                {/* Header */}
+                <div className="text-center border-b pb-2 mb-2">
+                  <p className="text-[10px] font-bold tracking-widest text-gray-500 uppercase">NPAMS · Papua New Guinea</p>
+                </div>
 
-              <div className="flex gap-2 w-full">
+                {/* QR Code */}
+                <div className="flex justify-center">
+                  <QRCode value={buildQRPayload(asset as AssetDetail)} size={160} />
+                </div>
+
+                {/* Asset Tag */}
+                <div className="text-center">
+                  <p className="font-mono font-bold text-xl tracking-wider">{asset.assetTag}</p>
+                  <p className="text-sm font-semibold mt-0.5 line-clamp-2">{asset.assetName}</p>
+                </div>
+
+                {/* Status + Condition row */}
+                <div className="flex justify-center gap-2 flex-wrap">
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold text-white ${statusBadgeClass(asset.status)}`}>
+                    {asset.status?.replace(/_/g, " ")}
+                  </span>
+                  <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border border-gray-300 capitalize">
+                    {asset.condition}
+                  </span>
+                </div>
+
+                {/* Key Details Grid */}
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs border-t pt-2">
+                  {asset.category?.categoryName && (
+                    <>
+                      <span className="text-gray-500 font-medium">Category</span>
+                      <span className="font-medium">{asset.category.categoryName}</span>
+                    </>
+                  )}
+                  {asset.brand && (
+                    <>
+                      <span className="text-gray-500 font-medium">Brand</span>
+                      <span className="font-medium">{asset.brand}</span>
+                    </>
+                  )}
+                  {asset.model && (
+                    <>
+                      <span className="text-gray-500 font-medium">Model</span>
+                      <span className="font-medium">{asset.model}</span>
+                    </>
+                  )}
+                  {asset.serialNumber && (
+                    <>
+                      <span className="text-gray-500 font-medium">Serial #</span>
+                      <span className="font-mono text-[11px]">{asset.serialNumber}</span>
+                    </>
+                  )}
+                </div>
+
+                {/* Location */}
+                <div className="text-xs border-t pt-2 space-y-0.5">
+                  <p className="text-gray-500 font-medium">Location</p>
+                  <p className="font-medium">
+                    {[asset.province?.provinceName, asset.district?.districtName, asset.facility?.facilityName]
+                      .filter(Boolean).join(" › ")}
+                  </p>
+                  {asset.assignedUser?.fullName && (
+                    <p className="text-gray-500">Custodian: <span className="text-black font-medium">{asset.assignedUser.fullName}</span></p>
+                  )}
+                </div>
+
+                {/* Financials */}
+                <div className="text-xs border-t pt-2 space-y-0.5">
+                  {asset.purchaseCost && (
+                    <p className="text-gray-500">Purchase Cost: <span className="text-black font-medium">K {Number(asset.purchaseCost).toLocaleString()}</span></p>
+                  )}
+                  {asset.purchaseDate && (
+                    <p className="text-gray-500">Purchase Date: <span className="text-black font-medium">{format(new Date(asset.purchaseDate), "dd MMM yyyy")}</span></p>
+                  )}
+                  {assetAny.warrantyExpiry && (
+                    <p className="text-gray-500">Warranty Expires: <span className="text-black font-medium">{format(new Date(assetAny.warrantyExpiry), "dd MMM yyyy")}</span></p>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="text-center border-t pt-2">
+                  <p className="text-[9px] text-gray-400 uppercase tracking-wide">National Public Asset Management System</p>
+                  <p className="text-[9px] text-gray-400">Scan QR to view full record</p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={downloadQR}>
                   <Download className="w-4 h-4 mr-2" />
-                  Download
+                  Download QR
                 </Button>
                 <Button variant="outline" className="flex-1" onClick={() => window.print()}>
                   <Printer className="w-4 h-4 mr-2" />
-                  Print
+                  Print Label
                 </Button>
               </div>
             </CardContent>

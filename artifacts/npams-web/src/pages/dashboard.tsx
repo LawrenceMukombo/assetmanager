@@ -8,13 +8,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Box, AlertTriangle, Wrench, DollarSign, Map,
   ArrowUpDown, ArrowUp, ArrowDown, Activity, TrendingUp,
-  CheckCircle, XCircle, X, Filter, ChevronRight, ExternalLink,
+  CheckCircle, XCircle, X, Filter, ChevronRight, ExternalLink, MapPin,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -109,20 +110,132 @@ function buildParams(filters: DashFilters, extra?: Record<string, string>): stri
   return s ? `?${s}` : "";
 }
 
+// ─── Location Filter Bar ──────────────────────────────────────────────────────
+
+interface LocationScope {
+  provinceId:   string | null;
+  provinceName: string | null;
+  districtId:   string | null;
+  districtName: string | null;
+}
+const EMPTY_LOCATION: LocationScope = { provinceId: null, provinceName: null, districtId: null, districtName: null };
+
+function LocationFilterBar({
+  scope,
+  onProvinceChange,
+  onDistrictChange,
+  showProvince,
+  fixedProvinceId,
+}: {
+  scope: LocationScope;
+  onProvinceChange: (id: string | null, name: string | null) => void;
+  onDistrictChange: (id: string | null, name: string | null) => void;
+  showProvince: boolean;
+  fixedProvinceId?: string | null;
+}) {
+  const lookupProvinceId = fixedProvinceId ?? scope.provinceId;
+
+  const { data: provData } = useQuery({
+    queryKey: ["provinces-list"],
+    queryFn:  () => apiFetchJson("/api/v1/locations/provinces"),
+    staleTime: 600_000,
+    enabled:  showProvince,
+  });
+
+  const { data: distData } = useQuery({
+    queryKey: ["districts-list", lookupProvinceId],
+    queryFn:  () => apiFetchJson(`/api/v1/locations/provinces/${lookupProvinceId}/districts`),
+    staleTime: 600_000,
+    enabled:  !!lookupProvinceId,
+  });
+
+  type ProvRow = { id: string; provinceName: string };
+  type DistRow = { id: string; districtName: string };
+  const provinces: ProvRow[] = (provData?.data as ProvRow[]) ?? [];
+  const districts: DistRow[] = (distData?.data as DistRow[]) ?? [];
+
+  return (
+    <Card className="border-dashed bg-muted/30">
+      <CardContent className="py-3 px-4 flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground shrink-0">
+          <MapPin className="w-4 h-4" /> Location Scope
+        </div>
+
+        {showProvince && (
+          <Select
+            value={scope.provinceId ?? "_none"}
+            onValueChange={v => {
+              if (v === "_none") { onProvinceChange(null, null); }
+              else {
+                const p = provinces.find(x => x.id === v);
+                onProvinceChange(v, p?.provinceName ?? null);
+              }
+            }}
+          >
+            <SelectTrigger className="h-8 w-[200px] text-sm">
+              <SelectValue placeholder="All Provinces" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">All Provinces</SelectItem>
+              {provinces.map(p => (
+                <SelectItem key={p.id} value={p.id}>{p.provinceName}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        <Select
+          value={scope.districtId ?? "_none"}
+          onValueChange={v => {
+            if (v === "_none") { onDistrictChange(null, null); }
+            else {
+              const d = districts.find(x => x.id === v);
+              onDistrictChange(v, d?.districtName ?? null);
+            }
+          }}
+          disabled={showProvince && !scope.provinceId}
+        >
+          <SelectTrigger className="h-8 w-[200px] text-sm">
+            <SelectValue placeholder={showProvince && !scope.provinceId ? "Select province first" : "All Districts"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_none">All Districts</SelectItem>
+            {districts.map(d => (
+              <SelectItem key={d.id} value={d.id}>{d.districtName}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {(scope.provinceId || scope.districtId) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs text-muted-foreground"
+            onClick={() => { onProvinceChange(null, null); onDistrictChange(null, null); }}
+          >
+            <X className="w-3 h-3 mr-1" /> Reset location
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Active Filter Strip ──────────────────────────────────────────────────────
 
-function FilterStrip({ filters, onClear, total, filteredTotal }: {
+function FilterStrip({ filters, onClear, total, filteredTotal, locationScope }: {
   filters: DashFilters;
   onClear: (key: keyof DashFilters | "all") => void;
   total: number;
   filteredTotal: number;
+  locationScope?: LocationScope;
 }) {
   const chips: { key: keyof DashFilters; label: string }[] = [];
   if (filters.status)       chips.push({ key: "status",       label: STATUS_LABELS[filters.status] ?? capitalize(filters.status) });
   if (filters.condition)    chips.push({ key: "condition",    label: CONDITION_LABELS[filters.condition] ?? capitalize(filters.condition) });
   if (filters.categoryName) chips.push({ key: "categoryName", label: filters.categoryName });
-  if (filters.districtId)   chips.push({ key: "districtId",   label: "District filter" });
-  if (filters.provinceId)   chips.push({ key: "provinceId",   label: "Province filter" });
+  if (filters.districtId)   chips.push({ key: "districtId",   label: locationScope?.districtName ?? "District filter" });
+  if (filters.provinceId)   chips.push({ key: "provinceId",   label: locationScope?.provinceName ?? "Province filter" });
 
   if (chips.length === 0) return null;
 
@@ -425,6 +538,7 @@ interface NationalDashData {
 
 function NationalDashboard() {
   const [filters, setFilters] = useState<DashFilters>(EMPTY_FILTERS);
+  const [locationScope, setLocationScope] = useState<LocationScope>(EMPTY_LOCATION);
   const [pivot, setPivot] = useState<Pivot>("status");
   const [sortKey, setSortKey] = useState<SortKey>("total_assets");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -443,8 +557,28 @@ function NationalDashboard() {
   }, []);
 
   const clearFilter = useCallback((key: keyof DashFilters | "all") => {
-    if (key === "all") setFilters(EMPTY_FILTERS);
-    else setFilters(f => ({ ...f, [key]: null }));
+    if (key === "all") {
+      setFilters(EMPTY_FILTERS);
+      setLocationScope(EMPTY_LOCATION);
+    } else if (key === "provinceId") {
+      setFilters(f => ({ ...f, provinceId: null, districtId: null }));
+      setLocationScope(EMPTY_LOCATION);
+    } else if (key === "districtId") {
+      setFilters(f => ({ ...f, districtId: null }));
+      setLocationScope(s => ({ ...s, districtId: null, districtName: null }));
+    } else {
+      setFilters(f => ({ ...f, [key]: null }));
+    }
+  }, []);
+
+  const handleProvinceChange = useCallback((id: string | null, name: string | null) => {
+    setFilters(f => ({ ...f, provinceId: id, districtId: null }));
+    setLocationScope({ provinceId: id, provinceName: name, districtId: null, districtName: null });
+  }, []);
+
+  const handleDistrictChange = useCallback((id: string | null, name: string | null) => {
+    setFilters(f => ({ ...f, districtId: id }));
+    setLocationScope(s => ({ ...s, districtId: id, districtName: name }));
   }, []);
 
   const openDetail = (title: string, params: Record<string, string>, subtitle?: string) => {
@@ -496,12 +630,21 @@ function NationalDashboard() {
         </div>
       </div>
 
+      {/* Location Filter Bar */}
+      <LocationFilterBar
+        scope={locationScope}
+        onProvinceChange={handleProvinceChange}
+        onDistrictChange={handleDistrictChange}
+        showProvince={true}
+      />
+
       {/* Filter Strip */}
       <FilterStrip
         filters={filters}
         onClear={clearFilter}
         total={d?.total_assets ?? 0}
         filteredTotal={d?.filtered_total ?? d?.total_assets ?? 0}
+        locationScope={locationScope}
       />
 
       {/* KPI Cards */}
@@ -836,7 +979,7 @@ function NationalDashboard() {
 // ═══════════════ PROVINCIAL DASHBOARD ═══════════════
 
 interface ProvDashData {
-  province?: { provinceName?: string; flagUrl?: string; themeAccentColor?: string; flagColors?: string[]; capitalCity?: string; region?: string };
+  province?: { id?: string; provinceName?: string; flagUrl?: string; themeAccentColor?: string; flagColors?: string[]; capitalCity?: string; region?: string };
   total_assets: number; active_assets: number; missing_assets: number;
   disposed_assets: number; maintenance_assets: number; total_value: string;
   filtered_total: number; filtered_value: string; has_filters: boolean;
@@ -853,6 +996,7 @@ function ProvincialDashboard() {
   const [, setLocation] = useLocation();
 
   const [filters, setFilters] = useState<DashFilters>(EMPTY_FILTERS);
+  const [locationScope, setLocationScope] = useState<LocationScope>(EMPTY_LOCATION);
   const [pivot, setPivot] = useState<Pivot>("status");
   const [drawer, setDrawer] = useState<{ title: string; subtitle?: string; params: Record<string, string> } | null>(null);
 
@@ -869,8 +1013,20 @@ function ProvincialDashboard() {
   }, []);
 
   const clearFilter = useCallback((key: keyof DashFilters | "all") => {
-    if (key === "all") setFilters(EMPTY_FILTERS);
-    else setFilters(f => ({ ...f, [key]: null }));
+    if (key === "all") {
+      setFilters(EMPTY_FILTERS);
+      setLocationScope(EMPTY_LOCATION);
+    } else if (key === "districtId") {
+      setFilters(f => ({ ...f, districtId: null }));
+      setLocationScope(s => ({ ...s, districtId: null, districtName: null }));
+    } else {
+      setFilters(f => ({ ...f, [key]: null }));
+    }
+  }, []);
+
+  const handleDistrictChange = useCallback((id: string | null, name: string | null) => {
+    setFilters(f => ({ ...f, districtId: id }));
+    setLocationScope(s => ({ ...s, districtId: id, districtName: name }));
   }, []);
 
   useEffect(() => {
@@ -922,12 +1078,22 @@ function ProvincialDashboard() {
         </div>
       </div>
 
+      {/* Location Filter Bar — district scope selector */}
+      <LocationFilterBar
+        scope={locationScope}
+        onProvinceChange={() => {}}
+        onDistrictChange={handleDistrictChange}
+        showProvince={false}
+        fixedProvinceId={d?.province?.id}
+      />
+
       {/* Filter strip */}
       <FilterStrip
         filters={filters}
         onClear={clearFilter}
         total={d?.total_assets ?? 0}
         filteredTotal={d?.filtered_total ?? d?.total_assets ?? 0}
+        locationScope={locationScope}
       />
 
       {/* Primary KPIs */}
