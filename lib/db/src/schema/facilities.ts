@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, decimal, boolean } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, text, decimal, boolean, unique } from "drizzle-orm/pg-core";
 import { districts } from "./districts";
 
 export const facilities = pgTable("facilities", {
@@ -10,7 +10,9 @@ export const facilities = pgTable("facilities", {
   gpsLatitude: decimal("gps_latitude", { precision: 10, scale: 7 }),
   gpsLongitude: decimal("gps_longitude", { precision: 10, scale: 7 }),
   active: boolean("active").notNull().default(true),
-});
+}, (t) => [
+  unique("facilities_district_name_unique").on(t.districtId, t.facilityName),
+]);
 
 export type Facility = typeof facilities.$inferSelect;
 export type InsertFacility = typeof facilities.$inferInsert;

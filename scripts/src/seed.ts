@@ -87,7 +87,7 @@ async function main() {
   }
   console.log("Provinces seeded:", Object.keys(provinceMap).length);
 
-  // --- DISTRICTS for Morobe, WHP, NCD ---
+  // --- DISTRICTS for Morobe, WHP, NCD, Central ---
   const districtData = [
     // Morobe
     { provinceCode: "MO", districtName: "Lae District", districtCode: "MO-LAE" },
@@ -102,6 +102,12 @@ async function main() {
     { provinceCode: "NCD", districtName: "Moresby North-East District", districtCode: "NCD-NE" },
     { provinceCode: "NCD", districtName: "Moresby North-West District", districtCode: "NCD-NW" },
     { provinceCode: "NCD", districtName: "Moresby South District", districtCode: "NCD-SO" },
+    // Central Province (5 districts — Kairuku-Hiri split into two)
+    { provinceCode: "CP", districtName: "Abau District",    districtCode: "CP-AB" },
+    { provinceCode: "CP", districtName: "Goilala District", districtCode: "CP-GO" },
+    { provinceCode: "CP", districtName: "Kairuku District", districtCode: "CP-KA" },
+    { provinceCode: "CP", districtName: "Hiri District",    districtCode: "CP-HI" },
+    { provinceCode: "CP", districtName: "Rigo District",    districtCode: "CP-RI" },
   ];
 
   const districtMap: Record<string, string> = {};
