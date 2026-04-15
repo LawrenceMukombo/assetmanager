@@ -13,37 +13,16 @@ modules = ["nodejs-24", "postgresql-16"]
 
   [agent]
   stack = "PNPM_WORKSPACE"
-expertMode = true
+  expertMode = true
 
   [postMerge]
   path = "scripts/post-merge.sh"
   timeoutMs = 20000
 
-[[ports]]
-localPort = 8080
-externalPort = 8080
-
-[[ports]]
-localPort = 8081
-externalPort = 80
-
-[[ports]]
-localPort = 8082
-externalPort = 3001
-
-[[ports]]
-localPort = 24529
-externalPort = 3000
-
-[[ports]]
-localPort = 24530
-externalPort = 3002
+  [[ports]]
+  localPort = 8080
+  externalPort = 80
 
   [nix]
   channel = "stable-25_05"
-
-[userenv]
-
-[userenv.shared]
-JWT_SECRET = "95d5f77ec1ca3cf7878a5701b7e4b76e95f36dfe31746daa72528d72881e096c2f5e5e664acec27af1a72d4674e696e966f4fbd6c10a0f1142ee775016b085c5"
   
