@@ -17,15 +17,6 @@ localPort = 24529
 [services.development]
 run = "pnpm --filter @workspace/npams-web run dev"
 
-[services.production]
-build = [ "pnpm", "--filter", "@workspace/npams-web", "run", "build" ]
-publicDir = "artifacts/npams-web/dist/public"
-serve = "static"
-
-[[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
-
 [services.env]
 PORT = "24529"
 BASE_PATH = "/"
