@@ -35,26 +35,27 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api", router);
 
 if (process.env.NODE_ENV === "production") {
-  // Resolve relative to this compiled file's location rather than process.cwd()
-  // so the path works regardless of which directory the process is started from.
+  // Frontend files are copied into dist/frontend/ by the build step,
+  // so they are always co-located with this bundle in the deployment container.
   const serverDir = path.dirname(fileURLToPath(import.meta.url));
-  const frontendDist = path.resolve(serverDir, "../../npams-web/dist/public");
+  const frontendDist = path.resolve(serverDir, "frontend");
   const indexHtml = path.join(frontendDist, "index.html");
 
-  logger.info({ frontendDist, exists: existsSync(frontendDist) }, "Static files configuration");
+  logger.info({ frontendDist, indexHtmlExists: existsSync(indexHtml), frontendExists: existsSync(frontendDist) }, "Static files configuration");
 
-  if (existsSync(frontendDist)) {
+  if (existsSync(indexHtml)) {
     app.use(express.static(frontendDist));
 
     app.get("*", (_req: Request, res: Response, next: NextFunction) => {
-      if (!existsSync(indexHtml)) {
-        logger.error({ indexHtml }, "index.html not found");
-        return next(new Error("Frontend index.html not found"));
-      }
-      res.sendFile(indexHtml);
+      res.sendFile(indexHtml, (err) => {
+        if (err) {
+          logger.error({ indexHtml, err: String(err) }, "sendFile failed");
+          next(err);
+        }
+      });
     });
   } else {
-    logger.warn({ frontendDist, cwd: process.cwd() }, "Frontend dist not found — static files will not be served");
+    logger.warn({ frontendDist, serverDir }, "Frontend dist/index.html not found — static files will not be served");
   }
 }
 
