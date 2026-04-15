@@ -9,11 +9,8 @@ localPort = 8080
 name = "API Server"
 paths = ["/api"]
 
-[services.env]
-PORT = "8080"
-
 [services.development]
-run = "pnpm --filter @workspace/api-server run dev"
+run = "PORT=8080 pnpm --filter @workspace/api-server run dev"
 
 [services.production]
 build = ["sh", "-c", "pnpm --filter @workspace/npams-web run build && pnpm --filter @workspace/api-server run build"]
