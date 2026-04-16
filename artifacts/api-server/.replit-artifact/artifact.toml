@@ -13,7 +13,7 @@ kind = "api"
   run = "PORT=8080 pnpm --filter @workspace/api-server run dev"
 
   [services.production]
-  build = ["sh", "-c", "pnpm --filter @workspace/npams-web run build && pnpm --filter @workspace/api-server run build && mkdir -p artifacts/api-server/dist/frontend && cp -r artifacts/npams-web/dist/public/. artifacts/api-server/dist/frontend/"]
+  build = ["sh", "-c", "pnpm --filter @workspace/npams-web run build && pnpm --filter @workspace/api-server run build"]
   run = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
 
   [services.production.health.startup]
