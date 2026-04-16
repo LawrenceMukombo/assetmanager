@@ -34,29 +34,31 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
 
-if (process.env.NODE_ENV === "production") {
-  // Frontend files are copied into dist/frontend/ by the build step,
-  // so they are always co-located with this bundle in the deployment container.
-  const serverDir = path.dirname(fileURLToPath(import.meta.url));
-  const frontendDist = path.resolve(serverDir, "frontend");
-  const indexHtml = path.join(frontendDist, "index.html");
+// Serve frontend static files whenever the built assets are co-located with
+// this bundle (i.e. in production). Checking file existence avoids any
+// dependency on the NODE_ENV variable being set correctly.
+const serverDir = path.dirname(fileURLToPath(import.meta.url));
+const frontendDist = path.resolve(serverDir, "frontend");
+const indexHtml = path.join(frontendDist, "index.html");
 
-  logger.info({ frontendDist, indexHtmlExists: existsSync(indexHtml), frontendExists: existsSync(frontendDist) }, "Static files configuration");
+logger.info(
+  { frontendDist, frontendExists: existsSync(frontendDist), indexHtmlExists: existsSync(indexHtml) },
+  "Static files configuration"
+);
 
-  if (existsSync(indexHtml)) {
-    app.use(express.static(frontendDist));
+if (existsSync(indexHtml)) {
+  app.use(express.static(frontendDist));
 
-    app.get("*", (_req: Request, res: Response, next: NextFunction) => {
-      res.sendFile(indexHtml, (err) => {
-        if (err) {
-          logger.error({ indexHtml, err: String(err) }, "sendFile failed");
-          next(err);
-        }
-      });
+  app.get(/.*/, (_req: Request, res: Response, next: NextFunction) => {
+    res.sendFile(indexHtml, (err) => {
+      if (err) {
+        logger.error({ indexHtml, err: String(err) }, "sendFile failed");
+        next(err);
+      }
     });
-  } else {
-    logger.warn({ frontendDist, serverDir }, "Frontend dist/index.html not found — static files will not be served");
-  }
+  });
+} else {
+  logger.warn({ frontendDist, serverDir }, "Frontend dist/index.html not found — API-only mode");
 }
 
 export default app;
