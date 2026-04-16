@@ -33,6 +33,21 @@ function loadFromStorage(): ProvinceBranding {
   return { provinceName: null, flagUrl: null, themeAccentColor: null, flagColors: [] };
 }
 
+const NATIONAL_FLAG = "/flags/png_national.svg";
+
+function setFavicon(url: string | null) {
+  const href = url && url.trim() ? url : NATIONAL_FLAG;
+  const type = href.endsWith(".svg") ? "image/svg+xml" : "image/png";
+  let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+  if (!link) {
+    link = document.createElement("link");
+    link.rel = "icon";
+    document.head.appendChild(link);
+  }
+  link.type = type;
+  link.href = href;
+}
+
 function applyAccentCss(colors: string[], singleColor: string | null) {
   const root = document.documentElement;
   const primary = colors[0] ?? singleColor;
@@ -50,11 +65,13 @@ export function ProvinceBrandingProvider({ children }: { children: ReactNode }) 
 
   useEffect(() => {
     applyAccentCss(branding.flagColors, branding.themeAccentColor);
+    setFavicon(branding.flagUrl);
   }, []);
 
   const applyBranding = useCallback((b: ProvinceBranding) => {
     setBranding(b);
     applyAccentCss(b.flagColors, b.themeAccentColor);
+    setFavicon(b.flagUrl);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(b));
     } catch {
@@ -66,6 +83,7 @@ export function ProvinceBrandingProvider({ children }: { children: ReactNode }) 
     const empty: ProvinceBranding = { provinceName: null, flagUrl: null, themeAccentColor: null, flagColors: [] };
     setBranding(empty);
     applyAccentCss([], null);
+    setFavicon(null);
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
