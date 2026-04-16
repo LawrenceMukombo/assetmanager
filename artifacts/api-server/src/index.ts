@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runWarrantyCheck } from "./routes/assets";
+import { autoSeedIfEmpty } from "./lib/autoSeed";
 
 const rawPort = process.env["PORT"];
 
@@ -23,6 +24,9 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  autoSeedIfEmpty()
+    .catch((err) => logger.error({ err }, "Auto-seed failed"));
 
   runWarrantyCheck()
     .then((count) => {
