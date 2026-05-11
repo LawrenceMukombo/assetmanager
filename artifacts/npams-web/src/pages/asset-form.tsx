@@ -245,6 +245,12 @@ export default function AssetForm() {
   useEffect(() => {
     if (isEdit && assetData?.data) {
       const asset = assetData.data as AssetFormValues & { assetName?: string; assetTag?: string; serialNumber?: string; purchaseDate?: string; purchaseCost?: string; warrantyExpiry?: string; usefulLifeYears?: number; depreciationMethod?: string; salvageValue?: string; photoUrl?: string; category?: { id?: string }; province?: { id?: string }; district?: { id?: string }; facility?: { id?: string }; assignedUser?: { id?: string } };
+      const validConditions: AssetFormValues["condition"][] = ["excellent", "good", "fair", "poor"];
+      const validStatuses: AssetFormValues["status"][] = ["active", "missing", "disposed", "under_maintenance"];
+      const validDepMethods: AssetFormValues["depreciation_method"][] = ["none", "straight_line", "declining_balance"];
+      const rawCondition = (asset as { condition?: string }).condition;
+      const rawStatus = (asset as { status?: string }).status;
+      const rawDepMethod = (asset as { depreciationMethod?: string }).depreciationMethod;
       form.reset({
         asset_name: (asset as { assetName?: string }).assetName || "",
         asset_tag: (asset as { assetTag?: string }).assetTag || "",
@@ -252,14 +258,14 @@ export default function AssetForm() {
         serial_number: (asset as { serialNumber?: string }).serialNumber || "",
         brand: (asset as { brand?: string }).brand || "",
         model: (asset as { model?: string }).model || "",
-        condition: ((asset as { condition?: string }).condition as AssetFormValues["condition"]) ?? "good",
-        status: ((asset as { status?: string }).status as AssetFormValues["status"]) ?? "active",
+        condition: validConditions.includes(rawCondition as AssetFormValues["condition"]) ? (rawCondition as AssetFormValues["condition"]) : "good",
+        status: validStatuses.includes(rawStatus as AssetFormValues["status"]) ? (rawStatus as AssetFormValues["status"]) : "active",
         purchase_date: (asset as { purchaseDate?: string }).purchaseDate ? new Date((asset as { purchaseDate: string }).purchaseDate).toISOString().split('T')[0] : "",
         purchase_cost: (asset as { purchaseCost?: string }).purchaseCost ? Number((asset as { purchaseCost: string }).purchaseCost) : undefined,
         supplier: (asset as { supplier?: string }).supplier || "",
         warranty_expiry: (asset as { warrantyExpiry?: string }).warrantyExpiry ? new Date((asset as { warrantyExpiry: string }).warrantyExpiry).toISOString().split('T')[0] : "",
         useful_life_years: (asset as { usefulLifeYears?: number }).usefulLifeYears || undefined,
-        depreciation_method: ((asset as { depreciationMethod?: string }).depreciationMethod as AssetFormValues["depreciation_method"]) ?? "none",
+        depreciation_method: validDepMethods.includes(rawDepMethod as AssetFormValues["depreciation_method"]) ? (rawDepMethod as AssetFormValues["depreciation_method"]) : "none",
         salvage_value: (asset as { salvageValue?: string }).salvageValue ? Number((asset as { salvageValue: string }).salvageValue) : undefined,
         notes: (asset as { notes?: string }).notes || "",
         photo_url: (asset as { photoUrl?: string }).photoUrl || "",
@@ -324,6 +330,76 @@ export default function AssetForm() {
     }
   };
 
+  const fieldStepMap: Record<keyof AssetFormValues, number> = {
+    asset_name: 1,
+    asset_tag: 1,
+    category_id: 1,
+    condition: 1,
+    status: 1,
+    brand: 1,
+    model: 1,
+    serial_number: 1,
+    purchase_date: 2,
+    purchase_cost: 2,
+    supplier: 2,
+    warranty_expiry: 2,
+    useful_life_years: 2,
+    depreciation_method: 2,
+    salvage_value: 2,
+    notes: 2,
+    photo_url: 2,
+    province_id: 3,
+    district_id: 3,
+    facility_id: 3,
+    assigned_to_user: 3,
+  };
+
+  const fieldLabels: Record<keyof AssetFormValues, string> = {
+    asset_name: "Asset Name",
+    asset_tag: "Asset Tag",
+    category_id: "Category",
+    condition: "Condition",
+    status: "Status",
+    brand: "Brand",
+    model: "Model",
+    serial_number: "Serial Number",
+    purchase_date: "Purchase Date",
+    purchase_cost: "Purchase Cost",
+    supplier: "Supplier",
+    warranty_expiry: "Warranty Expiry",
+    useful_life_years: "Useful Life (Years)",
+    depreciation_method: "Depreciation Method",
+    salvage_value: "Salvage Value",
+    notes: "Notes",
+    photo_url: "Asset Photo",
+    province_id: "Province",
+    district_id: "District",
+    facility_id: "Facility",
+    assigned_to_user: "Assigned Custodian",
+  };
+
+  const onInvalid = (errors: Record<string, unknown>) => {
+    const invalidFields = Object.keys(errors) as (keyof AssetFormValues)[];
+    if (invalidFields.length === 0) return;
+
+    const earliestStep = invalidFields.reduce((min, f) => {
+      const s = fieldStepMap[f] ?? 1;
+      return s < min ? s : min;
+    }, 4);
+
+    const labels = invalidFields
+      .map(f => fieldLabels[f] ?? String(f))
+      .filter(Boolean);
+
+    toast({
+      title: "Please fix the highlighted fields before saving",
+      description: labels.join(", "),
+      variant: "destructive",
+    });
+
+    if (earliestStep !== step) setStep(earliestStep);
+  };
+
   const nextStep = async () => {
     const fieldsToValidate: (keyof AssetFormValues)[] =
       step === 1 ? ["asset_name", "asset_tag", "category_id", "condition", "status"] :
@@ -381,7 +457,7 @@ export default function AssetForm() {
       <Card>
         <CardContent className="pt-6">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
               
               {/* Step 1: Basic Details */}
               <div className={step === 1 ? 'block' : 'hidden'}>
