@@ -7,6 +7,8 @@
     "hello": "tsx ./src/hello.ts",
     "seed": "tsx ./src/seed.ts",
     "test:rbac": "tsx ./src/rbac-integration-test.ts",
+    "test:user-delete": "tsx ./src/user-delete-integration-test.ts",
+    "test:integration": "pnpm run test:rbac && pnpm run test:user-delete",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
