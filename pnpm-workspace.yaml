@@ -43,6 +43,10 @@ onlyBuiltDependencies:
 
 overrides:
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0
+  '@tootallnate/once': 3.0.1
+  brace-expansion@>=2.0.0 <2.0.3: ^2.0.3
+  dompurify: ^3.4.0
+  yaml@>=2.0.0 <2.8.3: ^2.8.3
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-arm64': '-'
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-x64': '-'
   '@expo/ngrok-bin>@expo/ngrok-bin-freebsd-ia32': '-'
