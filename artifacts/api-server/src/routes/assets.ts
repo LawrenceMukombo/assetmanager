@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, and, isNull, ilike, or, sql, desc, lte, gte, isNotNull, inArray } from "drizzle-orm";
-import { db, assets, assetCategories, provinces, districts, facilities, users, activityLogs, notifications, assetTransfers } from "@workspace/db";
+import { db, assets, assetCategories, provinces, districts, facilities, users, activityLogs, notifications, assetTransfers, agencies } from "@workspace/db";
 import { requireAuth, enforceScopeFilter, requireAssetAdmin, isWithinAssetScope } from "../lib/auth";
 
 const router = Router();
@@ -334,6 +334,12 @@ router.get("/v1/assets/:id", requireAuth, async (req, res) => {
           id: facilities.id,
           facilityName: facilities.facilityName,
         },
+        agency: {
+          id: agencies.id,
+          agencyName: agencies.agencyName,
+          agencyCode: agencies.agencyCode,
+          logoUrl: agencies.logoUrl,
+        },
         assignedUser: {
           id: users.id,
           fullName: users.fullName,
@@ -345,6 +351,7 @@ router.get("/v1/assets/:id", requireAuth, async (req, res) => {
       .leftJoin(provinces, eq(assets.provinceId, provinces.id))
       .leftJoin(districts, eq(assets.districtId, districts.id))
       .leftJoin(facilities, eq(assets.facilityId, facilities.id))
+      .leftJoin(agencies, eq(assets.agencyId, agencies.id))
       .leftJoin(users, eq(assets.assignedToUser, users.id))
       .where(and(eq(assets.id, req.params.id as string), isNull(assets.deletedAt)))
       .limit(1);

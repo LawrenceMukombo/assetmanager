@@ -395,13 +395,30 @@ export default function AssetDetailPage() {
                 </CardHeader>
                 <CardContent className="grid sm:grid-cols-2 gap-y-4 gap-x-6">
                   <div className="sm:col-span-2">
-                    <p className="text-sm text-muted-foreground mb-1">Location Path</p>
+                    <p className="text-sm text-muted-foreground mb-1">{asset.agency ? "Agency / Location" : "Location Path"}</p>
                     <p className="font-medium flex items-center gap-2 flex-wrap">
-                      {asset.province?.provinceName ?? "N/A"}
-                      <span className="text-muted-foreground">›</span>
-                      {asset.district?.districtName ?? "N/A"}
-                      <span className="text-muted-foreground">›</span>
-                      {asset.facility?.facilityName ?? "N/A"}
+                      {asset.agency ? (
+                        <>
+                          {asset.agency.logoUrl && (
+                            <img src={asset.agency.logoUrl} alt="" className="h-5 w-5 object-contain" />
+                          )}
+                          <span>{asset.agency.agencyName}</span>
+                          {asset.facility?.facilityName && (
+                            <>
+                              <span className="text-muted-foreground">›</span>
+                              <span>{asset.facility.facilityName}</span>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {asset.province?.provinceName ?? "N/A"}
+                          <span className="text-muted-foreground">›</span>
+                          {asset.district?.districtName ?? "N/A"}
+                          <span className="text-muted-foreground">›</span>
+                          {asset.facility?.facilityName ?? "N/A"}
+                        </>
+                      )}
                     </p>
                   </div>
                   <div className="sm:col-span-2">
@@ -656,8 +673,9 @@ export default function AssetDetailPage() {
                 <div className="text-xs border-t pt-2 space-y-0.5">
                   <p className="text-gray-500 font-medium">Location</p>
                   <p className="font-medium">
-                    {[asset.province?.provinceName, asset.district?.districtName, asset.facility?.facilityName]
-                      .filter(Boolean).join(" › ")}
+                    {asset.agency
+                      ? [asset.agency.agencyName, asset.facility?.facilityName].filter(Boolean).join(" › ")
+                      : [asset.province?.provinceName, asset.district?.districtName, asset.facility?.facilityName].filter(Boolean).join(" › ")}
                   </p>
                   {asset.assignedUser?.fullName && (
                     <p className="text-gray-500">Custodian: <span className="text-black font-medium">{asset.assignedUser.fullName}</span></p>
