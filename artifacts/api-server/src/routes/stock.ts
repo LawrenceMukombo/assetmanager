@@ -248,8 +248,10 @@ router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (re
     : movementType === "transfer" ? 0
     : quantity; // adjust = positive delta
 
-  // Validate transfer destination is in caller scope (single-location stock model:
-  // transfer reassigns the item's facility; per-location balances are tracked in follow-up #7).
+  // Validate transfer destination is in caller scope. Single-location stock model:
+  // transfer fully relocates the item to the new facility; per-location partial balances
+  // are tracked in follow-up #7. The quantity field on transfers is informational
+  // (must equal on-hand at txn time, validated below).
   if (movementType === "transfer") {
     const toFacilityId = orNull(body.to_facility_id);
     if (!toFacilityId) {
@@ -266,7 +268,11 @@ router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (re
       res.status(400).json({ success: false, message: "Destination facility not found", data: null });
       return;
     }
-    if (!isWithinAssetScope(req.user, {
+    // Agency-scoped users own stock by agencyId, not by facility location — they can
+    // transfer to any facility their agency operates in. Geographic-scoped users
+    // (national/provincial/district/facility) must transfer within their location scope.
+    const isAgencyScoped = req.user.scopeLevel === "agency" || !!req.user.agencyId;
+    if (!isAgencyScoped && !isWithinAssetScope(req.user, {
       provinceId: destFacility.provinceId ?? null,
       districtId: destFacility.districtId,
       facilityId: destFacility.id,
@@ -294,6 +300,14 @@ router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (re
       if (!item) return { status: 404 as const, message: "Stock item not found" };
       const newQty = item.onHandQuantity + delta;
       if (newQty < 0) return { status: 400 as const, message: "Insufficient stock for issue" };
+      // Single-location stock model: transfer must move the entire on-hand balance.
+      // Partial-quantity transfers require per-location balances (follow-up #7).
+      if (movementType === "transfer" && quantity !== item.onHandQuantity) {
+        return {
+          status: 400 as const,
+          message: `Transfer quantity must equal current on-hand (${item.onHandQuantity} ${item.unitOfMeasure}). Partial transfers require per-location balances and will be supported in a future release.`,
+        };
+      }
 
       await tx.insert(stockMovements).values({
         stockItemId: item.id,

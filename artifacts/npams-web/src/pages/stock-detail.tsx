@@ -322,6 +322,11 @@ export default function StockDetailPage() {
               <Input type="number" min="1" value={movementForm.quantity} onChange={(e) => setMovementForm({ ...movementForm, quantity: e.target.value })} />
             </div>
             {movementType === "transfer" && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                Transfers relocate the full on-hand balance ({data.onHandQuantity.toLocaleString()} {data.unitOfMeasure}) to the destination. Quantity must equal current on-hand. Partial transfers require per-location balances (planned).
+              </p>
+            )}
+            {movementType === "transfer" && (
               <div>
                 <Label>Destination facility *</Label>
                 <Select value={movementForm.to_facility_id} onValueChange={(v) => setMovementForm({ ...movementForm, to_facility_id: v })}>
