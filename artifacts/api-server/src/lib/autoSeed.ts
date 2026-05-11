@@ -13,6 +13,12 @@ import {
   userScope,
   assetCategories,
   assets,
+  assetTransfers,
+  activityLogs,
+  maintenanceSchedules,
+  auditItems,
+  auditAssignments,
+  auditSessions,
   notifications,
   stockItems,
   stockBalances,
@@ -54,6 +60,7 @@ export async function autoSeedIfEmpty(): Promise<void> {
   await seedAdditionalIcaUsers();
   await seedAgencyStock();
   await seedIcaPerLocationStockBalances();
+  await seedAssetHistory();
 
   if (usersExist && agenciesExist) {
     logger.info("Auto-seed: idempotent top-up complete");
@@ -1053,5 +1060,459 @@ async function seedIcaPerLocationStockBalances(): Promise<void> {
     if (removed.length > 0) {
       logger.info({ removed: removed.length }, "Auto-seed: removed PNGICA stock balances at non-ICSA facilities");
     }
+  }
+}
+
+// ── ASSET HISTORY: depreciation defaults + transfer history + activity log ───
+// Idempotent — backfills missing depreciation fields, then for each seeded
+// asset that has no transfers/activity yet, creates a believable history.
+async function seedAssetHistory(): Promise<void> {
+  // 1) Backfill depreciation fields on assets that were seeded without them.
+  await backfillDepreciationDefaults();
+
+  // 2) Per-asset history (transfers + activity log). Skips any asset that
+  //    already has rows so server restarts and real user actions never get
+  //    duplicated.
+  await seedPerAssetHistory();
+}
+
+// Demo asset prefixes — only assets whose tag starts with one of these are
+// touched by the history seeder. Real, user-created assets (any other tag,
+// e.g. test fixtures or assets created via the UI) are left alone so that
+// repeated server starts cannot mutate non-demo records.
+const DEMO_ASSET_PREFIXES = ["MO-", "WHP-", "NCD-", "PNGICA-"] as const;
+
+function isDemoAssetTag(tag: string | null | undefined): boolean {
+  if (!tag) return false;
+  return DEMO_ASSET_PREFIXES.some((p) => tag.startsWith(p));
+}
+
+const CATEGORY_DEFAULTS: Record<string, { life: number; salvagePct: number }> = {
+  "ICT Equipment":               { life: 5,  salvagePct: 0.10 },
+  "Vehicles & Transport":        { life: 8,  salvagePct: 0.10 },
+  "Office Furniture":            { life: 12, salvagePct: 0.10 },
+  "Medical Equipment":           { life: 10, salvagePct: 0.05 },
+  "Heavy Machinery":             { life: 15, salvagePct: 0.10 },
+  "Buildings & Infrastructure":  { life: 40, salvagePct: 0.10 },
+  "Communication Equipment":     { life: 8,  salvagePct: 0.10 },
+};
+
+function ymd(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+async function backfillDepreciationDefaults(): Promise<void> {
+  const cats = await db.select({ id: assetCategories.id, categoryName: assetCategories.categoryName }).from(assetCategories);
+  const catNameById: Record<string, string> = {};
+  for (const c of cats) catNameById[c.id] = c.categoryName;
+
+  const rows = await db
+    .select({
+      id: assets.id,
+      assetTag: assets.assetTag,
+      categoryId: assets.categoryId,
+      purchaseCost: assets.purchaseCost,
+      purchaseDate: assets.purchaseDate,
+      usefulLifeYears: assets.usefulLifeYears,
+      salvageValue: assets.salvageValue,
+      depreciationMethod: assets.depreciationMethod,
+      createdAt: assets.createdAt,
+    })
+    .from(assets)
+    .where(isNull(assets.deletedAt));
+
+  let updated = 0;
+  for (const a of rows) {
+    if (!isDemoAssetTag(a.assetTag)) continue;
+    const catName = a.categoryId ? catNameById[a.categoryId] : undefined;
+    const defaults = catName ? CATEGORY_DEFAULTS[catName] : undefined;
+    const patch: Partial<typeof assets.$inferInsert> = {};
+
+    if (a.depreciationMethod === "none") patch.depreciationMethod = "straight_line";
+
+    if (!a.usefulLifeYears && defaults) patch.usefulLifeYears = defaults.life;
+
+    if (!a.purchaseDate) {
+      // Fall back to ~3 years before created_at so depreciation has elapsed.
+      const base = a.createdAt ? new Date(a.createdAt) : new Date();
+      base.setFullYear(base.getFullYear() - 3);
+      patch.purchaseDate = ymd(base);
+    }
+
+    if (!a.salvageValue && a.purchaseCost && defaults) {
+      const cost = parseFloat(a.purchaseCost);
+      patch.salvageValue = (cost * defaults.salvagePct).toFixed(2);
+    }
+
+    if (Object.keys(patch).length > 0) {
+      await db.update(assets).set(patch).where(eq(assets.id, a.id));
+      updated++;
+    }
+  }
+  if (updated > 0) logger.info({ updated }, "Auto-seed: backfilled depreciation defaults");
+}
+
+// Tiny deterministic hash → integer in [0, m).
+function hashMod(s: string, m: number): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h % m;
+}
+
+const TRANSFER_REASONS = [
+  "Reassignment to operational priority site",
+  "Facility consolidation",
+  "Loaned to district office for temporary use",
+  "Returned from maintenance facility",
+  "Officer transfer — equipment follows custodian",
+  "Re-allocation following annual asset review",
+  "Replacing decommissioned unit at destination",
+  "Capacity boost for high-demand site",
+];
+
+async function seedPerAssetHistory(): Promise<void> {
+  // Load assets with their current location.
+  const assetRows = await db
+    .select({
+      id: assets.id,
+      assetTag: assets.assetTag,
+      assetName: assets.assetName,
+      status: assets.status,
+      provinceId: assets.provinceId,
+      agencyId: assets.agencyId,
+      districtId: assets.districtId,
+      facilityId: assets.facilityId,
+      purchaseDate: assets.purchaseDate,
+      createdAt: assets.createdAt,
+      createdBy: assets.createdBy,
+    })
+    .from(assets)
+    .where(isNull(assets.deletedAt));
+
+  if (assetRows.length === 0) return;
+
+  // Pre-resolve province for each facility (used when an asset is agency-scoped
+  // and has no provinceId of its own).
+  const facilityIds = Array.from(new Set(assetRows.map((a) => a.facilityId).filter((v): v is string => !!v)));
+  const facilityProvince: Record<string, { provinceId: string | null; districtId: string | null }> = {};
+  if (facilityIds.length > 0) {
+    const fRows = await db
+      .select({
+        facilityId: facilities.id,
+        districtId: facilities.districtId,
+        provinceId: districts.provinceId,
+      })
+      .from(facilities)
+      .leftJoin(districts, eq(facilities.districtId, districts.id))
+      .where(inArray(facilities.id, facilityIds));
+    for (const r of fRows) {
+      facilityProvince[r.facilityId] = { provinceId: r.provinceId ?? null, districtId: r.districtId ?? null };
+    }
+  }
+
+  // Per-province alternative facilities to use as "from" sources.
+  const allFacRows = await db
+    .select({
+      id: facilities.id,
+      name: facilities.facilityName,
+      districtId: facilities.districtId,
+      provinceId: districts.provinceId,
+    })
+    .from(facilities)
+    .leftJoin(districts, eq(facilities.districtId, districts.id));
+  const facByProvince: Record<string, Array<{ id: string; name: string; districtId: string | null }>> = {};
+  for (const f of allFacRows) {
+    const pid = f.provinceId ?? "__none__";
+    (facByProvince[pid] ??= []).push({ id: f.id, name: f.name, districtId: f.districtId ?? null });
+  }
+
+  // Pick a pool of seeded users to attribute history to. Prefer named non-superadmin.
+  const userRows = await db.select({ id: users.id, fullName: users.fullName, email: users.email }).from(users);
+  const userPool = userRows.filter((u) => !u.email.startsWith("superadmin@"));
+  const fallbackUserId = (userRows[0]?.id) ?? null;
+  if (!fallbackUserId) return;
+
+  // Existing maintenance schedules per asset (used to weave linked entries).
+  const maintRows = await db
+    .select({
+      id: maintenanceSchedules.id,
+      assetId: maintenanceSchedules.assetId,
+      title: maintenanceSchedules.title,
+      status: maintenanceSchedules.status,
+      scheduledDate: maintenanceSchedules.scheduledDate,
+      completedDate: maintenanceSchedules.completedDate,
+    })
+    .from(maintenanceSchedules);
+  const maintByAsset: Record<string, typeof maintRows> = {};
+  for (const m of maintRows) (maintByAsset[m.assetId] ??= []).push(m);
+
+  // Existing transfer + activity counts per asset, for idempotency.
+  const existingTransfers = await db
+    .select({ assetId: assetTransfers.assetId })
+    .from(assetTransfers);
+  const hasTransfer = new Set(existingTransfers.map((r) => r.assetId));
+
+  const existingActivity = await db
+    .select({ entityId: activityLogs.entityId })
+    .from(activityLogs)
+    .where(eq(activityLogs.entityType, "asset"));
+  const hasActivity = new Set(existingActivity.map((r) => r.entityId).filter((v): v is string => !!v));
+
+  // Existing audit items per asset (used to weave linked AUDIT events).
+  const auditRows = await db
+    .select({
+      id: auditItems.id,
+      assetId: auditItems.assetId,
+      status: auditItems.status,
+      conditionObserved: auditItems.conditionObserved,
+      verifiedAt: auditItems.verifiedAt,
+      verifiedBy: auditItems.verifiedBy,
+      sessionName: auditSessions.name,
+      sessionId: auditSessions.id,
+    })
+    .from(auditItems)
+    .leftJoin(auditAssignments, eq(auditItems.assignmentId, auditAssignments.id))
+    .leftJoin(auditSessions, eq(auditAssignments.sessionId, auditSessions.id));
+  const auditByAsset: Record<string, typeof auditRows> = {};
+  for (const r of auditRows) (auditByAsset[r.assetId] ??= []).push(r);
+
+  let transfersInserted = 0;
+  let activityInserted = 0;
+  let skippedNonDemo = 0;
+
+  for (const a of assetRows) {
+    // Demo-only: never touch user-created or test assets.
+    if (!isDemoAssetTag(a.assetTag)) {
+      skippedNonDemo++;
+      continue;
+    }
+
+    // Resolve "current" province/district/facility for this asset.
+    let currProvinceId = a.provinceId;
+    let currDistrictId = a.districtId;
+    if (!currProvinceId && a.facilityId && facilityProvince[a.facilityId]) {
+      currProvinceId = facilityProvince[a.facilityId].provinceId;
+      currDistrictId = currDistrictId ?? facilityProvince[a.facilityId].districtId;
+    }
+    const currFacilityId = a.facilityId ?? null;
+
+    // Pick a deterministic actor user.
+    const actor = userPool.length > 0
+      ? userPool[hashMod(a.id, userPool.length)]
+      : { id: fallbackUserId, fullName: "System" };
+
+    // ── Transfers ────────────────────────────────────────────────────────
+    type TransferRecord = { id: string; transferredAt: Date; reason: string };
+    const seededTransfers: TransferRecord[] = [];
+
+    if (!hasTransfer.has(a.id) && currProvinceId) {
+      // Choose 0–3 transfers for ~50% of assets, deterministically.
+      const bucket = hashMod(a.id, 10);
+      const numTransfers = bucket < 1 ? 3 : bucket < 3 ? 2 : bucket < 5 ? 1 : 0;
+
+      if (numTransfers > 0) {
+        // Build pool of possible "from" facilities — same province first,
+        // then any other facility, excluding the current one.
+        const sameProvincePool = (facByProvince[currProvinceId] ?? [])
+          .filter((f) => f.id !== currFacilityId);
+        const fromPool = sameProvincePool.length > 0
+          ? sameProvincePool
+          : allFacRows.filter((f) => f.id !== currFacilityId).map((f) => ({ id: f.id, name: f.name, districtId: f.districtId ?? null }));
+
+        // Spread transfers between purchaseDate and ~3 months ago.
+        const start = a.purchaseDate
+          ? new Date(a.purchaseDate)
+          : (a.createdAt ? new Date(a.createdAt) : new Date(Date.now() - 1000 * 60 * 60 * 24 * 365 * 3));
+        const end = new Date(Date.now() - 1000 * 60 * 60 * 24 * 90);
+        if (end.getTime() > start.getTime() && fromPool.length > 0) {
+          const span = end.getTime() - start.getTime();
+          for (let i = 0; i < numTransfers; i++) {
+            const fromFac = fromPool[hashMod(a.id + ":from:" + i, fromPool.length)];
+            const reason = TRANSFER_REASONS[hashMod(a.id + ":r:" + i, TRANSFER_REASONS.length)];
+            const offset = Math.floor(span * ((i + 1) / (numTransfers + 1)));
+            const ts = new Date(start.getTime() + offset);
+            const fromProvinceId = (allFacRows.find((f) => f.id === fromFac.id)?.provinceId) ?? currProvinceId;
+            const transferredBy = userPool.length > 0
+              ? userPool[hashMod(a.id + ":by:" + i, userPool.length)].id
+              : fallbackUserId;
+            const [row] = await db
+              .insert(assetTransfers)
+              .values({
+                assetId: a.id,
+                fromProvinceId,
+                fromDistrictId: fromFac.districtId,
+                fromFacilityId: fromFac.id,
+                toProvinceId: currProvinceId,
+                toDistrictId: currDistrictId ?? null,
+                toFacilityId: currFacilityId,
+                transferredBy,
+                reason,
+                transferredAt: ts,
+              })
+              .returning({ id: assetTransfers.id });
+            if (row) {
+              seededTransfers.push({ id: row.id, transferredAt: ts, reason });
+              transfersInserted++;
+            }
+          }
+        }
+      }
+    }
+
+    // ── Activity log ─────────────────────────────────────────────────────
+    if (hasActivity.has(a.id)) continue;
+
+    type LogEvent = {
+      actionType: string;
+      description: string;
+      createdAt: Date;
+      userId: string;
+      metadata?: Record<string, unknown>;
+    };
+    const events: LogEvent[] = [];
+
+    const createdAt = a.purchaseDate
+      ? new Date(a.purchaseDate)
+      : (a.createdAt ? new Date(a.createdAt) : new Date(Date.now() - 1000 * 60 * 60 * 24 * 365));
+    const creatorId = a.createdBy ?? actor.id;
+
+    events.push({
+      actionType: "CREATE",
+      description: `Registered asset ${a.assetTag} - ${a.assetName}`,
+      createdAt,
+      userId: creatorId,
+      metadata: { assetTag: a.assetTag },
+    });
+
+    // 1–3 update events spread between creation and now.
+    const numUpdates = 1 + hashMod(a.id + ":u", 3); // 1, 2 or 3
+    const now = new Date();
+    const lifeSpan = Math.max(1000 * 60 * 60 * 24 * 30, now.getTime() - createdAt.getTime());
+    const updateDescriptions = [
+      "Updated condition assessment after annual audit",
+      "Reassigned custodian following staff rotation",
+      "Updated supplier contact details",
+      "Refreshed inventory record with serial number verification",
+      "Photo and notes updated during site visit",
+    ];
+    for (let i = 0; i < numUpdates; i++) {
+      const offset = Math.floor(lifeSpan * ((i + 1) / (numUpdates + 2)));
+      const desc = updateDescriptions[hashMod(a.id + ":ud:" + i, updateDescriptions.length)];
+      const u = userPool.length > 0
+        ? userPool[hashMod(a.id + ":uu:" + i, userPool.length)]
+        : { id: fallbackUserId, fullName: "System" };
+      events.push({
+        actionType: "UPDATE",
+        description: desc,
+        createdAt: new Date(createdAt.getTime() + offset),
+        userId: u.id,
+      });
+    }
+
+    // Transfer events (already inserted above; mirror them in the log).
+    for (const t of seededTransfers) {
+      events.push({
+        actionType: "TRANSFER",
+        description: `Transferred asset ${a.assetTag}: ${t.reason}`,
+        createdAt: t.transferredAt,
+        userId: actor.id,
+        metadata: { transferId: t.id, reason: t.reason },
+      });
+    }
+
+    // Maintenance link events (one per existing schedule).
+    const maint = maintByAsset[a.id] ?? [];
+    for (const m of maint) {
+      events.push({
+        actionType: "MAINTENANCE_SCHEDULED",
+        description: `Maintenance scheduled: ${m.title}`,
+        createdAt: m.scheduledDate ?? createdAt,
+        userId: actor.id,
+        metadata: { maintenanceId: m.id },
+      });
+      if (m.status === "completed" && m.completedDate) {
+        events.push({
+          actionType: "MAINTENANCE_COMPLETED",
+          description: `Maintenance completed: ${m.title}`,
+          createdAt: m.completedDate,
+          userId: actor.id,
+          metadata: { maintenanceId: m.id },
+        });
+      }
+    }
+
+    // Audit-linked events (one per existing audit item for this asset).
+    const audits = auditByAsset[a.id] ?? [];
+    for (const ai of audits) {
+      const ts = ai.verifiedAt ?? new Date(now.getTime() - 1000 * 60 * 60 * 24 * 14);
+      const sessionLabel = ai.sessionName ? ` (${ai.sessionName})` : "";
+      let actionType = "AUDIT_PENDING";
+      let desc = `Audit pending${sessionLabel}`;
+      if (ai.status === "verified") {
+        actionType = "AUDIT_VERIFIED";
+        desc = `Audit verified${sessionLabel}${ai.conditionObserved ? ` — condition ${ai.conditionObserved}` : ""}`;
+      } else if (ai.status === "not_found") {
+        actionType = "AUDIT_NOT_FOUND";
+        desc = `Audit could not locate asset${sessionLabel}`;
+      } else if (ai.status === "damaged") {
+        actionType = "AUDIT_DAMAGED";
+        desc = `Audit reported asset damaged${sessionLabel}`;
+      }
+      events.push({
+        actionType,
+        description: desc,
+        createdAt: ts,
+        userId: ai.verifiedBy ?? actor.id,
+        metadata: { auditItemId: ai.id, auditSessionId: ai.sessionId, status: ai.status },
+      });
+    }
+
+    // Status-derived events for non-active assets.
+    if (a.status === "under_maintenance") {
+      events.push({
+        actionType: "STATUS_TO_MAINTENANCE",
+        description: "Asset placed under maintenance",
+        createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 24 * 21),
+        userId: actor.id,
+      });
+    } else if (a.status === "missing") {
+      events.push({
+        actionType: "STATUS_REPORTED_MISSING",
+        description: "Asset reported missing during stocktake",
+        createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 24 * 60),
+        userId: actor.id,
+      });
+    } else if (a.status === "disposed") {
+      events.push({
+        actionType: "STATUS_DISPOSED",
+        description: "Asset disposed and written off the register",
+        createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 24 * 30),
+        userId: actor.id,
+      });
+    }
+
+    // Insert activity events in chronological order.
+    events.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    if (events.length > 0) {
+      await db.insert(activityLogs).values(
+        events.map((e) => ({
+          userId: e.userId,
+          actionType: e.actionType,
+          entityType: "asset",
+          entityId: a.id,
+          description: e.description,
+          metadata: e.metadata ?? null,
+          createdAt: e.createdAt,
+        })),
+      );
+      activityInserted += events.length;
+    }
+  }
+
+  if (transfersInserted > 0 || activityInserted > 0) {
+    logger.info(
+      { transfers: transfersInserted, activity: activityInserted, assets: assetRows.length, skippedNonDemo },
+      "Auto-seed: asset history (demo assets only)",
+    );
   }
 }
