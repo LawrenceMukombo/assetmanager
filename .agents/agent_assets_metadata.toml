@@ -18,3 +18,9 @@ id = "adVM_gqdvjARmSUsdDYrR"
 uri = "file://docs/README.md"
 type = "text"
 title = "NPAMS — Technical Documentation"
+
+[[outputs]]
+id = "WXE8DXnwi4KQ2P6Npb6X1"
+uri = "file://proposals/ICSA-NPAMS-Proposal.docx"
+type = "word_document"
+title = "NPAMS — ICSA Sponsor Proposal (Comprehensive Edition, Word)"
