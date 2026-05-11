@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Link, useParams, useLocation } from "wouter";
+import { NeighborsNav, useNeighbors } from "@/components/neighbors-nav";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_ROLES } from "@/App";
@@ -67,6 +68,15 @@ export default function AuditDetail() {
   const [assignForm, setAssignForm] = useState({
     provinceId: "", districtId: "", facilityId: "", assignedTo: "", dueDate: "",
   });
+
+  const { data: neighbors, loading: neighborsLoading, ctxNonce } = useNeighbors(
+    id ? `/api/v1/audit/sessions/${id}/neighbors` : null,
+    "npams_audit_sessions_list_ctx",
+  );
+  const goToNeighbor = useCallback(
+    (nid: string) => setLocation(`/audit/${nid}${ctxNonce ? `?ctx=${ctxNonce}` : ""}`),
+    [setLocation, ctxNonce],
+  );
 
   const { data: session, isLoading } = useQuery<AuditSessionDetail>({
     queryKey: ["audit-session", id],
@@ -154,6 +164,13 @@ export default function AuditDetail() {
           <ArrowLeft className="w-4 h-4 mr-1" /> Audit Sessions
         </Button>
       </div>
+
+      <NeighborsNav
+        data={neighbors}
+        loading={neighborsLoading}
+        onNavigate={goToNeighbor}
+        noun="audit session"
+      />
 
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>

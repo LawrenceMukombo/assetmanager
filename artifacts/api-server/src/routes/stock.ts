@@ -256,6 +256,80 @@ router.post("/v1/stock", requireAuth, requireStockAdmin, async (req, res) => {
   }
 });
 
+router.get("/v1/stock/:id/neighbors", requireAuth, async (req, res) => {
+  if (!req.user) return;
+  try {
+    const id = req.params.id as string;
+    const { search, low_stock } = req.query as { search?: string; low_stock?: string };
+
+    const [current] = await db
+      .select({ id: stockItems.id })
+      .from(stockItems)
+      .where(and(eq(stockItems.id, id), isNull(stockItems.deletedAt), ...scopeFilter(req.user)))
+      .limit(1);
+
+    if (!current) {
+      res.status(404).json({ success: false, message: "Stock item not found", data: null });
+      return;
+    }
+
+    const conditions = [isNull(stockItems.deletedAt), ...scopeFilter(req.user)];
+    if (search) {
+      conditions.push(or(ilike(stockItems.itemName, `%${search}%`), ilike(stockItems.itemCode, `%${search}%`))!);
+    }
+    if (low_stock === "true") {
+      conditions.push(sql`(
+        EXISTS (
+          SELECT 1 FROM ${stockBalances} sb
+          WHERE sb.stock_item_id = ${stockItems.id}
+            AND (
+              (sb.reorder_level > 0 AND sb.quantity <= sb.reorder_level)
+              OR (sb.reorder_level = 0 AND ${stockItems.reorderLevel} > 0 AND sb.quantity <= ${stockItems.reorderLevel})
+            )
+        )
+        OR (
+          ${stockItems.reorderLevel} > 0
+          AND ${stockItems.onHandQuantity} <= ${stockItems.reorderLevel}
+          AND NOT EXISTS (SELECT 1 FROM ${stockBalances} sb2 WHERE sb2.stock_item_id = ${stockItems.id})
+        )
+      )`);
+    }
+
+    const rows = await db
+      .select({ id: stockItems.id, itemCode: stockItems.itemCode, itemName: stockItems.itemName })
+      .from(stockItems)
+      .where(and(...conditions))
+      .orderBy(stockItems.itemName);
+
+    const idx = rows.findIndex((r) => r.id === id);
+    const toNeighbor = (r: typeof rows[number] | undefined) => r ? { id: r.id, title: r.itemCode, subtitle: r.itemName } : null;
+
+    if (idx === -1) {
+      res.json({
+        success: true,
+        message: "Neighbors retrieved",
+        data: { previous: null, next: null, position: 0, total: rows.length, in_context: false },
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      message: "Neighbors retrieved",
+      data: {
+        previous: toNeighbor(rows[idx - 1]),
+        next: toNeighbor(rows[idx + 1]),
+        position: idx + 1,
+        total: rows.length,
+        in_context: true,
+      },
+    });
+  } catch (err) {
+    req.log.error({ err }, "Get stock neighbors error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
 router.get("/v1/stock/:id", requireAuth, async (req, res) => {
   if (!req.user) return;
   try {

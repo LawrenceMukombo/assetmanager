@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_ROLES } from "@/App";
@@ -66,11 +66,23 @@ export default function StockPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [, setLocation] = useLocation();
 
   const isAdmin = user?.role ? ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]) : false;
 
   const [search, setSearch] = useState("");
   const [lowOnly, setLowOnly] = useState(false);
+
+  const openDetail = (stockId: string) => {
+    const ctx: Record<string, string> = {};
+    if (search) ctx.search = search;
+    if (lowOnly) ctx.low_stock = "true";
+    const nonce = Math.random().toString(36).slice(2, 10);
+    try {
+      sessionStorage.setItem(`npams_stock_list_ctx_${nonce}`, JSON.stringify(ctx));
+    } catch { /* ignore */ }
+    setLocation(`/stock/${stockId}?ctx=${nonce}`);
+  };
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [reorderItem, setReorderItem] = useState<ReorderItem | null>(null);
@@ -227,7 +239,7 @@ export default function StockPage() {
                   const lowLocs = it.lowLocationCount ?? 0;
                   const low = lowLocs > 0;
                   return (
-                    <TableRow key={it.id} className="cursor-pointer hover:bg-muted/40" onClick={() => (window.location.href = `/stock/${it.id}`)}>
+                    <TableRow key={it.id} className="cursor-pointer hover:bg-muted/40" onClick={() => openDetail(it.id)}>
                       <TableCell className="font-mono text-xs">{it.itemCode}</TableCell>
                       <TableCell className="font-medium">{it.itemName}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">{it.category ?? "—"}</TableCell>
@@ -264,9 +276,9 @@ export default function StockPage() {
                               <ShoppingCart className="w-4 h-4 mr-1" /> Reorder
                             </Button>
                           )}
-                          <Link href={`/stock/${it.id}`}>
-                            <Button variant="ghost" size="sm"><ArrowRight className="w-4 h-4" /></Button>
-                          </Link>
+                          <Button variant="ghost" size="sm" onClick={() => openDetail(it.id)}>
+                            <ArrowRight className="w-4 h-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>

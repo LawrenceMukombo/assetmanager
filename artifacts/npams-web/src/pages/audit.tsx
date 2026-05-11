@@ -179,7 +179,15 @@ export default function Audit() {
                       <Card
                         key={s.id}
                         className="cursor-pointer hover:shadow-md transition-shadow"
-                        onClick={() => setLocation(`/audit/${s.id}`)}
+                        onClick={() => {
+                          const ctx: Record<string, string> = {};
+                          if (tab === "active") ctx.status = "active";
+                          const nonce = Math.random().toString(36).slice(2, 10);
+                          try {
+                            sessionStorage.setItem(`npams_audit_sessions_list_ctx_${nonce}`, JSON.stringify(ctx));
+                          } catch { /* ignore */ }
+                          setLocation(`/audit/${s.id}?ctx=${nonce}`);
+                        }}
                       >
                         <CardHeader className="pb-2">
                           <div className="flex items-start justify-between gap-2">

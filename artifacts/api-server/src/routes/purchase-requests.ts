@@ -195,6 +195,78 @@ router.get("/v1/purchase-requests", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/v1/purchase-requests/:id/neighbors", requireAuth, async (req, res) => {
+  if (!req.user) return;
+  try {
+    const id = req.params.id as string;
+    const { status, mine, pending, stock_item_id: stockItemIdQ } = req.query as {
+      status?: string; mine?: string; pending?: string; stock_item_id?: string;
+    };
+
+    const [current] = await db
+      .select({ id: purchaseRequests.id })
+      .from(purchaseRequests)
+      .where(and(eq(purchaseRequests.id, id), ...scopeFilter(req.user)))
+      .limit(1);
+    if (!current) {
+      res.status(404).json({ success: false, message: "Purchase request not found", data: null });
+      return;
+    }
+
+    const conditions = [...scopeFilter(req.user)];
+    if (stockItemIdQ) conditions.push(eq(purchaseRequests.stockItemId, stockItemIdQ));
+    if (status) {
+      const allowed = ["draft", "submitted", "approved", "rejected", "received", "closed"] as const;
+      if (!(allowed as readonly string[]).includes(status)) {
+        res.status(400).json({ success: false, message: "Invalid status filter", data: null });
+        return;
+      }
+      conditions.push(sql`${purchaseRequests.status} = ${status}`);
+    }
+    if (mine === "true") conditions.push(eq(purchaseRequests.requestedBy, req.user.userId));
+    if (pending === "true") conditions.push(sql`${purchaseRequests.status} = 'submitted'`);
+
+    const rows = await db
+      .select({
+        id: purchaseRequests.id,
+        requestNumber: purchaseRequests.requestNumber,
+        itemName: stockItems.itemName,
+      })
+      .from(purchaseRequests)
+      .innerJoin(stockItems, eq(purchaseRequests.stockItemId, stockItems.id))
+      .where(and(...conditions))
+      .orderBy(desc(purchaseRequests.createdAt));
+
+    const idx = rows.findIndex((r) => r.id === id);
+    const toNeighbor = (r: typeof rows[number] | undefined) =>
+      r ? { id: r.id, title: r.requestNumber, subtitle: r.itemName } : null;
+
+    if (idx === -1) {
+      res.json({
+        success: true,
+        message: "Neighbors retrieved",
+        data: { previous: null, next: null, position: 0, total: rows.length, in_context: false },
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      message: "Neighbors retrieved",
+      data: {
+        previous: toNeighbor(rows[idx - 1]),
+        next: toNeighbor(rows[idx + 1]),
+        position: idx + 1,
+        total: rows.length,
+        in_context: true,
+      },
+    });
+  } catch (err) {
+    req.log.error({ err }, "Get purchase request neighbors error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
 router.get("/v1/purchase-requests/:id", requireAuth, async (req, res) => {
   if (!req.user) return;
   try {

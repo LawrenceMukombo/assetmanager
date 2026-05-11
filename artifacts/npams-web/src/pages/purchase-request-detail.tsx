@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "wouter";
+import { Link, useParams, useLocation } from "wouter";
+import { NeighborsNav, useNeighbors } from "@/components/neighbors-nav";
 import { apiFetchJson } from "@/lib/api-fetch";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_ROLES } from "@/App";
@@ -77,7 +78,17 @@ const EVENT_META: Record<string, { label: string; icon: React.ComponentType<{ cl
 export default function PurchaseRequestDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id ?? "";
+  const [, navigate] = useLocation();
   const { user } = useAuth();
+
+  const { data: neighbors, loading: neighborsLoading, ctxNonce } = useNeighbors(
+    id ? `/api/v1/purchase-requests/${id}/neighbors` : null,
+    "npams_purchase_requests_list_ctx",
+  );
+  const goToNeighbor = useCallback(
+    (nid: string) => navigate(`/purchase-requests/${nid}${ctxNonce ? `?ctx=${ctxNonce}` : ""}`),
+    [navigate, ctxNonce],
+  );
   const { toast } = useToast();
   const qc = useQueryClient();
   const isAdmin = user?.role ? ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]) : false;
@@ -180,6 +191,13 @@ export default function PurchaseRequestDetailPage() {
           <ArrowLeft className="w-4 h-4" /> Back to requests
         </Link>
       </div>
+
+      <NeighborsNav
+        data={neighbors}
+        loading={neighborsLoading}
+        onNavigate={goToNeighbor}
+        noun="purchase request"
+      />
 
       <Card className="border-blue-200">
         <CardHeader className="bg-gradient-to-r from-blue-50 to-violet-50 rounded-t-lg">

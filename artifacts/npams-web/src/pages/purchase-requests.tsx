@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_ROLES } from "@/App";
 import { apiFetchJson } from "@/lib/api-fetch";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from "@/components/ui/card";
@@ -82,10 +82,22 @@ export default function PurchaseRequestsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [, setLocation] = useLocation();
 
   const isAdmin = user?.role ? ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]) : false;
 
   const [tab, setTab] = useState<"pending" | "mine" | "all">(isAdmin ? "pending" : "mine");
+
+  const openDetail = (prId: string) => {
+    const ctx: Record<string, string> = {};
+    if (tab === "pending") ctx.pending = "true";
+    if (tab === "mine") ctx.mine = "true";
+    const nonce = Math.random().toString(36).slice(2, 10);
+    try {
+      sessionStorage.setItem(`npams_purchase_requests_list_ctx_${nonce}`, JSON.stringify(ctx));
+    } catch { /* ignore */ }
+    setLocation(`/purchase-requests/${prId}?ctx=${nonce}`);
+  };
   const [rejectTarget, setRejectTarget] = useState<PurchaseRequest | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [rejectSign, setRejectSign] = useState("");
@@ -190,9 +202,13 @@ export default function PurchaseRequestsPage() {
             return (
               <TableRow key={r.id}>
                 <TableCell className="font-mono text-xs">
-                  <Link href={`/purchase-requests/${r.id}`} className="text-primary hover:underline inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => openDetail(r.id)}
+                    className="text-primary hover:underline inline-flex items-center gap-1"
+                  >
                     {r.requestNumber} <ChevronRight className="w-3 h-3" />
-                  </Link>
+                  </button>
                 </TableCell>
                 <TableCell>
                   <div className="font-medium">{r.stockItem.itemName}</div>

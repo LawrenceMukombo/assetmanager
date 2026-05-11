@@ -130,6 +130,65 @@ router.get("/v1/audit/sessions/:id", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/v1/audit/sessions/:id/neighbors", requireAuth, async (req, res) => {
+  try {
+    const { user } = req;
+    const id = req.params.id;
+    const { status } = req.query as { status?: string };
+
+    const rows = await db
+      .select({
+        id: auditSessions.id,
+        name: auditSessions.name,
+        status: auditSessions.status,
+        provinceId: auditSessions.provinceId,
+        provinceName: provinces.provinceName,
+      })
+      .from(auditSessions)
+      .leftJoin(provinces, eq(auditSessions.provinceId, provinces.id))
+      .orderBy(desc(auditSessions.createdAt));
+
+    let filtered = user.scopeLevel === "national"
+      ? rows
+      : rows.filter(r => !r.provinceId || r.provinceId === user.provinceId);
+
+    if (status) {
+      filtered = filtered.filter(r => r.status === status);
+    }
+
+    const idx = filtered.findIndex(r => r.id === id);
+    const toNeighbor = (r: typeof filtered[number] | undefined) =>
+      r ? { id: r.id, title: r.name, subtitle: r.provinceName ?? null } : null;
+
+    if (idx === -1) {
+      // Confirm the session itself exists & is visible to the user (regardless of filter)
+      const visible = (user.scopeLevel === "national" ? rows : rows.filter(r => !r.provinceId || r.provinceId === user.provinceId))
+        .some(r => r.id === id);
+      if (!visible) return res.status(404).json({ success: false, message: "Session not found", data: null });
+      return res.json({
+        success: true,
+        message: "Neighbors retrieved",
+        data: { previous: null, next: null, position: 0, total: filtered.length, in_context: false },
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Neighbors retrieved",
+      data: {
+        previous: toNeighbor(filtered[idx - 1]),
+        next: toNeighbor(filtered[idx + 1]),
+        position: idx + 1,
+        total: filtered.length,
+        in_context: true,
+      },
+    });
+  } catch (err) {
+    req.log.error({ err }, "Get audit session neighbors error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
 router.patch("/v1/audit/sessions/:id", requireAuth, requireAssetAdmin, async (req, res) => {
   try {
     const { status, name, description, startDate, endDate } = req.body as {

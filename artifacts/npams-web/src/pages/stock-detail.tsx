@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { useParams, Link } from "wouter";
+import { useCallback, useState } from "react";
+import { useParams, Link, useLocation } from "wouter";
+import { NeighborsNav, useNeighbors } from "@/components/neighbors-nav";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetchJson } from "@/lib/api-fetch";
 import { useAuth } from "@/hooks/use-auth";
@@ -84,9 +85,19 @@ function MovementBadge({ type }: { type: string }) {
 
 export default function StockDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [, navigate] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
+
+  const { data: neighbors, loading: neighborsLoading, ctxNonce } = useNeighbors(
+    id ? `/api/v1/stock/${id}/neighbors` : null,
+    "npams_stock_list_ctx",
+  );
+  const goToNeighbor = useCallback(
+    (nid: string) => navigate(`/stock/${nid}${ctxNonce ? `?ctx=${ctxNonce}` : ""}`),
+    [navigate, ctxNonce],
+  );
 
   const isOfficer = user?.role ? OFFICER_ROLES.includes(user.role as typeof OFFICER_ROLES[number]) : false;
   const isAdmin = user?.role ? ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]) : false;
@@ -271,6 +282,13 @@ export default function StockDetailPage() {
       <div className="flex items-center gap-3">
         <Link href="/stock"><Button variant="ghost" size="sm"><ArrowLeft className="w-4 h-4 mr-1" /> Stock</Button></Link>
       </div>
+
+      <NeighborsNav
+        data={neighbors}
+        loading={neighborsLoading}
+        onNavigate={goToNeighbor}
+        noun="stock item"
+      />
 
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
