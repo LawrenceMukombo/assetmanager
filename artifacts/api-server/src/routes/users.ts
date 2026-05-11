@@ -1,7 +1,29 @@
 import { Router } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import { db, users, userRoles, roles, userScope, provinces, districts, facilities } from "@workspace/db";
+import {
+  db,
+  users,
+  userRoles,
+  roles,
+  userScope,
+  provinces,
+  districts,
+  facilities,
+  refreshTokens,
+  assets,
+  assetTransfers,
+  auditSessions,
+  auditAssignments,
+  auditItems,
+  maintenanceSchedules,
+  stockItems,
+  stockMovements,
+  purchaseRequests,
+  purchaseRequestEvents,
+  activityLogs,
+  notifications,
+} from "@workspace/db";
 import { requireAuth, requireUserAdmin } from "../lib/auth";
 
 const router = Router();
@@ -279,7 +301,14 @@ router.put("/v1/users/:id", requireAuth, requireUserAdmin, async (req, res) => {
       return;
     }
 
-    const { full_name, phone_number, department, job_title, gender, date_of_birth, role_id, province_id, district_id, facility_id } = req.body;
+    const { full_name, phone_number, department, job_title, gender, date_of_birth, role_id, province_id, district_id, facility_id, password } = req.body;
+
+    if (password !== undefined && password !== null && password !== "") {
+      if (typeof password !== "string" || password.length < 8) {
+        res.status(400).json({ success: false, message: "Password must be at least 8 characters", data: null });
+        return;
+      }
+    }
 
     const newProvinceId: string | null | undefined = province_id !== undefined ? (province_id as string | null) : existingScope?.provinceId;
     const newDistrictId: string | null | undefined = district_id !== undefined ? (district_id as string | null) : existingScope?.districtId;
@@ -321,6 +350,8 @@ router.put("/v1/users/:id", requireAuth, requireUserAdmin, async (req, res) => {
       }
     }
 
+    const passwordHash = password ? await bcrypt.hash(password as string, 10) : undefined;
+
     const [updated] = await db
       .update(users)
       .set({
@@ -330,10 +361,18 @@ router.put("/v1/users/:id", requireAuth, requireUserAdmin, async (req, res) => {
         ...(job_title !== undefined && { jobTitle: job_title as string | null }),
         ...(gender !== undefined && { gender: gender as string | null }),
         ...(date_of_birth !== undefined && { dateOfBirth: date_of_birth as string | null }),
+        ...(passwordHash !== undefined && { passwordHash }),
         updatedAt: new Date(),
       })
       .where(eq(users.id, targetId))
       .returning();
+
+    if (passwordHash !== undefined) {
+      await db
+        .update(refreshTokens)
+        .set({ revokedAt: new Date() })
+        .where(eq(refreshTokens.userId, targetId));
+    }
 
     if (role_id) {
       await db.delete(userRoles).where(eq(userRoles.userId, targetId));
@@ -354,6 +393,92 @@ router.put("/v1/users/:id", requireAuth, requireUserAdmin, async (req, res) => {
     res.json({ success: true, message: "User updated", data: { id: updated.id, fullName: updated.fullName } });
   } catch (err) {
     req.log.error({ err }, "Update user error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
+router.delete("/v1/users/:id", requireAuth, requireUserAdmin, async (req, res) => {
+  if (!req.user) return;
+
+  if (req.user.scopeLevel !== "national") {
+    res.status(403).json({ success: false, message: "Only national admins can delete users", data: null });
+    return;
+  }
+
+  const targetId = req.params.id as string;
+
+  if (req.user.userId === targetId) {
+    res.status(400).json({ success: false, message: "You cannot delete your own account", data: null });
+    return;
+  }
+
+  try {
+    const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.id, targetId)).limit(1);
+    if (!existing) {
+      res.status(404).json({ success: false, message: "User not found", data: null });
+      return;
+    }
+
+    const refChecks: { table: string; condition: ReturnType<typeof eq> | ReturnType<typeof or> }[] = [
+      { table: "asset records", condition: or(eq(assets.assignedToUser, targetId), eq(assets.createdBy, targetId))! },
+      { table: "asset transfers", condition: eq(assetTransfers.transferredBy, targetId) },
+      { table: "audit sessions", condition: eq(auditSessions.createdBy, targetId) },
+      { table: "audit assignments", condition: eq(auditAssignments.assignedTo, targetId) },
+      { table: "audit verifications", condition: eq(auditItems.verifiedBy, targetId) },
+      { table: "maintenance jobs", condition: or(eq(maintenanceSchedules.assignedTo, targetId), eq(maintenanceSchedules.createdBy, targetId))! },
+      { table: "stock items", condition: eq(stockItems.createdBy, targetId) },
+      { table: "stock movements", condition: or(eq(stockMovements.issuedToUser, targetId), eq(stockMovements.actorUserId, targetId))! },
+      { table: "purchase requests", condition: or(eq(purchaseRequests.requestedBy, targetId), eq(purchaseRequests.approvedBy, targetId))! },
+      { table: "purchase request events", condition: eq(purchaseRequestEvents.actorUserId, targetId) },
+      { table: "activity logs", condition: eq(activityLogs.userId, targetId) },
+    ];
+
+    const checks = await Promise.all([
+      db.select({ id: assets.id }).from(assets).where(refChecks[0].condition).limit(1),
+      db.select({ id: assetTransfers.id }).from(assetTransfers).where(refChecks[1].condition).limit(1),
+      db.select({ id: auditSessions.id }).from(auditSessions).where(refChecks[2].condition).limit(1),
+      db.select({ id: auditAssignments.id }).from(auditAssignments).where(refChecks[3].condition).limit(1),
+      db.select({ id: auditItems.id }).from(auditItems).where(refChecks[4].condition).limit(1),
+      db.select({ id: maintenanceSchedules.id }).from(maintenanceSchedules).where(refChecks[5].condition).limit(1),
+      db.select({ id: stockItems.id }).from(stockItems).where(refChecks[6].condition).limit(1),
+      db.select({ id: stockMovements.id }).from(stockMovements).where(refChecks[7].condition).limit(1),
+      db.select({ id: purchaseRequests.id }).from(purchaseRequests).where(refChecks[8].condition).limit(1),
+      db.select({ id: purchaseRequestEvents.id }).from(purchaseRequestEvents).where(refChecks[9].condition).limit(1),
+      db.select({ id: activityLogs.id }).from(activityLogs).where(refChecks[10].condition).limit(1),
+    ]);
+
+    const blockingTables = checks
+      .map((rows, i) => (rows.length > 0 ? refChecks[i].table : null))
+      .filter((t): t is string => t !== null);
+
+    if (blockingTables.length > 0) {
+      res.status(409).json({
+        success: false,
+        message: `Cannot delete: this user has historical references in ${blockingTables.join(", ")}. Deactivate the account instead.`,
+        data: { references: blockingTables },
+      });
+      return;
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.delete(notifications).where(eq(notifications.userId, targetId));
+      await tx.delete(refreshTokens).where(eq(refreshTokens.userId, targetId));
+      await tx.delete(userRoles).where(eq(userRoles.userId, targetId));
+      await tx.delete(userScope).where(eq(userScope.userId, targetId));
+      await tx.delete(users).where(eq(users.id, targetId));
+    });
+
+    res.json({ success: true, message: "User deleted", data: null });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "23503") {
+      res.status(409).json({
+        success: false,
+        message: "Cannot delete: this user is still referenced by other records. Deactivate the account instead.",
+        data: null,
+      });
+      return;
+    }
+    req.log.error({ err }, "Delete user error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });

@@ -5,9 +5,21 @@ import {
   getGetUsersQueryKey,
   useGetProvinces,
   useGetDistrictsByProvince,
+  useGetFacilitiesByDistrict,
   getGetProvincesQueryKey,
   getGetDistrictsByProvinceQueryKey,
+  getGetFacilitiesByDistrictQueryKey,
 } from "@workspace/api-client-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -28,7 +40,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, ShieldCheck, Users as UsersIcon } from "lucide-react";
+import { Plus, Pencil, ShieldCheck, Users as UsersIcon, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Label } from "@/components/ui/label";
 
@@ -141,6 +153,21 @@ interface UserRow {
   provinceName?: string | null;
 }
 
+const editUserSchema = z.object({
+  full_name: z.string().min(1, "Full name is required"),
+  password: z.string().refine(v => v === "" || v.length >= 8, "Password must be at least 8 characters").optional(),
+  phone_number: z.string().optional(),
+  department: z.string().optional(),
+  job_title: z.string().optional(),
+  gender: z.string().optional(),
+  date_of_birth: z.string().optional(),
+  role_id: z.string().min(1, "Role is required"),
+  province_id: z.string().optional(),
+  district_id: z.string().optional(),
+  facility_id: z.string().optional(),
+});
+type EditUserFormValues = z.infer<typeof editUserSchema>;
+
 export default function Users() {
   const { user } = useAuth();
   const isAdmin = ADMIN_ROLES.includes(user?.role as typeof ADMIN_ROLES[number]);
@@ -151,10 +178,17 @@ export default function Users() {
   const [selectedRoleScope, setSelectedRoleScope] = useState("");
 
   const [editUser, setEditUser] = useState<UserRow | null>(null);
-  const [editRoleId, setEditRoleId] = useState("");
   const [editProvinceId, setEditProvinceId] = useState("");
+  const [editDistrictId, setEditDistrictId] = useState("");
   const [editRoleScope, setEditRoleScope] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const [deleteUser, setDeleteUser] = useState<UserRow | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const isNationalAdmin = (user as { scope_level?: string } | null)?.scope_level === "national";
 
   const token = localStorage.getItem("npams_token");
 
@@ -221,6 +255,28 @@ export default function Users() {
     },
   });
 
+  const editForm = useForm<EditUserFormValues>({
+    resolver: zodResolver(editUserSchema),
+    defaultValues: {
+      full_name: "", password: "", phone_number: "",
+      department: "", job_title: "", gender: "", date_of_birth: "",
+      role_id: "", province_id: "", district_id: "", facility_id: "",
+    },
+  });
+
+  const { data: editDistrictsData } = useGetDistrictsByProvince(editProvinceId, {
+    query: {
+      queryKey: getGetDistrictsByProvinceQueryKey(editProvinceId),
+      enabled: !!editProvinceId,
+    },
+  });
+  const { data: editFacilitiesData } = useGetFacilitiesByDistrict(editDistrictId, {
+    query: {
+      queryKey: getGetFacilitiesByDistrictQueryKey(editDistrictId),
+      enabled: !!editDistrictId,
+    },
+  });
+
   if (!isAdmin) return <Redirect to="/dashboard" />;
 
   const onSubmit = (values: UserFormValues) => {
@@ -242,26 +298,59 @@ export default function Users() {
 
   const openEditUser = (u: UserRow) => {
     setEditUser(u);
-    setEditRoleId(u.role?.id ?? "");
-    setEditProvinceId(u.scope?.provinceId ?? "");
+    setEditError(null);
+    const provinceId = u.scope?.provinceId ?? "";
+    const districtId = u.scope?.districtId ?? "";
+    setEditProvinceId(provinceId);
+    setEditDistrictId(districtId);
     const role = rolesData?.find(r => r.id === u.role?.id);
     setEditRoleScope(role?.scopeLevel ?? u.role?.scopeLevel ?? "");
+    editForm.reset({
+      full_name: u.fullName ?? "",
+      password: "",
+      phone_number: u.phoneNumber ?? "",
+      department: u.department ?? "",
+      job_title: u.jobTitle ?? "",
+      gender: u.gender ?? "",
+      date_of_birth: u.dateOfBirth ?? "",
+      role_id: u.role?.id ?? "",
+      province_id: provinceId,
+      district_id: districtId,
+      facility_id: u.scope?.facilityId ?? "",
+    });
   };
 
-  const handleSaveEdit = async () => {
+  const closeEditUser = () => {
+    setEditUser(null);
+    setEditError(null);
+    editForm.reset();
+  };
+
+  const onSubmitEdit = async (values: EditUserFormValues) => {
     if (!editUser?.id) return;
     setIsSavingEdit(true);
-    const body: Record<string, string | null | undefined> = {};
-    if (editRoleId && editRoleId !== editUser.role?.id) body.role_id = editRoleId;
+    setEditError(null);
     const isNationalRole = NATIONAL_SCOPES.includes(editRoleScope);
+    const body: Record<string, string | null | undefined> = {
+      full_name: values.full_name,
+      phone_number: values.phone_number || null,
+      department: values.department || null,
+      job_title: values.job_title || null,
+      gender: values.gender || null,
+      date_of_birth: values.date_of_birth || null,
+      role_id: values.role_id,
+    };
+    if (values.password && values.password.length > 0) {
+      body.password = values.password;
+    }
     if (isNationalRole) {
       body.province_id = null;
       body.district_id = null;
       body.facility_id = null;
-    } else if (editProvinceId !== editUser.scope?.provinceId) {
-      body.province_id = editProvinceId || null;
-      body.district_id = null;
-      body.facility_id = null;
+    } else {
+      body.province_id = values.province_id || null;
+      body.district_id = values.district_id || null;
+      body.facility_id = values.facility_id || null;
     }
 
     const result = await apiFetchJson(`/api/v1/users/${editUser.id}`, {
@@ -271,10 +360,31 @@ export default function Users() {
     setIsSavingEdit(false);
     if (result.ok) {
       toast({ title: "User updated successfully" });
-      setEditUser(null);
+      closeEditUser();
       refetch();
     } else {
-      toast({ variant: "destructive", title: "Error", description: result.message });
+      setEditError(result.message);
+    }
+  };
+
+  const openDeleteUser = (u: UserRow) => {
+    setDeleteUser(u);
+    setDeleteError(null);
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteUser?.id) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    const result = await apiFetchJson(`/api/v1/users/${deleteUser.id}`, { method: "DELETE" });
+    setIsDeleting(false);
+    if (result.ok) {
+      toast({ title: "User deleted" });
+      setDeleteUser(null);
+      if (editUser?.id === deleteUser.id) closeEditUser();
+      refetch();
+    } else {
+      setDeleteError(result.message);
     }
   };
 
@@ -367,9 +477,21 @@ export default function Users() {
                       />
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Button variant="ghost" size="sm" onClick={() => openEditUser(u)}>
-                        <Pencil className="w-3 h-3 mr-1" /> Edit
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openEditUser(u)}>
+                          <Pencil className="w-3 h-3 mr-1" /> Edit
+                        </Button>
+                        {isNationalAdmin && u.id !== user?.id && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => openDeleteUser(u)}
+                          >
+                            <Trash2 className="w-3 h-3 mr-1" /> Delete
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -621,81 +743,303 @@ export default function Users() {
       </Dialog>
 
       {editUser && (
-        <Dialog open={!!editUser} onOpenChange={(open) => { if (!open) setEditUser(null); }}>
-          <DialogContent className="max-w-md">
+        <Dialog open={!!editUser} onOpenChange={(open) => { if (!open) closeEditUser(); }}>
+          <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
             <DialogHeader>
-              <DialogTitle>Edit Role & Scope — {editUser.fullName}</DialogTitle>
+              <DialogTitle>Edit User — {editUser.fullName}</DialogTitle>
               <DialogDescription>
-                Change this user's role or provincial scope. This affects what data they can access.
+                Update profile details, role, scope, or reset password.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="p-3 bg-muted/40 rounded-lg text-sm space-y-1">
-                <p><span className="text-muted-foreground">Email:</span> <span className="font-medium">{editUser.email}</span></p>
-                <p><span className="text-muted-foreground">Current Role:</span> <span className="font-medium">{editUser.role?.roleName ?? "None"}</span></p>
-                <p><span className="text-muted-foreground">Current Province:</span> <span className="font-medium">{editUser.provinceName || "National"}</span></p>
-              </div>
+            <Form {...editForm}>
+              <form onSubmit={editForm.handleSubmit(onSubmitEdit)} className="flex-1 overflow-y-auto pr-1">
+                <div className="space-y-4 py-2">
+                  <div className="space-y-1">
+                    <Label>Email (login identity)</Label>
+                    <Input value={editUser.email ?? ""} readOnly disabled />
+                    <p className="text-xs text-muted-foreground">Email is the user's login and cannot be changed.</p>
+                  </div>
 
-              <div className="space-y-1">
-                <Label>New Role</Label>
-                <Select
-                  value={editRoleId}
-                  onValueChange={(val) => {
-                    setEditRoleId(val);
-                    const role = rolesData?.find(r => r.id === val);
-                    setEditRoleScope(role?.scopeLevel ?? "");
-                    if (role?.scopeLevel === "national") {
-                      setEditProvinceId("");
-                    }
-                  }}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
-                  <SelectContent>
-                    {rolesData?.map(r => (
-                      <SelectItem key={r.id} value={r.id}>{r.roleName}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {editRoleId && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {ROLE_PERMISSIONS[rolesData?.find(r => r.id === editRoleId)?.roleName ?? ""]?.description ?? ""}
-                  </p>
-                )}
-              </div>
+                  <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wider pt-2">Account Details</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField
+                      control={editForm.control}
+                      name="full_name"
+                      render={({ field }) => (
+                        <FormItem className="col-span-2">
+                          <FormLabel>Full Name</FormLabel>
+                          <FormControl><Input {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={editForm.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem className="col-span-2">
+                          <FormLabel>Reset Password (optional)</FormLabel>
+                          <FormControl>
+                            <Input type="password" autoComplete="new-password" placeholder="Leave blank to keep current password" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={editForm.control}
+                      name="phone_number"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone Number</FormLabel>
+                          <FormControl><Input placeholder="+675 xxx xxxx" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={editForm.control}
+                      name="gender"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Gender</FormLabel>
+                          <Select onValueChange={v => field.onChange(v === "_none" ? "" : v)} value={field.value || "_none"}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              <SelectItem value="_none">— Not specified —</SelectItem>
+                              <SelectItem value="male">Male</SelectItem>
+                              <SelectItem value="female">Female</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
-              {!isEditNationalRole && (
-                <div className="space-y-1">
-                  <Label>
-                    Province Scope <span className="text-destructive">*</span>
-                  </Label>
-                  <Select value={editProvinceId} onValueChange={setEditProvinceId}>
-                    <SelectTrigger className={!editProvinceId ? "border-destructive/50" : ""}>
-                      <SelectValue placeholder="Select province (required)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {provincesData?.data?.map(p => (
-                        <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {!editProvinceId && (
-                    <p className="text-xs text-destructive">Province is required for provincial roles.</p>
+                  <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wider pt-2">Professional Details</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField
+                      control={editForm.control}
+                      name="department"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Department</FormLabel>
+                          <FormControl><Input placeholder="e.g. Finance" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={editForm.control}
+                      name="job_title"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Job Title</FormLabel>
+                          <FormControl><Input placeholder="e.g. Asset Officer" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={editForm.control}
+                      name="date_of_birth"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Date of Birth</FormLabel>
+                          <FormControl><Input type="date" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wider pt-2">System Access</p>
+                  <FormField
+                    control={editForm.control}
+                    name="role_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Role</FormLabel>
+                        <Select
+                          onValueChange={(val) => {
+                            field.onChange(val);
+                            const role = rolesData?.find(r => r.id === val);
+                            const scope = role?.scopeLevel ?? "";
+                            setEditRoleScope(scope);
+                            if (scope === "national") {
+                              editForm.setValue("province_id", "");
+                              editForm.setValue("district_id", "");
+                              editForm.setValue("facility_id", "");
+                              setEditProvinceId("");
+                              setEditDistrictId("");
+                            }
+                          }}
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {rolesData?.map(r => (
+                              <SelectItem key={r.id} value={r.id}>{r.roleName}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {field.value && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {ROLE_PERMISSIONS[rolesData?.find(r => r.id === field.value)?.roleName ?? ""]?.description ?? ""}
+                          </p>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  {!isEditNationalRole && (
+                    <FormField
+                      control={editForm.control}
+                      name="province_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Province Scope <span className="text-destructive">*</span></FormLabel>
+                          <Select
+                            onValueChange={(val) => {
+                              field.onChange(val);
+                              setEditProvinceId(val);
+                              editForm.setValue("district_id", "");
+                              editForm.setValue("facility_id", "");
+                              setEditDistrictId("");
+                            }}
+                            value={field.value}
+                          >
+                            <FormControl>
+                              <SelectTrigger><SelectValue placeholder="Select province" /></SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {provincesData?.data?.map(p => (
+                                <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {!field.value && (
+                            <p className="text-xs text-destructive">Province is required for provincial roles.</p>
+                          )}
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                  {!isEditNationalRole && editProvinceId && (
+                    <FormField
+                      control={editForm.control}
+                      name="district_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>District Scope (optional)</FormLabel>
+                          <Select
+                            onValueChange={(val) => {
+                              field.onChange(val);
+                              setEditDistrictId(val);
+                              editForm.setValue("facility_id", "");
+                            }}
+                            value={field.value}
+                          >
+                            <FormControl>
+                              <SelectTrigger><SelectValue placeholder="Select district (optional)" /></SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {editDistrictsData?.data?.map(d => (
+                                <SelectItem key={d.id} value={d.id!}>{d.districtName}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                  {!isEditNationalRole && editDistrictId && (
+                    <FormField
+                      control={editForm.control}
+                      name="facility_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Facility Scope (optional)</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger><SelectValue placeholder="Select facility (optional)" /></SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {editFacilitiesData?.data?.map(f => (
+                                <SelectItem key={f.id} value={f.id!}>{f.facilityName}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+
+                  {editError && (
+                    <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                      {editError}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setEditUser(null)}>Cancel</Button>
-              <Button
-                onClick={handleSaveEdit}
-                disabled={isSavingEdit || !editRoleId || (!isEditNationalRole && !editProvinceId)}
-              >
-                {isSavingEdit ? "Saving..." : "Save Changes"}
-              </Button>
-            </DialogFooter>
+                <DialogFooter className="pt-4 gap-2 sm:justify-between">
+                  <div>
+                    {isNationalAdmin && editUser.id !== user?.id && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => openDeleteUser(editUser)}
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" /> Delete user
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" onClick={closeEditUser}>Cancel</Button>
+                    <Button type="submit" disabled={isSavingEdit}>
+                      {isSavingEdit ? "Saving..." : "Save Changes"}
+                    </Button>
+                  </div>
+                </DialogFooter>
+              </form>
+            </Form>
           </DialogContent>
         </Dialog>
       )}
+
+      <AlertDialog open={!!deleteUser} onOpenChange={(open) => { if (!open) { setDeleteUser(null); setDeleteError(null); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete user permanently?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes <span className="font-medium">{deleteUser?.fullName}</span> ({deleteUser?.email}) and their roles. This cannot be undone.
+              If the user has historical records (audits, asset changes, purchase requests, etc.), deletion will be refused — deactivate them instead.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {deleteError}
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => { e.preventDefault(); handleDeleteUser(); }}
+            >
+              {isDeleting ? "Deleting..." : "Delete permanently"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
