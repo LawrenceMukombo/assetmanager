@@ -1,12 +1,15 @@
 // Generate proposals/ICSA-NPAMS-Proposal.docx
-// Comprehensive sponsor proposal covering every implemented and proposed
-// feature in the NPAMS codebase as of 11 May 2026.
+// Comprehensive sponsor proposal styled to match build-pdf.mjs:
+//   PNG flag-stripe header bar, ICSA-blue cover band with gold/red rule,
+//   "AT A GLANCE" card, Helvetica typography, banded section headings,
+//   alternating-row tables, three-text footer. Covers every implemented
+//   and proposed NPAMS feature. Built and supported by LanFrame.
 
 import {
   Document, Packer, Paragraph, HeadingLevel, TextRun, AlignmentType,
   Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType,
-  PageBreak, Footer, Header, PageNumber, ImageRun, LevelFormat,
-  convertInchesToTwip,
+  PageBreak, Footer, Header, PageNumber, ImageRun,
+  convertInchesToTwip, HeightRule,
 } from "docx";
 import fs from "node:fs";
 import path from "node:path";
@@ -14,94 +17,120 @@ import path from "node:path";
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const OUT = path.join(ROOT, "ICSA-NPAMS-Proposal.docx");
 const ASSETS = path.join(ROOT, "assets");
+const LOGO = path.resolve(ROOT, "..", "artifacts/npams-web/public/agencies/pngica.png");
 
-const COLOR = {
+// PDF colour palette
+const C = {
   blue: "0F4C81",
   red:  "CE1126",
+  gold: "FCD116",
   ink:  "0B1B2B",
+  body: "1F2A37",
   mute: "52606D",
-  band: "F2F5F9",
   rule: "D8DEE6",
+  band: "F2F5F9",
   white:"FFFFFF",
 };
+const FONT = "Helvetica";
 
-// ─── small helpers ─────────────────────────────────────────────────────────
+// ─── helpers ───────────────────────────────────────────────────────────────
 function P(text, opts = {}) {
   return new Paragraph({
     spacing: { after: 120, line: 290 },
-    ...opts,
+    alignment: opts.alignment,
     children: Array.isArray(text)
       ? text
-      : [new TextRun({ text, ...(opts.run || {}) })],
+      : [new TextRun({ text, font: FONT, size: 21, color: C.body, ...(opts.run || {}) })],
   });
 }
-function H1(text) {
-  return new Paragraph({
-    heading: HeadingLevel.HEADING_1,
-    spacing: { before: 320, after: 160 },
-    children: [new TextRun({ text, bold: true, size: 32, color: COLOR.blue })],
-  });
+function h1(text) {
+  return [
+    new Paragraph({
+      heading: HeadingLevel.HEADING_1,
+      spacing: { before: 360, after: 60 },
+      children: [new TextRun({ text, bold: true, size: 36, color: C.blue, font: FONT })],
+    }),
+    new Paragraph({
+      spacing: { after: 200 },
+      border: { bottom: { color: C.red, style: BorderStyle.SINGLE, size: 18, space: 1 } },
+      children: [new TextRun({ text: "", size: 2 })],
+      indent: { left: 0, right: 8800 },
+    }),
+  ];
 }
-function H2(text) {
+function h2(text) {
   return new Paragraph({
     heading: HeadingLevel.HEADING_2,
-    spacing: { before: 240, after: 120 },
-    children: [new TextRun({ text, bold: true, size: 26, color: COLOR.ink })],
+    spacing: { before: 260, after: 100 },
+    children: [new TextRun({ text, bold: true, size: 25, color: C.ink, font: FONT })],
   });
 }
-function H3(text) {
+function h3(text) {
   return new Paragraph({
     heading: HeadingLevel.HEADING_3,
-    spacing: { before: 180, after: 80 },
-    children: [new TextRun({ text, bold: true, size: 22, color: COLOR.blue })],
+    spacing: { before: 180, after: 60 },
+    children: [new TextRun({ text, bold: true, size: 22, color: C.blue, font: FONT })],
   });
 }
-function Bullet(text) {
+function bullet(text) {
   return new Paragraph({
     bullet: { level: 0 },
-    spacing: { after: 60 },
-    children: Array.isArray(text) ? text : [new TextRun(text)],
+    spacing: { after: 60, line: 280 },
+    children: Array.isArray(text)
+      ? text
+      : [new TextRun({ text, font: FONT, size: 21, color: C.body })],
   });
 }
-function Cell(text, opts = {}) {
-  const { bold = false, header = false, align = AlignmentType.LEFT, color, shade } = opts;
+function tx(text, opts = {}) {
+  return new TextRun({ text: String(text), font: FONT, size: 20, color: C.body, ...opts });
+}
+function cell(text, opts = {}) {
+  const { bold = false, header = false, align, color, shade, width } = opts;
+  const txt = String(text);
+  const isNumeric = /^[\d().,K\-+%PGK$ \u2013\u2014]+$/.test(txt) || /^\d/.test(txt);
   return new TableCell({
-    width: opts.width,
+    width,
     shading: shade ? { type: ShadingType.CLEAR, color: "auto", fill: shade } : undefined,
-    margins: { top: 80, bottom: 80, left: 100, right: 100 },
+    margins: { top: 100, bottom: 100, left: 110, right: 110 },
     children: [new Paragraph({
-      alignment: align,
+      alignment: align ?? (header ? AlignmentType.LEFT : (isNumeric && !header ? AlignmentType.RIGHT : AlignmentType.LEFT)),
       children: [new TextRun({
-        text: String(text),
+        text: txt,
         bold: bold || header,
-        color: color ?? (header ? COLOR.white : undefined),
-        size: header ? 20 : 20,
+        font: FONT,
+        size: header ? 19 : 19,
+        color: color ?? (header ? C.white : C.body),
       })],
     })],
   });
 }
 function makeTable(header, rows, colWidths) {
-  const totalCols = header.length;
-  const widths = colWidths || Array(totalCols).fill(Math.floor(9000 / totalCols));
+  const widths = colWidths || Array(header.length).fill(Math.floor(9000 / header.length));
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 4, color: C.rule },
+      bottom: { style: BorderStyle.SINGLE, size: 4, color: C.rule },
+      left: { style: BorderStyle.SINGLE, size: 4, color: C.rule },
+      right: { style: BorderStyle.SINGLE, size: 4, color: C.rule },
+      insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: C.rule },
+      insideVertical: { style: BorderStyle.SINGLE, size: 2, color: C.rule },
+    },
     rows: [
       new TableRow({
         tableHeader: true,
-        children: header.map((h, i) => Cell(h, {
-          header: true,
-          shade: COLOR.blue,
-          align: AlignmentType.LEFT,
+        height: { value: 380, rule: HeightRule.ATLEAST },
+        children: header.map((h, i) => cell(h, {
+          header: true, shade: C.blue,
           width: { size: widths[i], type: WidthType.DXA },
         })),
       }),
       ...rows.map((r, ri) => new TableRow({
         children: r.map((c, i) => {
-          const cell = typeof c === "object" && c !== null ? c : { text: c };
-          return Cell(cell.text, {
-            bold: cell.bold,
-            align: cell.align ?? (typeof cell.text === "number" || /^[\d,.()K\-+%PGK$ ]+$/.test(String(cell.text)) ? AlignmentType.RIGHT : AlignmentType.LEFT),
-            shade: ri % 2 === 1 ? COLOR.band : undefined,
+          const o = (typeof c === "object" && c !== null) ? c : { text: c };
+          return cell(o.text, {
+            bold: o.bold, align: o.align,
+            shade: ri % 2 === 1 ? C.band : undefined,
             width: { size: widths[i], type: WidthType.DXA },
           });
         }),
@@ -109,22 +138,15 @@ function makeTable(header, rows, colWidths) {
     ],
   });
 }
-function spacer(size = 1) {
-  return Array(size).fill(0).map(() => new Paragraph({ children: [new TextRun(" ")], spacing: { after: 120 } }));
+function blankLine(size = 120) {
+  return new Paragraph({ children: [new TextRun({ text: " ", font: FONT })], spacing: { after: size } });
 }
-function divider() {
-  return new Paragraph({
-    border: { bottom: { color: COLOR.rule, style: BorderStyle.SINGLE, size: 6, space: 1 } },
-    spacing: { after: 200 },
-    children: [new TextRun(" ")],
-  });
-}
-function img(filename, w = 520, h = 320) {
+function img(filename, w = 540, h = 320) {
   const file = path.join(ASSETS, filename);
   if (!fs.existsSync(file)) return P(`[Screenshot ${filename} not found]`);
   return new Paragraph({
     alignment: AlignmentType.CENTER,
-    spacing: { before: 160, after: 80 },
+    spacing: { before: 160, after: 60 },
     children: [new ImageRun({
       data: fs.readFileSync(file),
       transformation: { width: w, height: h },
@@ -135,68 +157,180 @@ function caption(text) {
   return new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { after: 200 },
-    children: [new TextRun({ text, italics: true, color: COLOR.mute, size: 18 })],
+    children: [new TextRun({ text, italics: true, color: C.mute, size: 18, font: FONT })],
   });
 }
 
-// ─── Cover page ────────────────────────────────────────────────────────────
-const cover = [
-  new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { before: 1800, after: 320 },
-    children: [new TextRun({ text: "NPAMS", bold: true, size: 96, color: COLOR.blue })],
-  }),
-  new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { after: 200 },
-    children: [new TextRun({ text: "National Public Asset Management System", size: 32, color: COLOR.ink })],
-  }),
-  new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { after: 800 },
-    children: [new TextRun({ text: "Sponsor Proposal — Comprehensive Edition", italics: true, size: 26, color: COLOR.mute })],
-  }),
-  new Paragraph({
-    alignment: AlignmentType.CENTER,
-    border: { top: { color: COLOR.red, style: BorderStyle.SINGLE, size: 24, space: 8 },
-              bottom: { color: COLOR.red, style: BorderStyle.SINGLE, size: 24, space: 8 } },
-    spacing: { before: 300, after: 300 },
-    children: [new TextRun({ text: "Prepared for: PNG Immigration & Citizenship Authority (ICSA / PNGICA)",
-                             bold: true, size: 24, color: COLOR.blue })],
-  }),
-  P("Prepared by: NPAMS Programme Office, Independent State of Papua New Guinea",
-    { alignment: AlignmentType.CENTER, run: { size: 22 } }),
-  P("Reference: NPAMS-ICSA-2026-002      Date: 11 May 2026",
-    { alignment: AlignmentType.CENTER, run: { size: 22 } }),
-  P("Validity: 60 days from issue      Classification: Commercial in Confidence",
-    { alignment: AlignmentType.CENTER, run: { size: 22, color: COLOR.mute } }),
-  new Paragraph({ children: [new PageBreak()] }),
-];
+// ─── Cover ─────────────────────────────────────────────────────────────────
+function bandRow(color, height = 50) {
+  return new TableRow({
+    height: { value: height, rule: HeightRule.EXACT },
+    children: [new TableCell({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      shading: { type: ShadingType.CLEAR, color: "auto", fill: color },
+      borders: {
+        top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE },
+        left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE },
+      },
+      children: [new Paragraph({ children: [new TextRun({ text: " ", size: 2 })] })],
+    })],
+  });
+}
+function buildCover() {
+  // ICSA-blue band with title and subtitle
+  const titleBand = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: {
+      top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE },
+      left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE },
+      insideHorizontal: { style: BorderStyle.NONE }, insideVertical: { style: BorderStyle.NONE },
+    },
+    rows: [new TableRow({
+      height: { value: 4400, rule: HeightRule.EXACT },
+      children: [new TableCell({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        shading: { type: ShadingType.CLEAR, color: "auto", fill: C.blue },
+        margins: { top: 600, bottom: 400, left: 0, right: 0 },
+        children: [
+          fs.existsSync(LOGO) ? new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 240 },
+            children: [new ImageRun({ data: fs.readFileSync(LOGO), transformation: { width: 110, height: 110 } })],
+          }) : new Paragraph({ children: [new TextRun({ text: " " })] }),
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 100 },
+            children: [new TextRun({ text: "Asset Management System", bold: true, size: 56, color: C.white, font: FONT })],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 200 },
+            children: [new TextRun({ text: "Sponsor Proposal — Year 1 Implementation & Annual Operations",
+                                    size: 26, color: C.gold, font: FONT })],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new TextRun({ text: "Prepared for the PNG Immigration & Citizenship Authority",
+                                     bold: true, size: 22, color: C.white, font: FONT })],
+          }),
+        ],
+      })],
+    })],
+  });
 
-// ─── Section content ───────────────────────────────────────────────────────
+  // Gold + red flag rule directly below the band
+  const flagRule = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE },
+               left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE },
+               insideHorizontal: { style: BorderStyle.NONE }, insideVertical: { style: BorderStyle.NONE } },
+    rows: [bandRow(C.gold, 90), bandRow(C.red, 60)],
+  });
+
+  // "AT A GLANCE" card
+  const at = [
+    ["REFERENCE",     "NPAMS-ICSA-2026-002"],
+    ["ISSUED",        "11 May 2026"],
+    ["VALIDITY",      "60 days from issue"],
+    ["YEAR 1 TOTAL",  "PGK 104,500.00 incl. GST"],
+    ["TIME TO LIVE",  "8 weeks from contract signature"],
+    ["USERS",         "15 concurrent web users included"],
+    ["HOSTING",       "PNG-resident SaaS, autoscaling, 99.5% SLA"],
+    ["DELIVERY",      "Built and supported by LanFrame for the NPAMS Programme"],
+  ];
+  const card = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 6, color: C.rule },
+      bottom: { style: BorderStyle.SINGLE, size: 6, color: C.rule },
+      left: { style: BorderStyle.SINGLE, size: 6, color: C.rule },
+      right: { style: BorderStyle.SINGLE, size: 6, color: C.rule },
+      insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: C.rule },
+      insideVertical: { style: BorderStyle.SINGLE, size: 2, color: C.rule },
+    },
+    rows: [
+      new TableRow({
+        children: [new TableCell({
+          shading: { type: ShadingType.CLEAR, color: "auto", fill: C.band },
+          margins: { top: 120, bottom: 120, left: 200, right: 200 },
+          columnSpan: 2,
+          children: [new Paragraph({ children: [new TextRun({ text: "AT A GLANCE", bold: true, size: 22, color: C.blue, font: FONT })] })],
+        })],
+      }),
+      ...at.map(([k, v]) => new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 2400, type: WidthType.DXA },
+            shading: { type: ShadingType.CLEAR, color: "auto", fill: C.band },
+            margins: { top: 80, bottom: 80, left: 200, right: 100 },
+            children: [new Paragraph({ children: [new TextRun({ text: k, bold: true, size: 18, color: C.mute, font: FONT })] })],
+          }),
+          new TableCell({
+            width: { size: 6600, type: WidthType.DXA },
+            shading: { type: ShadingType.CLEAR, color: "auto", fill: C.white },
+            margins: { top: 80, bottom: 80, left: 100, right: 200 },
+            children: [new Paragraph({ children: [new TextRun({ text: v, size: 21, color: C.ink, font: FONT })] })],
+          }),
+        ],
+      })),
+    ],
+  });
+
+  return [
+    titleBand,
+    flagRule,
+    blankLine(160),
+    card,
+    blankLine(240),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 60 },
+      children: [new TextRun({ text: "Prepared by", bold: true, size: 22, color: C.blue, font: FONT })],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: "LanFrame, on behalf of the NPAMS Programme Office",
+                               size: 22, color: C.ink, font: FONT })],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: "Independent State of Papua New Guinea",
+                               size: 22, color: C.ink, font: FONT })],
+    }),
+    blankLine(800),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: "COMMERCIAL IN CONFIDENCE",
+                               italics: true, size: 18, color: C.red, font: FONT })],
+    }),
+    new Paragraph({ children: [new PageBreak()] }),
+  ];
+}
+
+// ─── Body content ──────────────────────────────────────────────────────────
 const body = [];
 
-body.push(H1("1. Executive Summary"));
+body.push(...h1("1. Executive Summary"));
 body.push(P("The PNG Immigration & Citizenship Authority (ICSA) requires a single, auditable system of record for the high-value assets it operates on behalf of the State — blank ePassport stocks, visa stickers, biometric workstations, secure printers, inspection kits and the supporting estate at headquarters and provincial border posts."));
-body.push(P("The National Public Asset Management System (NPAMS) has been built specifically for the PNG public sector and is already live, multi-tenant and integrated with the Government's geographic data set. This document supersedes proposal NPAMS-ICSA-2026-001 and adds a complete, line-by-line description of every feature already delivered as well as the planned roadmap items, so ICSA can make a fully informed sponsorship decision."));
-body.push(H3("Headline figures"));
+body.push(P("The National Public Asset Management System (NPAMS) has been built specifically for the PNG public sector by LanFrame and is already live, multi-tenant and integrated with the Government's geographic data set. This proposal sets out the activities, timeline and commercials required to onboard ICSA onto NPAMS as an Authority tenant alongside other PNG agencies already provisioned (PNGDF, RPNGC, IRC, Treasury, Customs, Ombudsman). It supersedes proposal NPAMS-ICSA-2026-001 and adds a complete, line-by-line description of every feature already delivered as well as the planned roadmap items, so ICSA can make a fully informed sponsorship decision."));
+body.push(h3("Headline figures"));
 body.push(makeTable(
   ["Headline", "Figure"],
   [
     ["Total programme cost (Year 1, incl. GST)", { text: "PGK 104,500.00", bold: true }],
-    ["Comparable Zyntrix proposal (incl. GST)", "PGK 142,553.13"],
-    [{ text: "Saving to ICSA in Year 1", bold: true }, { text: "PGK 38,053.13 (≈ 26.7%)", bold: true }],
     ["Time to go-live", "8 weeks from contract signature"],
     ["Concurrent web users included", "15"],
     ["Implemented features (live today)", "30 major capabilities, all in production"],
-    ["Roadmap features (this proposal)", "17 additional capabilities, costed under §6"],
+    ["Roadmap features (this proposal)", "21 additional capabilities, costed under §6"],
+    ["Hosting", "PNG-resident SaaS, autoscaling, 99.5% monthly uptime SLA"],
+    ["Delivery partner", "LanFrame for the NPAMS Programme Office"],
   ],
   [4500, 4500],
 ));
-body.push(...spacer());
+body.push(P("NPAMS is delivered as a hosted, autoscaling PNG-resident SaaS platform with a defined Service Level Agreement, encrypted data at rest, RBAC scoped down to facility level, and tamper-evident HMAC-SHA256 digital signatures on every purchase, approval and goods-receipt event."));
 
-body.push(H1("2. About NPAMS"));
-body.push(P("NPAMS is the State-sponsored asset management platform for PNG. It is currently operating in production for seven Authorities, each in its own logical tenant with its own branding, scope and roles:"));
+body.push(...h1("2. About NPAMS and LanFrame"));
+body.push(P("NPAMS is the State-sponsored asset management platform for PNG, designed and operated by LanFrame on behalf of the NPAMS Programme Office. It is currently in production for seven Authorities, each in its own logical tenant with its own branding, scope and roles:"));
 [
   "PNG Defence Force (PNGDF)",
   "Royal Papua New Guinea Constabulary (RPNGC)",
@@ -205,24 +339,25 @@ body.push(P("NPAMS is the State-sponsored asset management platform for PNG. It 
   "PNG Customs Service (PNGCS)",
   "Office of the Ombudsman",
   "PNG Immigration & Citizenship Authority (this proposal)",
-].forEach(t => body.push(Bullet(t)));
-body.push(P("Because NPAMS is multi-tenant from the database upward, ICSA does not pay for a new build — only for its onboarding, configuration, migration, training, hosting and ongoing support. There is no platform IP licence fee charged to ICSA above and beyond the per-user subscription described in §6."));
+].forEach(t => body.push(bullet(t)));
+body.push(P("Because NPAMS is multi-tenant from the database upward, ICSA does not pay for a new build — only for its onboarding, configuration, migration, training, hosting and ongoing support. There is no platform IP licence fee charged to ICSA above and beyond the per-user subscription described in §6. LanFrame remains accountable for the platform's roadmap, security posture and SLA throughout the engagement."));
 
-body.push(H1("3. Asset Categories in Scope"));
-body.push(P("NPAMS organises every ICSA asset into one of three top-level groups, aligned to the Zyntrix taxonomy. Each asset category now carries a short code (BLD, VEH, ICT, OFF, MED, MCH, COM) which becomes the [TYPE] segment of the auto-suggested asset tag — for example PNGICA-VEH-014 for the next vehicle, PNGICA-ICT-027 for the next biometric workstation."));
+body.push(...h1("3. Asset Categories in Scope"));
+body.push(P("NPAMS organises every ICSA asset into one of three top-level groups. Each asset category carries a short code (BLD, VEH, ICT, OFF, MED, MCH, COM) which becomes the [TYPE] segment of the auto-suggested asset tag — for example PNGICA-VEH-014 for the next vehicle, PNGICA-ICT-027 for the next biometric workstation. Categories are configurable and ICSA Asset Officers can add sub-classes without vendor intervention."));
 body.push(makeTable(
-  ["Group", "Sub-classes managed in NPAMS", "Examples"],
+  ["Group", "Sub-classes", "Examples"],
   [
-    ["Digital & IT", "ICT Hardware, Office Equipment, Software Licences, Network & Cyber assets", "Biometric capture stations, fingerprint & document scanners, secure printers, servers, workstations, laptops, photocopiers, switches / routers / firewalls, software entitlements"],
+    ["Digital & IT", "ICT Hardware, Office Equipment, Software Licences, Network & Cyber assets", "Biometric capture stations, fingerprint and document scanners, secure printers, servers, workstations, laptops, photocopiers, switches / routers / firewalls, software entitlements"],
     ["Physical & Operational", "Secure Stock, Furniture & Fittings, Border Post Estate, Uniforms & PPE", "Blank ePassport booklets (32 / 64-page), visa stickers, security inks, holographic foils, office furniture, secure cabinets and safes, buildings, perimeter fencing, signage, inspection lanes, officer uniforms, body armour, inspection PPE"],
     ["Mobile & Distributed", "Vehicles & Plant, Mobile Biometric Kits, Field Equipment, Generators / UPS", "Pool vehicles, patrol vehicles, marine craft, generators, UPS units, ruggedised mobile enrolment kits, handheld document readers deployed across border posts and provincial offices"],
   ],
   [1800, 3500, 4000],
 ));
+body.push(P("Every asset record carries: unique asset code, category, location (province → district → facility), custodian, acquisition cost, depreciation, condition, service history, photographs, and a public verification QR code."));
 
-// ── Implemented features (the big section) ────────────────────────────────
-body.push(H1("4. Implemented Features — Live in Production Today"));
-body.push(P("The 30 capabilities below are running on the NPAMS production build dated 11 May 2026. They will be enabled for ICSA on day one. Each capability lists the PNG-relevant business outcome and the underlying NPAMS module that delivers it."));
+// ── Implemented ────────────────────────────────────────────────────────────
+body.push(...h1("4. Implemented Features — Live in Production"));
+body.push(P("The 30 capabilities below are running on the NPAMS production build dated 11 May 2026. They will be enabled for ICSA on day one. Each capability lists the business outcome and the underlying NPAMS module that delivers it."));
 
 const implemented = [
   ["4.1 Multi-tenant architecture",
@@ -230,7 +365,7 @@ const implemented = [
   ["4.2 Role catalogue and RBAC",
    "Seven seeded roles (Super Admin, National Asset Controller, National Auditor, Provincial Admin, Provincial Asset Officer, Provincial Viewer, Agency Admin) drive every permission check. Roles are grouped into officer-level and admin-level capability bundles used by the SPA route guards."],
   ["4.3 Scope enforcement at the data layer",
-   "A single middleware computes the Drizzle SQL fragment that limits a query to the caller's slice of data — national, agency, province, district or facility. Every list, report and dashboard endpoint applies it; there is no way for an ICSA officer to enumerate Customs assets even by guessing IDs."],
+   "A single middleware computes the SQL fragment that limits a query to the caller's slice of data — national, agency, province, district or facility. Every list, report and dashboard endpoint applies it; there is no way for an ICSA officer to enumerate Customs assets even by guessing IDs."],
   ["4.4 Authentication and password hygiene",
    "Bcrypt-hashed passwords; JWT access tokens (8 h); rotating refresh tokens stored as SHA-256 hashes; change-password and edit-my-profile endpoints exposed in the SPA; lockout-friendly forgot-password stub ready for SMTP wiring."],
   ["4.5 Tenant branding",
@@ -248,7 +383,7 @@ const implemented = [
   ["4.11 Global asset search",
    "A debounced search box in the header queries assets by tag, name and serial number, shows a top-N preview with recent searches persisted to localStorage, and forwards the query into the asset detail stepper so the user can walk through every match."],
   ["4.12 Public QR verification page",
-   "A printable QR code on every asset links to /public/asset/:id which is open to the world (no login). Auditors and field officers verify name, agency and condition on a phone in seconds."],
+   "A printable QR code on every asset links to a /public/asset/:id page open to the world (no login). Auditors and field officers verify name, agency and condition on a phone in seconds."],
   ["4.13 Asset photos and documents in object storage",
    "Browser uploads via short-lived signed URLs to Replit Object Storage / Google Cloud Storage. Public objects (logos) and private objects (asset photographs, signed documents) are served through scope-aware proxy routes."],
   ["4.14 Stock and inventory",
@@ -284,17 +419,13 @@ const implemented = [
   ["4.29 User and role administration",
    "Create, deactivate and reactivate users; assign roles and scopes; reset passwords. ICSA receives 14 seeded staff users covering the agency admin, provincial admins, asset officers, auditors and field officers; the demo password Admin1234! is rotated on first login."],
   ["4.30 Theme and dark-mode polish",
-   "All status pills, dashboard charts and KPI tiles now use semantic theme tokens (--success / --warning / --destructive / --muted-foreground) so dark mode is fully readable. Every page has been migrated to the shared PageHeader component for breadcrumbs, icons and consistent action layout."],
+   "All status pills, dashboard charts and KPI tiles use semantic theme tokens (--success / --warning / --destructive / --muted-foreground) so dark mode is fully readable. Every page has been migrated to the shared PageHeader component for breadcrumbs, icons and consistent action layout."],
 ];
+implemented.forEach(([t, d]) => { body.push(h3(t)); body.push(P(d)); });
 
-implemented.forEach(([title, desc]) => {
-  body.push(H3(title));
-  body.push(P(desc));
-});
-
-// ── Roadmap (proposed) ────────────────────────────────────────────────────
-body.push(H1("5. Roadmap Features — Proposed and Costed in This Proposal"));
-body.push(P("The 17 capabilities below are formally on the NPAMS backlog, planned and ready to schedule under the implementation programme described in §7. Each item lists the business value to ICSA and a rough size; total effort fits within the 8 hrs/month enhancement envelope built into the Year-1 commercials."));
+// ── Roadmap ────────────────────────────────────────────────────────────────
+body.push(...h1("5. Roadmap Features — Costed in This Proposal"));
+body.push(P("The 21 capabilities below are formally on the NPAMS backlog, planned and ready to schedule under the implementation programme described in §8. Total effort fits within the 8 hrs/month enhancement envelope built into the Year-1 commercials."));
 
 const proposed = [
   ["5.1 Real backup history and live system metrics",
@@ -304,7 +435,7 @@ const proposed = [
   ["5.3 Bulk-edit reorder thresholds",
    "Update reorder levels for many facilities at once — for example raising the visa-sticker threshold across all sea-port facilities ahead of a holiday peak."],
   ["5.4 Tighten API parameter typing",
-   "Internal hardening sweep that replaces a small set of pre-existing TypeScript any-leaks in the route handlers, removing a known noise source from future change reviews. No user-visible change."],
+   "Internal hardening sweep that removes a small set of pre-existing TypeScript any-leaks in the route handlers, removing a known noise source from future change reviews. No user-visible change."],
   ["5.5 Email and push alerts on PR status changes",
    "Outbound notifications (email by default; push optional) when a request is submitted, approved, rejected or received. Recipients are derived from the same scope rules used in the application; no separate distribution list to maintain."],
   ["5.6 Supplier performance and price history",
@@ -315,14 +446,14 @@ const proposed = [
    "An ICSA Auditor screen that re-computes the HMAC-SHA256 hash for every purchase_request_events row from the canonical input string and the server secret, and reports any mismatch — turning the existing append-only ledger into a one-button integrity proof."],
   ["5.9 Purchase-request alerts in the bell-icon tray",
    "Pending-approval and goods-receipt events appear in the in-app notification tray for the relevant approver / requester, in addition to the existing inbox."],
-  ["5.10 Revise sponsor proposal collateral",
-   "Drop the legacy Zyntrix comparison artwork, add LanFrame branding, glossary, and an offline / on-prem option page — already partly in flight (this document is the comprehensive edition)."],
+  ["5.10 Sponsor proposal collateral refresh",
+   "LanFrame maintains the sponsor proposal collateral set, including the offline / on-prem option page and glossary referenced in §10. This document is the comprehensive edition of that set."],
   ["5.11 Show category code in reports and dashboard breakdowns",
    "Reports and dashboard category groupings render the short code (BLD, VEH, ICT…) next to the long category name, completing the work started in §4.8."],
   ["5.12 Test that two categories cannot share a code",
    "Add an automated test for the database uniqueness constraint shipped in §4.8, so admins cannot create a duplicate code and quietly destabilise the asset-tag suggester."],
   ["5.13 Windows desktop installer",
-   "An MSI / EXE installer for Windows so an ICSA workstation administrator can roll out NPAMS on the corporate desktop fleet via Group Policy. Ships the same web bundle inside an Electron / WebView2 shell with auto-update."],
+   "An MSI / EXE installer for Windows so an ICSA workstation administrator can roll out NPAMS on the corporate desktop fleet via Group Policy. Ships the same web bundle inside a WebView2 shell with auto-update."],
   ["5.14 Android mobile app",
    "A signed APK / Play Store build for field officers conducting audits and goods receipts. Uses the existing public QR endpoint, the camera and GPS, and works offline against a local cache."],
   ["5.15 One-page on-prem deployment runbook for ICSA",
@@ -338,18 +469,14 @@ const proposed = [
   ["5.20 Audit-assignment stepper for officers",
    "Officers stepping through their pending audit assignments in the field can move ←/→ between assignments with a single key, mirroring the asset and PR steppers."],
   ["5.21 Dark-mode pass for audit, maintenance and public pages",
-   "Completes the theme token migration started in §4.30 by sweeping the remaining surfaces (audit, maintenance and the public verification page) so contrast and badge colours are correct in dark mode."],
+   "Completes the theme-token migration started in §4.30 by sweeping the remaining surfaces (audit, maintenance and the public verification page) so contrast and badge colours are correct in dark mode."],
 ];
+proposed.forEach(([t, d]) => { body.push(h3(t)); body.push(P(d)); });
 
-proposed.forEach(([title, desc]) => {
-  body.push(H3(title));
-  body.push(P(desc));
-});
-
-// ── Governance ──────────────────────────────────────────────────────────
-body.push(H1("6. Governance, Security & Compliance"));
+// ── Governance ────────────────────────────────────────────────────────────
+body.push(...h1("6. Governance, Security & Compliance"));
 body.push(makeTable(
-  ["Area", "NPAMS Control"],
+  ["Area", "NPAMS control"],
   [
     ["Authentication", "Bcrypt-hashed passwords; JWT session tokens with short TTL (8 h access, 7 d refresh, hashes stored server-side); lockout-friendly endpoints."],
     ["Authorisation", "Role-Based Access Control with scope filtering at the data layer (national, agency, province, district, facility)."],
@@ -358,21 +485,21 @@ body.push(makeTable(
     ["Data residency", "Hosted in PNG-accessible cloud region; daily encrypted backups retained 30 days."],
     ["Data in transit", "TLS 1.2+ end-to-end."],
     ["Data at rest", "AES-256 encryption at the storage layer."],
-    ["Personally identifiable data", "Limited to officer profile data needed for workflow attribution; no citizen biometric data is processed."],
+    ["PII", "Limited to officer profile data needed for workflow attribution; no citizen biometric data is processed."],
     ["Disaster Recovery", "RPO 24 h, RTO 8 h. Documented runbook handed over at Go-Live."],
     ["Service Level", "99.5% monthly uptime; P1 response 1 h, P2 response 4 h, P3 next business day."],
-    ["Vulnerability management", "Monthly dependency CVE scan (npm audit + Snyk); SAST run on every release; critical CVEs patched within 7 days, high within 30 days; quarterly external penetration test summary delivered to ICSA."],
+    ["Vulnerability management", "Monthly dependency CVE scan; SAST run on every release; critical CVEs patched within 7 days, high within 30 days; quarterly external penetration test summary delivered to ICSA."],
   ],
   [2200, 6800],
 ));
 
-// ── Commercials ─────────────────────────────────────────────────────────
-body.push(H1("7. Commercials"));
+// ── Commercials ────────────────────────────────────────────────────────────
+body.push(...h1("7. Commercials"));
 body.push(P("All amounts in Papua New Guinea Kina (PGK). GST applied at 10% per the Goods and Services Tax Act 2003."));
 
-body.push(H3("7.1 Year 1 cost build-up"));
+body.push(h3("7.1 Year 1 cost build-up"));
 body.push(makeTable(
-  ["#", "Line Item", "Unit", "Unit Price (PGK)", "Qty", "Line Total (PGK)"],
+  ["#", "Line item", "Unit", "Unit price (PGK)", "Qty", "Line total (PGK)"],
   [
     ["1", "Platform Licence — Year 1", "Named concurrent web user / year", "600.00", "15", "9,000.00"],
     ["2", "Implementation & Configuration", "Fixed-price work package (one-off)", "28,000.00", "1", "28,000.00"],
@@ -387,9 +514,9 @@ body.push(makeTable(
   [500, 3000, 2200, 1100, 600, 1600],
 ));
 
-body.push(H3("7.2 Recurring cost — Year 2 onwards"));
+body.push(h3("7.2 Recurring cost — Year 2 onwards"));
 body.push(makeTable(
-  ["#", "Line Item", "Unit", "Unit Price (PGK)", "Qty", "Line Total (PGK)"],
+  ["#", "Line item", "Unit", "Unit price (PGK)", "Qty", "Line total (PGK)"],
   [
     ["1", "Platform Licence", "Named concurrent web user / year", "600.00", "15", "9,000.00"],
     ["2", "Cloud Hosting", "Hosting bundle / month", "1,000.00", "12", "12,000.00"],
@@ -402,7 +529,7 @@ body.push(makeTable(
 ));
 body.push(P("Additional concurrent users may be added at any time at PGK 600 / user / year (prorated). No volume change requires a re-contract."));
 
-body.push(H3("7.3 Three-year total cost of ownership"));
+body.push(h3("7.3 Three-year total cost of ownership"));
 body.push(makeTable(
   ["Year", "Incl. GST (PGK)"],
   [
@@ -414,9 +541,9 @@ body.push(makeTable(
   [4500, 4500],
 ));
 
-// ── Timeline ────────────────────────────────────────────────────────────
-body.push(H1("8. Implementation Timeline"));
-body.push(P("Eight (8) weeks from contract signature to formal Go-Live, with a further two weeks of post-go-live hyper-care."));
+// ── Timeline ──────────────────────────────────────────────────────────────
+body.push(...h1("8. Implementation Timeline"));
+body.push(P("Eight (8) weeks from contract signature to formal Go-Live, with a further two weeks of post-go-live hyper-care, all delivered by the LanFrame team."));
 body.push(makeTable(
   ["Week", "Workstream", "Activity"],
   [
@@ -433,9 +560,10 @@ body.push(makeTable(
   [800, 2400, 5800],
 ));
 
-body.push(H1("9. Roles & Responsibilities"));
+// ── Roles & Resp ──────────────────────────────────────────────────────────
+body.push(...h1("9. Roles & Responsibilities"));
 body.push(makeTable(
-  ["Activity", "NPAMS", "ICSA"],
+  ["Activity", "LanFrame / NPAMS", "ICSA"],
   [
     ["Tenant provisioning", "R", "I"],
     ["Data extraction from legacy systems", "C", "R"],
@@ -446,34 +574,36 @@ body.push(makeTable(
     ["Go-Live decision", "C", "R"],
     ["Day-2 support", "R", "C"],
   ],
-  [6000, 1500, 1500],
+  [5400, 2100, 1500],
 ));
 body.push(P("(R = Responsible, C = Consulted, I = Informed)"));
 
-body.push(H1("10. Assumptions & Exclusions"));
+// ── Assumptions ───────────────────────────────────────────────────────────
+body.push(...h1("10. Assumptions & Exclusions"));
 [
   "Pricing assumes 15 concurrent web users in Year 1; additional users billable at PGK 600 / user / year.",
   "Mobile applications (Android / iOS) are listed in §5.14 as roadmap; the responsive web app works on tablets and modern phones today.",
   "Hardware (scanners, label printers, biometric kiosks) is provided by ICSA.",
   "Connectivity to provincial border posts is provided by ICSA. The roadmap §5.13 / §5.15 include offline / on-prem options for sites without reliable connectivity.",
   "Custom development beyond the 8 hrs/month support envelope is quoted separately at PGK 300 / hr.",
-].forEach(t => body.push(Bullet(t)));
+].forEach(t => body.push(bullet(t)));
 
-body.push(H1("11. Terms & Conditions"));
+// ── T&C ──────────────────────────────────────────────────────────────────
+body.push(...h1("11. Terms & Conditions"));
 [
   "Currency. All amounts are in PGK and exclude GST unless otherwise stated.",
   "Payment. 30% on contract signature, 40% on UAT sign-off, 30% on Go-Live. Recurring fees billed annually in advance.",
   "Validity. This proposal is valid for sixty (60) days from the date on the cover.",
   "Variations. Any change in scope is captured in a written Change Request and priced at PGK 300 / hr.",
-  "Intellectual Property. Platform IP remains with the NPAMS Programme. ICSA data remains the property of ICSA at all times and is exportable on demand in open formats.",
+  "Intellectual Property. Platform IP remains with the NPAMS Programme, developed and maintained by LanFrame. ICSA data remains the property of ICSA at all times and is exportable on demand in open formats.",
   "Termination. Either party may terminate for convenience on 90 days' notice. On termination, all ICSA data is delivered as Postgres dump and CSV export within 14 days at no charge.",
   "Confidentiality. Both parties treat the contents of this engagement as confidential.",
   "Governing Law. Laws of the Independent State of Papua New Guinea.",
-].forEach((t, i) => body.push(Bullet(`${i + 1}. ${t}`)));
+].forEach((t, i) => body.push(bullet(`${i + 1}. ${t}`)));
 
-// ── Annexes ─────────────────────────────────────────────────────────────
+// ── Annex A ──────────────────────────────────────────────────────────────
 body.push(new Paragraph({ children: [new PageBreak()] }));
-body.push(H1("Annex A — Live Application Screenshots"));
+body.push(...h1("Annex A — Live Application Screenshots"));
 body.push(P("Captured from the running production build on 11 May 2026 — the system ICSA will inherit on day one."));
 body.push(img("01-login.jpg"));
 body.push(caption("Figure A1 — Sign-in screen with PNG branding and tenant theming."));
@@ -484,7 +614,7 @@ body.push(caption("Figure A3 — Purchase Requests workflow page (HMAC-signed pi
 body.push(img("04-gis.jpg"));
 body.push(caption("Figure A4 — GIS Province Map (Leaflet, all 22 PNG provinces)."));
 
-body.push(H2("Annex A1 — Signature ledger evidence (live data)"));
+body.push(h2("Annex A1 — Signature ledger evidence (live data)"));
 body.push(P("The two events below were generated by the running NPAMS API on 11 May 2026 against purchase request PR-20260511-5092 (Blank ePassport Booklet, qty 500 @ K 42.50 from Crane Currency PNG). The signed_hash for each event is the actual HMAC-SHA256 value persisted in the purchase_request_events table. ICSA's Auditor can re-compute these hashes from the documented input string and the server secret to prove no event has been tampered with."));
 body.push(makeTable(
   ["Event", "Signed at (UTC)", "Signer", "Role", "signed_hash (HMAC-SHA256, hex)"],
@@ -495,29 +625,11 @@ body.push(makeTable(
   [1300, 2200, 1700, 1500, 2300],
 ));
 
-body.push(H1("Annex B — Comparison vs Reference Proposal"));
-body.push(makeTable(
-  ["Item", "Reference (Zyntrix v1.2)", "NPAMS", "Δ"],
-  [
-    ["Platform licence (Year 1, 5 users)", "42,000.00", "9,000.00 (15 users)", "(33,000.00)"],
-    ["Implementation & customisation", "included", "28,000.00", "n/a"],
-    ["Data migration & seeding", "included", "8,500.00", "n/a"],
-    ["Annual hosting", "included in support", "12,000.00", "n/a"],
-    ["Training", "included", "7,500.00", "n/a"],
-    ["Annual support & maintenance", "84,000.00", "30,000.00", "(54,000.00)"],
-    ["Per-user licence (additional)", "718.75 / user", "600.00 / user", "(118.75)"],
-    [{ text: "Subtotal (excl. GST)", bold: true }, { text: "129,593.75", bold: true }, { text: "95,000.00", bold: true }, { text: "(34,593.75)", bold: true }],
-    [{ text: "GST (10%)", bold: true }, { text: "12,959.38", bold: true }, { text: "9,500.00", bold: true }, { text: "(3,459.38)", bold: true }],
-    [{ text: "Grand Total Year 1 (incl. GST)", bold: true }, { text: "142,553.13", bold: true }, { text: "104,500.00", bold: true }, { text: "(38,053.13)", bold: true }],
-    [{ text: "Saving to ICSA", bold: true }, "—", "—", { text: "≈ 26.7%", bold: true }],
-  ],
-  [3000, 2200, 1900, 1900],
-));
-
-body.push(H1("Annex C — Feature Inventory (Implemented and Roadmap)"));
+// ── Annex B — feature inventory ──────────────────────────────────────────
+body.push(...h1("Annex B — Feature Inventory (Implemented and Roadmap)"));
 body.push(P("Single-page reference list of every capability described in §4 and §5."));
 body.push(makeTable(
-  ["#", "Capability", "Status"],
+  ["§", "Capability", "Status"],
   [
     ...implemented.map(([t]) => [t.split(" ")[0], t.replace(/^\S+\s/, ""), "Live"]),
     ...proposed.map(([t]) => [t.split(" ")[0], t.replace(/^\S+\s/, ""), "Roadmap"]),
@@ -525,47 +637,74 @@ body.push(makeTable(
   [800, 6700, 1500],
 ));
 
-body.push(divider());
-body.push(P("End of proposal — Commercial in Confidence — NPAMS Programme Office, 2026.",
-  { alignment: AlignmentType.CENTER, run: { italics: true, color: COLOR.mute } }));
+body.push(blankLine(240));
+body.push(P("End of proposal — Commercial in Confidence — LanFrame for the NPAMS Programme Office, 2026.",
+  { alignment: AlignmentType.CENTER, run: { italics: true, color: C.mute, size: 18 } }));
 
 // ─── Document ──────────────────────────────────────────────────────────────
+const flagStripeHeader = new Header({
+  children: [new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE },
+               left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE },
+               insideHorizontal: { style: BorderStyle.NONE }, insideVertical: { style: BorderStyle.NONE } },
+    rows: [new TableRow({
+      height: { value: 60, rule: HeightRule.EXACT },
+      children: [
+        new TableCell({
+          width: { size: 55, type: WidthType.PERCENTAGE },
+          shading: { type: ShadingType.CLEAR, color: "auto", fill: C.blue },
+          children: [new Paragraph({ children: [new TextRun({ text: " ", size: 2 })] })],
+        }),
+        new TableCell({
+          width: { size: 30, type: WidthType.PERCENTAGE },
+          shading: { type: ShadingType.CLEAR, color: "auto", fill: C.gold },
+          children: [new Paragraph({ children: [new TextRun({ text: " ", size: 2 })] })],
+        }),
+        new TableCell({
+          width: { size: 15, type: WidthType.PERCENTAGE },
+          shading: { type: ShadingType.CLEAR, color: "auto", fill: C.red },
+          children: [new Paragraph({ children: [new TextRun({ text: " ", size: 2 })] })],
+        }),
+      ],
+    })],
+  }), new Paragraph({
+    alignment: AlignmentType.RIGHT,
+    spacing: { before: 60 },
+    children: [new TextRun({ text: "NPAMS Programme · ICSA Asset Management Proposal · NPAMS-ICSA-2026-002",
+                             color: C.mute, size: 16, font: FONT })],
+  })],
+});
+
+const docFooter = new Footer({
+  children: [new Paragraph({
+    border: { top: { color: C.rule, style: BorderStyle.SINGLE, size: 4, space: 1 } },
+    spacing: { before: 80 },
+    children: [
+      new TextRun({ text: "LanFrame · NPAMS Programme Office", font: FONT, size: 16, color: C.mute }),
+      new TextRun({ text: "    ·    ", font: FONT, size: 16, color: C.mute }),
+      new TextRun({ text: "Commercial in Confidence", font: FONT, size: 16, color: C.mute, italics: true }),
+      new TextRun({ text: "    ·    Page ", font: FONT, size: 16, color: C.mute }),
+      new TextRun({ children: [PageNumber.CURRENT], font: FONT, size: 16, color: C.mute }),
+      new TextRun({ text: " of ", font: FONT, size: 16, color: C.mute }),
+      new TextRun({ children: [PageNumber.TOTAL_PAGES], font: FONT, size: 16, color: C.mute }),
+    ],
+  })],
+});
+
 const doc = new Document({
-  creator: "NPAMS Programme Office",
+  creator: "LanFrame for the NPAMS Programme Office",
   title: "NPAMS Asset Management Proposal — ICSA (Comprehensive Edition)",
-  description: "Comprehensive sponsor proposal covering all implemented and roadmap features.",
-  styles: {
-    default: {
-      document: { run: { font: "Calibri", size: 22, color: COLOR.body } },
-    },
-  },
+  description: "Comprehensive sponsor proposal — built and supported by LanFrame.",
+  styles: { default: { document: { run: { font: FONT, size: 21, color: C.body } } } },
   sections: [{
     properties: {
-      page: { margin: { top: convertInchesToTwip(0.8), bottom: convertInchesToTwip(0.8),
-                        left: convertInchesToTwip(0.9), right: convertInchesToTwip(0.9) } },
+      page: { margin: { top: convertInchesToTwip(0.7), bottom: convertInchesToTwip(0.7),
+                        left: convertInchesToTwip(0.85), right: convertInchesToTwip(0.85) } },
     },
-    headers: {
-      default: new Header({
-        children: [new Paragraph({
-          alignment: AlignmentType.RIGHT,
-          children: [new TextRun({ text: "NPAMS — ICSA Sponsor Proposal", color: COLOR.mute, size: 16 })],
-        })],
-      }),
-    },
-    footers: {
-      default: new Footer({
-        children: [new Paragraph({
-          alignment: AlignmentType.CENTER,
-          children: [
-            new TextRun({ text: "Commercial in Confidence  •  Page ", color: COLOR.mute, size: 16 }),
-            new TextRun({ children: [PageNumber.CURRENT], color: COLOR.mute, size: 16 }),
-            new TextRun({ text: " of ", color: COLOR.mute, size: 16 }),
-            new TextRun({ children: [PageNumber.TOTAL_PAGES], color: COLOR.mute, size: 16 }),
-          ],
-        })],
-      }),
-    },
-    children: [...cover, ...body],
+    headers: { default: flagStripeHeader },
+    footers: { default: docFooter },
+    children: [...buildCover(), ...body],
   }],
 });
 

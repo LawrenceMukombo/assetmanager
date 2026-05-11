@@ -23,4 +23,10 @@ title = "NPAMS — Technical Documentation"
 id = "WXE8DXnwi4KQ2P6Npb6X1"
 uri = "file://proposals/ICSA-NPAMS-Proposal.docx"
 type = "word_document"
-title = "NPAMS — ICSA Sponsor Proposal (Comprehensive Edition, Word)"
+title = "NPAMS — ICSA Sponsor Proposal (Word, PDF look-and-feel)"
+
+[[outputs]]
+id = "XrxJZoDbKj0acuh0QhkwL"
+uri = "file://proposals/ICSA-NPAMS-Summary.pptx"
+type = "slides"
+title = "NPAMS — ICSA Sponsor Summary (PowerPoint)"
