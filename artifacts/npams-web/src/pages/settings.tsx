@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const profileSchema = z.object({
   full_name: z.string().min(1, "Name is required"),
@@ -29,16 +29,83 @@ const passwordSchema = z
     path: ["confirm_password"],
   });
 
+const agencyBrandingSchema = z.object({
+  agency_name: z.string().min(1, "Agency name is required"),
+  logo_url: z.string().optional(),
+  theme_accent_color: z.string().optional(),
+  flag_colors: z.string().optional(),
+});
+
 export default function Settings() {
   const { user } = useAuth();
-  const { branding } = useProvinceBranding();
+  const { branding, applyBranding } = useProvinceBranding();
   const { toast } = useToast();
   const [profileLoading, setProfileLoading] = useState(false);
   const [pwdLoading, setPwdLoading] = useState(false);
+  const [brandingLoading, setBrandingLoading] = useState(false);
 
   const isSuperAdmin = user?.role === "Super Admin";
   const isProvincialAdmin = user?.role === "Provincial Admin";
+  const isAgencyAdmin = user?.role === "Agency Admin";
   const isNational = user?.scope_level === "national";
+  const isAgency = user?.scope_level === "agency";
+
+  const agencyBrandingForm = useForm<z.infer<typeof agencyBrandingSchema>>({
+    resolver: zodResolver(agencyBrandingSchema),
+    defaultValues: { agency_name: "", logo_url: "", theme_accent_color: "", flag_colors: "" },
+  });
+
+  useEffect(() => {
+    if (!isAgency || !isAgencyAdmin) return;
+    let cancelled = false;
+    (async () => {
+      const r = await apiFetchJson<{ data: { agencyName: string; logoUrl: string | null; themeAccentColor: string | null; flagColors: string[] } }>(
+        "/api/v1/agency_branding",
+      );
+      if (cancelled || !r.ok || !r.data) return;
+      const d = r.data.data;
+      agencyBrandingForm.reset({
+        agency_name: d.agencyName ?? "",
+        logo_url: d.logoUrl ?? "",
+        theme_accent_color: d.themeAccentColor ?? "",
+        flag_colors: Array.isArray(d.flagColors) ? d.flagColors.join(", ") : "",
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [isAgency, isAgencyAdmin, agencyBrandingForm]);
+
+  const onAgencyBrandingSubmit = async (values: z.infer<typeof agencyBrandingSchema>) => {
+    setBrandingLoading(true);
+    const colors = (values.flag_colors ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const result = await apiFetchJson<{ data: { agencyName: string; logoUrl: string | null; themeAccentColor: string | null; flagColors: string[] } }>(
+      "/api/v1/agency_branding",
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          agency_name: values.agency_name,
+          logo_url: values.logo_url || null,
+          theme_accent_color: values.theme_accent_color || null,
+          flag_colors: colors,
+        }),
+      },
+    );
+    setBrandingLoading(false);
+    if (result.ok && result.data) {
+      const d = result.data.data;
+      applyBranding({
+        provinceName: d.agencyName,
+        flagUrl: d.logoUrl,
+        themeAccentColor: d.themeAccentColor,
+        flagColors: Array.isArray(d.flagColors) ? d.flagColors : [],
+      });
+      toast({ title: "Agency branding updated" });
+    } else {
+      toast({ variant: "destructive", title: "Error", description: result.message });
+    }
+  };
 
   const profileForm = useForm<z.infer<typeof profileSchema>>({
     resolver: zodResolver(profileSchema),
@@ -191,7 +258,99 @@ export default function Settings() {
         </div>
       </div>
 
-      {!isNational && isProvincialAdmin && branding.provinceName && (
+      {isAgency && isAgencyAdmin && (
+        <div className="space-y-4">
+          <Separator />
+          <div>
+            <h3 className="text-lg font-semibold">Agency Branding</h3>
+            <p className="text-sm text-muted-foreground">
+              Customise how your agency appears across the portal — name, logo, accent colour and flag colours.
+            </p>
+          </div>
+          <Card>
+            <CardContent className="pt-6">
+              <Form {...agencyBrandingForm}>
+                <form onSubmit={agencyBrandingForm.handleSubmit(onAgencyBrandingSubmit)} className="space-y-4">
+                  <FormField
+                    control={agencyBrandingForm.control}
+                    name="agency_name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Agency Name</FormLabel>
+                        <FormControl><Input {...field} placeholder="e.g. PNG Immigration & Citizenship Authority" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={agencyBrandingForm.control}
+                    name="logo_url"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Logo URL</FormLabel>
+                        <FormControl><Input {...field} placeholder="/agencies/your-logo.png or https://..." /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <FormField
+                      control={agencyBrandingForm.control}
+                      name="theme_accent_color"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Accent Colour</FormLabel>
+                          <div className="flex items-center gap-2">
+                            <FormControl>
+                              <Input {...field} placeholder="#0D47A1" />
+                            </FormControl>
+                            {field.value && (
+                              <div
+                                className="w-9 h-9 rounded border shrink-0"
+                                style={{ backgroundColor: field.value }}
+                              />
+                            )}
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={agencyBrandingForm.control}
+                      name="flag_colors"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Flag Colours (comma-separated)</FormLabel>
+                          <FormControl><Input {...field} placeholder="#CE1126, #000000, #FCD116" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <div className="flex items-center gap-3 pt-2">
+                    <Button type="submit" disabled={brandingLoading}>
+                      {brandingLoading ? "Saving..." : "Save Branding"}
+                    </Button>
+                    {agencyBrandingForm.watch("logo_url") && (
+                      <img
+                        src={agencyBrandingForm.watch("logo_url")}
+                        alt="Logo preview"
+                        className="h-10 w-10 object-contain rounded border bg-white p-0.5"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Changes apply immediately. Other users in your agency will see the new branding next time they log in.
+                  </p>
+                </form>
+              </Form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {!isNational && !isAgency && isProvincialAdmin && branding.provinceName && (
         <div className="space-y-4">
           <Separator />
           <div>

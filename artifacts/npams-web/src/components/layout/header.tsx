@@ -20,6 +20,7 @@ export function Header() {
   const queryClient = useQueryClient();
   const [notifOpen, setNotifOpen] = useState(false);
   const isNational = user?.scope_level === "national";
+  const isAgency = user?.scope_level === "agency";
 
   const { data: notifications } = useGetNotifications({
     query: {
@@ -44,7 +45,9 @@ export function Header() {
   const headerTitle = isNational
     ? "National Public Asset Management System"
     : branding.provinceName
-    ? `${branding.provinceName} Asset Management`
+    ? `${branding.provinceName} — Asset Management System`
+    : isAgency
+    ? "Agency Asset Management System"
     : "Provincial Asset Management";
 
   const nationalColors = ["#CE1126", "#000000", "#FCD116"];
@@ -83,8 +86,12 @@ export function Header() {
           ) : branding.flagUrl ? (
             <img
               src={branding.flagUrl}
-              alt={`${branding.provinceName ?? "Province"} flag`}
-              className="h-6 w-10 object-contain rounded-sm border bg-muted hidden sm:block"
+              alt={`${branding.provinceName ?? "Org"} ${isAgency ? "logo" : "flag"}`}
+              className={
+                isAgency
+                  ? "h-9 w-9 object-contain rounded-sm bg-white p-0.5 hidden sm:block"
+                  : "h-6 w-10 object-contain rounded-sm border bg-muted hidden sm:block"
+              }
             />
           ) : null}
           <h1 className="font-semibold text-lg hidden sm:block">{headerTitle}</h1>

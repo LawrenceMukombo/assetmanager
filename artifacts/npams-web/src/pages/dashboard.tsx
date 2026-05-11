@@ -1101,6 +1101,7 @@ function NationalDashboard() {
 
 interface ProvDashData {
   province?: { id?: string; provinceName?: string; flagUrl?: string; themeAccentColor?: string; flagColors?: string[]; capitalCity?: string; region?: string };
+  agency?: { id?: string; agencyName?: string; agencyCode?: string; agencyType?: string; logoUrl?: string | null; themeAccentColor?: string | null; flagColors?: string[] };
   total_assets: number; active_assets: number; missing_assets: number;
   disposed_assets: number; maintenance_assets: number; total_value: string;
   filtered_total: number; filtered_value: string; has_filters: boolean;
@@ -1158,7 +1159,14 @@ function ProvincialDashboard() {
   }, []);
 
   useEffect(() => {
-    if (d?.province) {
+    if (d?.agency) {
+      applyBranding({
+        provinceName:     d.agency.agencyName        ?? null,
+        flagUrl:          d.agency.logoUrl           ?? null,
+        themeAccentColor: d.agency.themeAccentColor  ?? null,
+        flagColors:       Array.isArray(d.agency.flagColors) ? d.agency.flagColors : [],
+      });
+    } else if (d?.province) {
       applyBranding({
         provinceName:     d.province.provinceName     ?? null,
         flagUrl:          d.province.flagUrl          ?? null,
@@ -1166,7 +1174,7 @@ function ProvincialDashboard() {
         flagColors:       Array.isArray(d.province.flagColors) ? d.province.flagColors : [],
       });
     }
-  }, [d?.province, applyBranding]);
+  }, [d?.province, d?.agency, applyBranding]);
 
   const openDetail = (title: string, params: Record<string, string>, subtitle?: string) => {
     setDrawer({ title, subtitle, params });
@@ -1191,28 +1199,36 @@ function ProvincialDashboard() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        {d?.province?.flagUrl && (
+        {d?.agency?.logoUrl ? (
+          <img src={d.agency.logoUrl} alt={`${d.agency.agencyName ?? ""} logo`} className="h-12 w-12 object-contain rounded-sm bg-white p-0.5 border" />
+        ) : d?.province?.flagUrl ? (
           <img src={d.province.flagUrl} alt={`${d.province.provinceName ?? ""} flag`} className="h-8 w-12 object-cover rounded-sm border" />
-        )}
+        ) : null}
         <div>
           <h2 className="text-3xl font-bold tracking-tight">
-            {d?.province?.provinceName ? `${d.province.provinceName} Dashboard` : "Provincial Dashboard"}
+            {d?.agency?.agencyName
+              ? `${d.agency.agencyName} Dashboard`
+              : d?.province?.provinceName
+              ? `${d.province.provinceName} Dashboard`
+              : "Provincial Dashboard"}
           </h2>
           <p className="text-muted-foreground text-sm">
-            {d?.province?.region ? `${d.province.region} Region` : ""}
-            {d?.province?.capitalCity ? ` · ${d.province.capitalCity}` : ""}
-            {" "}· Click any chart or card to cross-filter
+            {d?.agency
+              ? <>{d.agency.agencyType ? `${d.agency.agencyType.toUpperCase()} · ` : ""}{d.agency.agencyCode ?? ""} · Click any chart or card to cross-filter</>
+              : <>{d?.province?.region ? `${d.province.region} Region` : ""}{d?.province?.capitalCity ? ` · ${d.province.capitalCity}` : ""} · Click any chart or card to cross-filter</>}
           </p>
         </div>
       </div>
 
-      {/* Location Filter Bar — district + facility scope selector */}
-      <LocationFilterBar
-        scope={locationScope}
-        onChange={handleLocationChange}
-        showRegionProvince={false}
-        fixedProvinceId={d?.province?.id}
-      />
+      {/* Location Filter Bar — districts/facilities only apply for province scope */}
+      {!d?.agency && (
+        <LocationFilterBar
+          scope={locationScope}
+          onChange={handleLocationChange}
+          showRegionProvince={false}
+          fixedProvinceId={d?.province?.id}
+        />
+      )}
 
       {/* Filter strip */}
       <FilterStrip

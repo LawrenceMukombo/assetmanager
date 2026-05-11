@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, and, isNull, sql, desc, inArray } from "drizzle-orm";
-import { db, assets, assetCategories, provinces, districts, facilities } from "@workspace/db";
+import { db, assets, assetCategories, provinces, districts, facilities, agencies } from "@workspace/db";
 import { requireAuth, requireNational } from "../lib/auth";
 
 const router = Router();
@@ -122,35 +122,28 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
       .orderBy(desc(sql`count(*)`))
       .limit(12);
 
-    // By District — filter by status/condition/category but NOT district itself
-    const districtConditions = [...baseConditions.filter(c => c !== (districtId ? eq(assets.districtId, districtId) : null))];
-    // Re-build baseConditions without districtId for the district chart
-    const baseNoDistrict = [isNull(assets.deletedAt), eq(assets.provinceId, provinceId)];
-    if (facilityId) baseNoDistrict.push(eq(assets.facilityId, facilityId));
-    const districtChartConditions = [...baseNoDistrict];
-    if (safeStatus)    districtChartConditions.push(eq(assets.status, safeStatus));
-    if (safeCondition) districtChartConditions.push(eq(assets.condition, safeCondition));
-    if (categoryId)    districtChartConditions.push(eq(assets.categoryId, categoryId));
-
-    const byDistrict = await db.select({
-      district_id:    districts.id,
-      district_name:  districts.districtName,
-      total_assets:   sql<number>`count(${assets.id})::int`,
-      missing_assets: sql<number>`sum(case when ${assets.status} = 'missing' then 1 else 0 end)::int`,
-      active_assets:  sql<number>`sum(case when ${assets.status} = 'active' then 1 else 0 end)::int`,
-      total_value:    sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
-    }).from(districts)
-      .leftJoin(assets, and(
-        eq(assets.districtId, districts.id),
-        isNull(assets.deletedAt),
-        ...(safeStatus    ? [eq(assets.status, safeStatus)]      : []),
-        ...(safeCondition ? [eq(assets.condition, safeCondition)]: []),
-        ...(categoryId    ? [eq(assets.categoryId, categoryId)]  : []),
-        ...(facilityId    ? [eq(assets.facilityId, facilityId)]  : []),
-      ))
-      .where(eq(districts.provinceId, provinceId))
-      .groupBy(districts.id, districts.districtName)
-      .orderBy(desc(sql`count(${assets.id})`));
+    // By District — only meaningful for province scope (agencies don't roll up by district)
+    const byDistrict = !isAgencyScoped && provinceId
+      ? await db.select({
+          district_id:    districts.id,
+          district_name:  districts.districtName,
+          total_assets:   sql<number>`count(${assets.id})::int`,
+          missing_assets: sql<number>`sum(case when ${assets.status} = 'missing' then 1 else 0 end)::int`,
+          active_assets:  sql<number>`sum(case when ${assets.status} = 'active' then 1 else 0 end)::int`,
+          total_value:    sql<string>`coalesce(sum(${assets.purchaseCost}::numeric), 0)::text`,
+        }).from(districts)
+          .leftJoin(assets, and(
+            eq(assets.districtId, districts.id),
+            isNull(assets.deletedAt),
+            ...(safeStatus    ? [eq(assets.status, safeStatus)]      : []),
+            ...(safeCondition ? [eq(assets.condition, safeCondition)]: []),
+            ...(categoryId    ? [eq(assets.categoryId, categoryId)]  : []),
+            ...(facilityId    ? [eq(assets.facilityId, facilityId)]  : []),
+          ))
+          .where(eq(districts.provinceId, provinceId))
+          .groupBy(districts.id, districts.districtName)
+          .orderBy(desc(sql`count(${assets.id})`))
+      : [];
 
     // Acquisition trend (scoped, always unfiltered by cross-filters)
     const acquisitionTrend = await db.select({
@@ -183,23 +176,38 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
       .orderBy(desc(assets.createdAt))
       .limit(10);
 
-    const [province] = await db.select({
-      id:               provinces.id,
-      provinceName:     provinces.provinceName,
-      flagUrl:          provinces.flagUrl,
-      themeAccentColor: provinces.themeAccentColor,
-      flagColors:       provinces.flagColors,
-      capitalCity:      provinces.capitalCity,
-      region:           provinces.region,
-      population:       provinces.population,
-      areaKm2:          provinces.areaKm2,
-    }).from(provinces).where(eq(provinces.id, provinceId)).limit(1);
+    const province = !isAgencyScoped
+      ? (await db.select({
+          id:               provinces.id,
+          provinceName:     provinces.provinceName,
+          flagUrl:          provinces.flagUrl,
+          themeAccentColor: provinces.themeAccentColor,
+          flagColors:       provinces.flagColors,
+          capitalCity:      provinces.capitalCity,
+          region:           provinces.region,
+          population:       provinces.population,
+          areaKm2:          provinces.areaKm2,
+        }).from(provinces).where(eq(provinces.id, provinceId!)).limit(1))[0]
+      : undefined;
+
+    const agency = isAgencyScoped && agencyId
+      ? (await db.select({
+          id:               agencies.id,
+          agencyName:       agencies.agencyName,
+          agencyCode:       agencies.agencyCode,
+          agencyType:       agencies.agencyType,
+          logoUrl:          agencies.logoUrl,
+          themeAccentColor: agencies.themeAccentColor,
+          flagColors:       agencies.flagColors,
+        }).from(agencies).where(eq(agencies.id, agencyId)).limit(1))[0]
+      : undefined;
 
     res.json({
       success: true,
-      message: "Provincial dashboard retrieved",
+      message: isAgencyScoped ? "Agency dashboard retrieved" : "Provincial dashboard retrieved",
       data: {
         province,
+        agency,
         total_assets:       totals.total_assets       ?? 0,
         active_assets:      totals.active_assets      ?? 0,
         missing_assets:     totals.missing_assets     ?? 0,

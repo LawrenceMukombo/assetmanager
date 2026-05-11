@@ -12,6 +12,7 @@ import notificationsRouter from "./notifications";
 import storageRouter from "./storage";
 import auditRouter from "./audit";
 import maintenanceRouter from "./maintenance";
+import agencyRouter from "./agency";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(notificationsRouter);
 router.use(storageRouter);
 router.use(auditRouter);
 router.use(maintenanceRouter);
+router.use(agencyRouter);
 
 export default router;

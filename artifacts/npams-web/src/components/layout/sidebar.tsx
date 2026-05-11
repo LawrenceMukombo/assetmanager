@@ -49,22 +49,36 @@ export function Sidebar() {
   const unreadCount = notifications?.data?.filter((n) => !n.readStatus).length ?? 0;
 
   const isNational = user?.scope_level === "national";
+  const isAgency = user?.scope_level === "agency";
   const isAdmin = user?.role ? ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]) : false;
   const isOfficer = user?.role ? OFFICER_ROLES.includes(user.role as typeof OFFICER_ROLES[number]) : false;
 
   const scopeLabel = isNational
     ? "National"
-    : branding.provinceName ?? "Provincial";
+    : isAgency
+    ? "Agency"
+    : "Provincial";
+
+  const orgName = isNational
+    ? "NPAMS"
+    : branding.provinceName ?? (isAgency ? "Agency" : "NPAMS");
 
   return (
     <SidebarComponent>
-      <SidebarHeader className="border-b p-4" style={{ borderTopWidth: 4, borderTopStyle: "solid", borderTopColor: isNational ? "#CE1126" : "var(--province-accent, hsl(var(--primary)))" }}>
+      <SidebarHeader
+        className="border-b p-4"
+        style={{
+          borderTopWidth: 4,
+          borderTopStyle: "solid",
+          borderTopColor: isNational ? "#CE1126" : "var(--province-accent, hsl(var(--primary)))",
+        }}
+      >
         <div className="flex items-center gap-2">
           {!isNational && branding.flagUrl ? (
             <img
               src={branding.flagUrl}
-              alt={`${branding.provinceName ?? "Province"} flag`}
-              className="w-10 h-6 object-contain rounded-sm border bg-muted"
+              alt={`${branding.provinceName ?? scopeLabel} ${isAgency ? "logo" : "flag"}`}
+              className={isAgency ? "w-10 h-10 object-contain rounded-sm bg-white p-0.5" : "w-10 h-6 object-contain rounded-sm border bg-muted"}
             />
           ) : isNational ? (
             <img
@@ -74,11 +88,11 @@ export function Sidebar() {
             />
           ) : (
             <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center text-primary-foreground font-bold text-xs">
-              NP
+              {isAgency ? "AG" : "NP"}
             </div>
           )}
-          <div className="flex flex-col">
-            <span className="font-semibold text-sm">NPAMS</span>
+          <div className="flex flex-col min-w-0">
+            <span className="font-semibold text-sm truncate" title={orgName}>{orgName}</span>
             <span className="text-xs text-muted-foreground truncate">{scopeLabel}</span>
           </div>
         </div>

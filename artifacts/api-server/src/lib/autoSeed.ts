@@ -48,7 +48,96 @@ export async function autoSeedIfEmpty(): Promise<void> {
     await seedAgencies();
   }
 
+  await seedAgencyAssets();
+
   logger.info("Auto-seed: complete. Default password: Admin1234!");
+}
+
+async function seedAgencyAssets(): Promise<void> {
+  const [ica] = await db.select({ id: agencies.id }).from(agencies).where(eq(agencies.agencyCode, "PNGICA")).limit(1);
+  if (!ica) return;
+
+  const existing = await db.select({ id: assets.id }).from(assets).where(eq(assets.agencyId, ica.id)).limit(1);
+  if (existing.length > 0) return;
+
+  const cats = await db.select({ id: assetCategories.id, categoryName: assetCategories.categoryName }).from(assetCategories);
+  const catMap: Record<string, string> = {};
+  for (const c of cats) catMap[c.categoryName] = c.id;
+
+  type SeedAsset = {
+    assetTag: string; assetName: string; categoryName: string;
+    serialNumber?: string; brand?: string; model?: string;
+    purchaseDate: string; purchaseCost: string; supplier: string;
+    usefulLifeYears: number; status: "active" | "missing" | "under_maintenance" | "disposed" | "transferred";
+    condition: "excellent" | "good" | "fair" | "poor"; salvageValue: string; notes: string;
+  };
+  const icaAssets: SeedAsset[] = [
+    // Buildings & Infrastructure
+    { assetTag: "PNGICA-BLD-001", assetName: "Konedobu Head Office Building",       categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-HQ-2018",  purchaseDate: "2018-03-01", purchaseCost: "8500000", supplier: "Hebou Constructions Ltd", usefulLifeYears: 50, status: "active", condition: "good", salvageValue: "850000", notes: "PNGICA HQ — 4 storey office building, Konedobu, Port Moresby" },
+    { assetTag: "PNGICA-BLD-002", assetName: "Jacksons Airport Border Post",         categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-JBP-2019", purchaseDate: "2019-06-15", purchaseCost: "2200000", supplier: "Curtain Bros",            usefulLifeYears: 40, status: "active", condition: "good", salvageValue: "220000", notes: "Border control facility at Jacksons Intl Airport" },
+    { assetTag: "PNGICA-BLD-003", assetName: "Vanimo Border Post",                   categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-VBP-2017", purchaseDate: "2017-09-20", purchaseCost: "1800000", supplier: "Hornibrook NGI",          usefulLifeYears: 40, status: "active", condition: "fair", salvageValue: "180000", notes: "Indonesia border post, West Sepik" },
+    { assetTag: "PNGICA-BLD-004", assetName: "Wutung Border Crossing Office",        categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-WUT-2020", purchaseDate: "2020-11-10", purchaseCost: "1500000", supplier: "Curtain Bros",            usefulLifeYears: 40, status: "active", condition: "good", salvageValue: "150000", notes: "Land border crossing, Sandaun Province" },
+    { assetTag: "PNGICA-BLD-005", assetName: "Lae Regional Office",                  categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-LAE-2016", purchaseDate: "2016-04-12", purchaseCost: "1200000", supplier: "Hebou Constructions Ltd", usefulLifeYears: 40, status: "active", condition: "fair", salvageValue: "120000", notes: "Regional immigration office, Morobe Province" },
+    // Vehicles & Transport
+    { assetTag: "PNGICA-VEH-001", assetName: "Toyota Land Cruiser 200",              categoryName: "Vehicles & Transport", serialNumber: "JTMHV09J504123456", brand: "Toyota", model: "Land Cruiser VX",   purchaseDate: "2022-01-15", purchaseCost: "285000", supplier: "Ela Motors PNG",  usefulLifeYears: 10, status: "active", condition: "good", salvageValue: "28500", notes: "Director General official vehicle" },
+    { assetTag: "PNGICA-VEH-002", assetName: "Toyota Hilux 4x4 Dual Cab",            categoryName: "Vehicles & Transport", serialNumber: "MR0FZ29G801234567", brand: "Toyota", model: "Hilux SR5",         purchaseDate: "2021-07-20", purchaseCost: "135000", supplier: "Ela Motors PNG",  usefulLifeYears: 8,  status: "active", condition: "good", salvageValue: "13500", notes: "Field operations — Vanimo border post" },
+    { assetTag: "PNGICA-VEH-003", assetName: "Toyota Hilux 4x4 Dual Cab",            categoryName: "Vehicles & Transport", serialNumber: "MR0FZ29G801234568", brand: "Toyota", model: "Hilux SR5",         purchaseDate: "2021-07-20", purchaseCost: "135000", supplier: "Ela Motors PNG",  usefulLifeYears: 8,  status: "active", condition: "fair", salvageValue: "13500", notes: "Field operations — Wutung crossing" },
+    { assetTag: "PNGICA-VEH-004", assetName: "Nissan Patrol Y62",                    categoryName: "Vehicles & Transport", serialNumber: "JN1TANY62U0123456", brand: "Nissan", model: "Patrol Ti",         purchaseDate: "2020-09-05", purchaseCost: "265000", supplier: "Boroko Motors",   usefulLifeYears: 10, status: "active", condition: "good", salvageValue: "26500", notes: "Deputy DG vehicle" },
+    { assetTag: "PNGICA-VEH-005", assetName: "Toyota HiAce Commuter Bus",            categoryName: "Vehicles & Transport", serialNumber: "JTFSS22P607123456", brand: "Toyota", model: "HiAce GL",          purchaseDate: "2019-03-22", purchaseCost: "95000",  supplier: "Ela Motors PNG",  usefulLifeYears: 8,  status: "under_maintenance", condition: "fair", salvageValue: "9500", notes: "Staff transport — engine service overdue" },
+    { assetTag: "PNGICA-VEH-006", assetName: "Toyota Hilux Single Cab",              categoryName: "Vehicles & Transport", serialNumber: "MR0CZ29G601234569", brand: "Toyota", model: "Hilux Workmate",    purchaseDate: "2018-11-30", purchaseCost: "78000",  supplier: "Ela Motors PNG",  usefulLifeYears: 8,  status: "active", condition: "poor", salvageValue: "7800",  notes: "Logistics vehicle — Lae regional office" },
+    { assetTag: "PNGICA-VEH-007", assetName: "Honda CRF 250 Motorcycle",             categoryName: "Vehicles & Transport", serialNumber: "MLHME10A0L1234567", brand: "Honda",  model: "CRF 250L",          purchaseDate: "2023-02-14", purchaseCost: "32000",  supplier: "Ela Motors PNG",  usefulLifeYears: 6,  status: "active", condition: "excellent", salvageValue: "3200", notes: "Border patrol motorcycle, Sandaun" },
+    // Office Furniture
+    { assetTag: "PNGICA-OFF-001", assetName: "Executive Office Desk Set",            categoryName: "Office Furniture", brand: "SteelCase",    model: "Series 7",   purchaseDate: "2022-04-10", purchaseCost: "8500",  supplier: "Office National PNG", usefulLifeYears: 15, status: "active", condition: "good", salvageValue: "850",  notes: "DG office furniture set — desk, credenza, return" },
+    { assetTag: "PNGICA-OFF-002", assetName: "Boardroom Conference Table 12-seat",   categoryName: "Office Furniture", brand: "Herman Miller",model: "Eames",      purchaseDate: "2021-11-20", purchaseCost: "24000", supplier: "Office National PNG", usefulLifeYears: 20, status: "active", condition: "good", salvageValue: "2400", notes: "Executive boardroom, Konedobu HQ" },
+    { assetTag: "PNGICA-OFF-003", assetName: "Filing Cabinet Bank (10 units)",       categoryName: "Office Furniture", brand: "Sentinel",     model: "4-drawer",   purchaseDate: "2020-08-15", purchaseCost: "18000", supplier: "Office National PNG", usefulLifeYears: 15, status: "active", condition: "fair", salvageValue: "1800", notes: "Records section — citizen files" },
+    { assetTag: "PNGICA-OFF-004", assetName: "Workstation Cubicles (set of 20)",     categoryName: "Office Furniture", brand: "Haworth",      model: "Compose",    purchaseDate: "2022-06-01", purchaseCost: "95000", supplier: "Office National PNG", usefulLifeYears: 12, status: "active", condition: "good", salvageValue: "9500", notes: "Open-plan office, Level 2 HQ" },
+    { assetTag: "PNGICA-OFF-005", assetName: "Reception Counter",                    categoryName: "Office Furniture", model: "Custom",       purchaseDate: "2019-05-25", purchaseCost: "12000", supplier: "PNG Joinery Works",  usefulLifeYears: 15, status: "active", condition: "fair", salvageValue: "1200", notes: "Public reception, ground floor HQ" },
+    // ICT Equipment
+    { assetTag: "PNGICA-ICT-001", assetName: "Border Management System Server",            categoryName: "ICT Equipment", serialNumber: "DELL-PE-R750-001",   brand: "Dell",          model: "PowerEdge R750", purchaseDate: "2022-03-15", purchaseCost: "85000",  supplier: "Datec PNG Ltd",     usefulLifeYears: 7,  status: "active", condition: "good", salvageValue: "8500",  notes: "Primary BMS server — biometric & passport database" },
+    { assetTag: "PNGICA-ICT-002", assetName: "Border Management System Server (Failover)", categoryName: "ICT Equipment", serialNumber: "DELL-PE-R750-002",   brand: "Dell",          model: "PowerEdge R750", purchaseDate: "2022-03-15", purchaseCost: "85000",  supplier: "Datec PNG Ltd",     usefulLifeYears: 7,  status: "active", condition: "good", salvageValue: "8500",  notes: "Failover BMS server" },
+    { assetTag: "PNGICA-ICT-003", assetName: "Passport Printing System",                   categoryName: "ICT Equipment", serialNumber: "MORPHO-PP-2021-001", brand: "IDEMIA",        model: "MorphoPass PP",  purchaseDate: "2021-10-10", purchaseCost: "180000", supplier: "IDEMIA Australia",  usefulLifeYears: 10, status: "active", condition: "good", salvageValue: "18000", notes: "ePassport printing & personalisation, Konedobu HQ" },
+    { assetTag: "PNGICA-ICT-004", assetName: "Biometric Capture Station",                  categoryName: "ICT Equipment", serialNumber: "MORPHO-BIO-2022-001",brand: "IDEMIA",        model: "MorphoWave",     purchaseDate: "2022-08-05", purchaseCost: "45000",  supplier: "IDEMIA Australia",  usefulLifeYears: 8,  status: "active", condition: "good", salvageValue: "4500",  notes: "Fingerprint & facial capture — passport applications" },
+    { assetTag: "PNGICA-ICT-005", assetName: "Biometric Capture Station",                  categoryName: "ICT Equipment", serialNumber: "MORPHO-BIO-2022-002",brand: "IDEMIA",        model: "MorphoWave",     purchaseDate: "2022-08-05", purchaseCost: "45000",  supplier: "IDEMIA Australia",  usefulLifeYears: 8,  status: "active", condition: "good", salvageValue: "4500",  notes: "Biometric station — Jacksons Airport" },
+    { assetTag: "PNGICA-ICT-006", assetName: "ePassport Reader",                           categoryName: "ICT Equipment", serialNumber: "3M-CR100-001",       brand: "3M",            model: "CR100M",         purchaseDate: "2020-12-01", purchaseCost: "8500",   supplier: "Datec PNG Ltd",     usefulLifeYears: 7,  status: "active",  condition: "fair", salvageValue: "850", notes: "Passport scanner — Jacksons immigration desk 1" },
+    { assetTag: "PNGICA-ICT-007", assetName: "ePassport Reader",                           categoryName: "ICT Equipment", serialNumber: "3M-CR100-002",       brand: "3M",            model: "CR100M",         purchaseDate: "2020-12-01", purchaseCost: "8500",   supplier: "Datec PNG Ltd",     usefulLifeYears: 7,  status: "active",  condition: "fair", salvageValue: "850", notes: "Passport scanner — Jacksons immigration desk 2" },
+    { assetTag: "PNGICA-ICT-008", assetName: "ePassport Reader",                           categoryName: "ICT Equipment", serialNumber: "3M-CR100-003",       brand: "3M",            model: "CR100M",         purchaseDate: "2020-12-01", purchaseCost: "8500",   supplier: "Datec PNG Ltd",     usefulLifeYears: 7,  status: "missing", condition: "poor", salvageValue: "850", notes: "Passport scanner — reported missing Vanimo, Mar 2024" },
+    { assetTag: "PNGICA-ICT-009", assetName: "Cisco Catalyst 9300 Switch",                 categoryName: "ICT Equipment", serialNumber: "FCW2440L0A1",        brand: "Cisco",         model: "Catalyst 9300",  purchaseDate: "2021-05-20", purchaseCost: "22000",  supplier: "Daltron PNG",       usefulLifeYears: 8,  status: "active", condition: "good", salvageValue: "2200",  notes: "Core network switch, HQ data centre" },
+    { assetTag: "PNGICA-ICT-010", assetName: "HP EliteBook 850 G9 Laptop",                 categoryName: "ICT Equipment", serialNumber: "5CG2123ABC",         brand: "HP",            model: "EliteBook 850",  purchaseDate: "2023-04-10", purchaseCost: "5800",   supplier: "Datec PNG Ltd",     usefulLifeYears: 5,  status: "active", condition: "excellent", salvageValue: "580", notes: "Director laptop — Operations Division" },
+    { assetTag: "PNGICA-ICT-011", assetName: "HP EliteBook 850 G9 Laptop",                 categoryName: "ICT Equipment", serialNumber: "5CG2123ABD",         brand: "HP",            model: "EliteBook 850",  purchaseDate: "2023-04-10", purchaseCost: "5800",   supplier: "Datec PNG Ltd",     usefulLifeYears: 5,  status: "active", condition: "excellent", salvageValue: "580", notes: "Director laptop — Citizenship Division" },
+    { assetTag: "PNGICA-ICT-012", assetName: "Dell OptiPlex Desktop (x25)",                categoryName: "ICT Equipment", serialNumber: "DELL-OPT-2022-BULK", brand: "Dell",          model: "OptiPlex 7090",  purchaseDate: "2022-11-15", purchaseCost: "125000", supplier: "Datec PNG Ltd",     usefulLifeYears: 6,  status: "active", condition: "good", salvageValue: "12500", notes: "Officer workstations — Konedobu HQ (25 units)" },
+    { assetTag: "PNGICA-ICT-013", assetName: "Konica Bizhub C658 Multifunction",           categoryName: "ICT Equipment", serialNumber: "A6F1011001234",      brand: "Konica Minolta",model: "Bizhub C658",    purchaseDate: "2021-06-30", purchaseCost: "28000",  supplier: "Konica Minolta PNG",usefulLifeYears: 7,  status: "under_maintenance", condition: "fair", salvageValue: "2800", notes: "Records section MFP — drum replacement scheduled" },
+    { assetTag: "PNGICA-ICT-014", assetName: "VSAT Satellite Terminal",                    categoryName: "ICT Equipment", serialNumber: "HUGHES-HX260-001",   brand: "Hughes",        model: "HX260",          purchaseDate: "2020-02-12", purchaseCost: "45000",  supplier: "Daltron PNG",       usefulLifeYears: 10, status: "active", condition: "good", salvageValue: "4500",  notes: "Vanimo border post — primary internet uplink" },
+    // Communication Equipment
+    { assetTag: "PNGICA-COM-001", assetName: "Motorola APX 4500 Two-Way Radio (set of 30)", categoryName: "Communication Equipment", serialNumber: "MOTO-APX-BULK-2022", brand: "Motorola", model: "APX 4500",      purchaseDate: "2022-07-18", purchaseCost: "75000", supplier: "Datec PNG Ltd", usefulLifeYears: 8, status: "active", condition: "good", salvageValue: "7500", notes: "Border officer comms — bulk procurement (30 units)" },
+    { assetTag: "PNGICA-COM-002", assetName: "Iridium Satellite Phone",                     categoryName: "Communication Equipment", serialNumber: "IRID-9555-001",      brand: "Iridium",  model: "Extreme 9575",  purchaseDate: "2021-09-22", purchaseCost: "3500",  supplier: "Daltron PNG",   usefulLifeYears: 7, status: "active", condition: "good", salvageValue: "350", notes: "Vanimo border post emergency comms" },
+    { assetTag: "PNGICA-COM-003", assetName: "Iridium Satellite Phone",                     categoryName: "Communication Equipment", serialNumber: "IRID-9555-002",      brand: "Iridium",  model: "Extreme 9575",  purchaseDate: "2021-09-22", purchaseCost: "3500",  supplier: "Daltron PNG",   usefulLifeYears: 7, status: "active", condition: "good", salvageValue: "350", notes: "Wutung crossing emergency comms" },
+  ];
+
+  let inserted = 0;
+  for (const a of icaAssets) {
+    const categoryId = catMap[a.categoryName];
+    if (!categoryId) continue;
+    await db.insert(assets).values({
+      assetTag: a.assetTag,
+      assetName: a.assetName,
+      categoryId,
+      serialNumber: a.serialNumber ?? null,
+      brand: a.brand ?? null,
+      model: a.model ?? null,
+      purchaseDate: a.purchaseDate,
+      purchaseCost: a.purchaseCost,
+      supplier: a.supplier,
+      usefulLifeYears: a.usefulLifeYears,
+      status: a.status,
+      condition: a.condition,
+      agencyId: ica.id,
+      depreciationMethod: "straight_line",
+      salvageValue: a.salvageValue,
+      notes: a.notes,
+    }).onConflictDoNothing();
+    inserted++;
+  }
+  logger.info({ count: inserted, agency: "PNGICA" }, "Auto-seed: agency assets");
 }
 
 async function seedInitialData(): Promise<void> {
