@@ -354,6 +354,126 @@ router.get("/v1/assets/latest-code", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/v1/assets/:id/neighbors", requireAuth, enforceScopeFilter, async (req, res) => {
+  try {
+    const id = req.params.id as string;
+
+    const [current] = await db
+      .select({
+        id: assets.id,
+        agencyId: assets.agencyId,
+        provinceId: assets.provinceId,
+        districtId: assets.districtId,
+        facilityId: assets.facilityId,
+      })
+      .from(assets)
+      .where(and(eq(assets.id, id), isNull(assets.deletedAt)))
+      .limit(1);
+
+    if (!current) {
+      res.status(404).json({ success: false, message: "Asset not found", data: null });
+      return;
+    }
+
+    if (!isWithinAssetScope(req.user!, {
+      agencyId: current.agencyId,
+      provinceId: current.provinceId,
+      districtId: current.districtId,
+      facilityId: current.facilityId,
+    })) {
+      res.status(403).json({ success: false, message: "Access denied", data: null });
+      return;
+    }
+
+    const {
+      province_id,
+      district_id,
+      facility_id,
+      category_id,
+      status,
+      condition,
+      search,
+    } = req.query as Record<string, string>;
+
+    const conditions = [isNull(assets.deletedAt)];
+
+    const effectiveAgencyId = req.user?.scopedAgencyId || undefined;
+    if (effectiveAgencyId) {
+      conditions.push(eq(assets.agencyId, effectiveAgencyId));
+    } else {
+      const effectiveProvinceId = province_id || req.user?.scopedProvinceId || undefined;
+      const effectiveDistrictId = district_id || req.user?.scopedDistrictId || undefined;
+      const effectiveFacilityId = facility_id || req.user?.scopedFacilityId || undefined;
+
+      if (effectiveProvinceId) conditions.push(eq(assets.provinceId, effectiveProvinceId));
+      if (effectiveDistrictId) conditions.push(eq(assets.districtId, effectiveDistrictId));
+      if (effectiveFacilityId) conditions.push(eq(assets.facilityId, effectiveFacilityId));
+    }
+
+    if (category_id) conditions.push(eq(assets.categoryId, category_id));
+
+    const VALID_STATUSES = ["active", "disposed", "missing", "under_maintenance"] as const;
+    const VALID_CONDITIONS = ["excellent", "good", "fair", "poor"] as const;
+
+    if (status) {
+      const sv = status.split(",").map((s) => s.trim()).filter((s): s is typeof VALID_STATUSES[number] => (VALID_STATUSES as readonly string[]).includes(s));
+      if (sv.length === 1) conditions.push(eq(assets.status, sv[0]));
+      else if (sv.length > 1) conditions.push(inArray(assets.status, sv));
+    }
+    if (condition) {
+      const cv = condition.split(",").map((c) => c.trim()).filter((c): c is typeof VALID_CONDITIONS[number] => (VALID_CONDITIONS as readonly string[]).includes(c));
+      if (cv.length === 1) conditions.push(eq(assets.condition, cv[0]));
+      else if (cv.length > 1) conditions.push(inArray(assets.condition, cv));
+    }
+    if (search) {
+      conditions.push(
+        or(
+          ilike(assets.assetName, `%${search}%`),
+          ilike(assets.assetTag, `%${search}%`),
+          ilike(assets.serialNumber, `%${search}%`),
+          ilike(assets.brand, `%${search}%`),
+        )!,
+      );
+    }
+
+    const rows = await db
+      .select({ id: assets.id, assetTag: assets.assetTag, assetName: assets.assetName })
+      .from(assets)
+      .where(and(...conditions))
+      .orderBy(desc(assets.createdAt));
+
+    const idx = rows.findIndex((r) => r.id === id);
+
+    if (idx === -1) {
+      const [{ totalAll }] = await db
+        .select({ totalAll: sql<number>`count(*)::int` })
+        .from(assets)
+        .where(and(...conditions));
+      res.json({
+        success: true,
+        message: "Neighbors retrieved",
+        data: { previous: null, next: null, position: 0, total: totalAll, in_context: false },
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      message: "Neighbors retrieved",
+      data: {
+        previous: idx > 0 ? rows[idx - 1] : null,
+        next: idx < rows.length - 1 ? rows[idx + 1] : null,
+        position: idx + 1,
+        total: rows.length,
+        in_context: true,
+      },
+    });
+  } catch (err) {
+    req.log.error({ err }, "Get asset neighbors error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
 router.get("/v1/assets/:id", requireAuth, async (req, res) => {
   try {
     const [row] = await db

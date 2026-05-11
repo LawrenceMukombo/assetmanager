@@ -372,6 +372,24 @@ export default function Assets() {
     facilityName?: string;
   }[];
 
+  const goToAsset = (assetId: string) => {
+    const ctx: Record<string, string> = {};
+    if (provinceId) ctx.province_id = provinceId;
+    if (districtId) ctx.district_id = districtId;
+    if (facilityId) ctx.facility_id = facilityId;
+    if (categoryId) ctx.category_id = categoryId;
+    if (statuses.length) ctx.status = statuses.join(",");
+    if (conditions.length) ctx.condition = conditions.join(",");
+    if (search) ctx.search = search;
+    const nonce = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      sessionStorage.setItem(`npams_assets_list_ctx_${nonce}`, JSON.stringify(ctx));
+    } catch {
+      // ignore quota errors
+    }
+    setLocation(`/assets/${assetId}?ctx=${nonce}`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -715,7 +733,7 @@ export default function Assets() {
                   <TableRow
                     key={asset.id}
                     className="cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => setLocation(`/assets/${asset.id}`)}
+                    onClick={() => goToAsset(asset.id!)}
                   >
                     <TableCell className="font-mono text-xs">
                       {asset.assetTag}
@@ -768,7 +786,7 @@ export default function Assets() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onClick={() => setLocation(`/assets/${asset.id}`)}
+                            onClick={() => goToAsset(asset.id!)}
                           >
                             <Eye className="mr-2 h-4 w-4" />
                             View Details

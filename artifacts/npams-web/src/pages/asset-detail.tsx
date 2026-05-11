@@ -1,4 +1,4 @@
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { useGetAssetById, getGetAssetByIdQueryKey } from "@workspace/api-client-react";
 import type { AssetDetail } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Edit, Printer, Download, Activity, ArrowRight, TrendingDown, ImageIcon, FileText, Wrench, CheckCircle, AlertTriangle, Trash2 } from "lucide-react";
+import { ArrowLeft, Edit, Printer, Download, Activity, ArrowRight, TrendingDown, ImageIcon, FileText, Wrench, CheckCircle, AlertTriangle, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { statusBadgeClass } from "@/lib/status";
 import QRCode from "react-qr-code";
 import { useEffect, useRef, useState } from "react";
@@ -126,12 +126,24 @@ function getWorkflowActions(currentStatus: string | undefined | null): WorkflowA
   return actions;
 }
 
+type NeighborInfo = { id: string; assetTag: string; assetName: string };
+type NeighborsData = {
+  previous: NeighborInfo | null;
+  next: NeighborInfo | null;
+  position: number;
+  total: number;
+  in_context: boolean;
+};
+
 export default function AssetDetailPage() {
   const { id } = useParams();
+  const [, navigate] = useLocation();
   const qrRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [neighbors, setNeighbors] = useState<NeighborsData | null>(null);
+  const [isNeighborsLoading, setIsNeighborsLoading] = useState(false);
 
   const [showTransferDialog, setShowTransferDialog] = useState(false);
   const [transferToProvinceId, setTransferToProvinceId] = useState("");
@@ -165,6 +177,71 @@ export default function AssetDetailPage() {
   const depreciation = (asset as (AssetDetail & { depreciation?: DepreciationData }))?.depreciation ?? null;
   const activityLogs = (asset as AssetDetail & { activity_logs?: { id: string; actionType?: string; description?: string; createdAt?: string }[] })?.activity_logs ?? [];
   const isAdmin = ADMIN_ROLES.includes(user?.role || "");
+
+  const ctxNonce = (() => {
+    if (typeof window === "undefined") return null;
+    const sp = new URLSearchParams(window.location.search);
+    return sp.get("ctx");
+  })();
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    setNeighbors(null);
+    setIsNeighborsLoading(true);
+    let listFilters: Record<string, string> = {};
+    if (ctxNonce) {
+      try {
+        const raw = sessionStorage.getItem(`npams_assets_list_ctx_${ctxNonce}`);
+        if (raw) listFilters = JSON.parse(raw) as Record<string, string>;
+      } catch {
+        // ignore
+      }
+    }
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(listFilters)) {
+      if (v) params.set(k, v);
+    }
+    const qs = params.toString();
+    apiFetchJson<NeighborsData>(`/api/v1/assets/${id}/neighbors${qs ? `?${qs}` : ""}`)
+      .then((r) => {
+        if (cancelled) return;
+        if (r.ok && r.data) setNeighbors(r.data);
+        else setNeighbors(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsNeighborsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, ctxNonce]);
+
+  const navigateToNeighbor = (neighborId: string) => {
+    navigate(`/assets/${neighborId}${ctxNonce ? `?ctx=${ctxNonce}` : ""}`);
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable) return;
+      }
+      if (isNeighborsLoading || !neighbors) return;
+      if (e.key === "ArrowLeft" && neighbors.previous) {
+        e.preventDefault();
+        navigateToNeighbor(neighbors.previous.id);
+      } else if (e.key === "ArrowRight" && neighbors.next) {
+        e.preventDefault();
+        navigateToNeighbor(neighbors.next.id);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [neighbors, ctxNonce, isNeighborsLoading]);
 
   const downloadQR = () => {
     if (!qrRef.current) return;
@@ -297,6 +374,67 @@ export default function AssetDetailPage() {
           </Button>
         </div>
       </div>
+
+      {(isNeighborsLoading || (neighbors && neighbors.total > 0)) && (
+        <Card>
+          <CardContent className="flex items-center justify-between gap-3 p-3">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isNeighborsLoading || !neighbors?.previous}
+              onClick={() => neighbors?.previous && navigateToNeighbor(neighbors.previous.id)}
+              className="h-auto py-2"
+              title={neighbors?.previous ? `Previous: ${neighbors.previous.assetTag} — ${neighbors.previous.assetName}` : "No previous asset"}
+            >
+              <ChevronLeft className="w-4 h-4 mr-2 shrink-0" />
+              <div className="text-left min-w-0">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none">Previous (←)</div>
+                <div className="text-xs font-mono truncate max-w-[180px] mt-0.5">
+                  {neighbors?.previous ? neighbors.previous.assetTag : "—"}
+                </div>
+                {neighbors?.previous && (
+                  <div className="text-[11px] text-muted-foreground truncate max-w-[180px] leading-tight">
+                    {neighbors.previous.assetName}
+                  </div>
+                )}
+              </div>
+            </Button>
+            <div className="text-sm text-muted-foreground text-center">
+              {isNeighborsLoading ? (
+                <span className="italic">Loading…</span>
+              ) : neighbors?.in_context ? (
+                <>
+                  Asset <span className="font-semibold text-foreground">{neighbors.position}</span> of{" "}
+                  <span className="font-semibold text-foreground">{neighbors.total}</span>
+                </>
+              ) : (
+                <span className="italic">Outside current filter</span>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isNeighborsLoading || !neighbors?.next}
+              onClick={() => neighbors?.next && navigateToNeighbor(neighbors.next.id)}
+              className="h-auto py-2"
+              title={neighbors?.next ? `Next: ${neighbors.next.assetTag} — ${neighbors.next.assetName}` : "No next asset"}
+            >
+              <div className="text-right min-w-0">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none">Next (→)</div>
+                <div className="text-xs font-mono truncate max-w-[180px] mt-0.5">
+                  {neighbors?.next ? neighbors.next.assetTag : "—"}
+                </div>
+                {neighbors?.next && (
+                  <div className="text-[11px] text-muted-foreground truncate max-w-[180px] leading-tight">
+                    {neighbors.next.assetName}
+                  </div>
+                )}
+              </div>
+              <ChevronRight className="w-4 h-4 ml-2 shrink-0" />
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {isAdmin && workflowActions.length > 0 && (
         <Card>
