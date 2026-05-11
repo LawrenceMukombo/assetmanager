@@ -30,3 +30,123 @@ id = "XrxJZoDbKj0acuh0QhkwL"
 uri = "file://proposals/ICSA-NPAMS-Summary.pptx"
 type = "slides"
 title = "NPAMS — ICSA Sponsor Summary (PowerPoint)"
+
+[[outputs]]
+id = "syammxULoZ6LCmcEuKWTO"
+uri = "file://proposals/assets/screens/01-login.jpg"
+type = "image"
+title = "01 — Login (ICSA branded)"
+
+[[outputs]]
+id = "hrl2ki6Dn0C0dUkwPAhM4"
+uri = "file://proposals/assets/screens/02-dashboard.jpg"
+type = "image"
+title = "02 — Dashboard"
+
+[[outputs]]
+id = "NWGnf-rZXx9n7CDemfoYL"
+uri = "file://proposals/assets/screens/03-assets.jpg"
+type = "image"
+title = "03 — Assets register"
+
+[[outputs]]
+id = "g3z42tyKLp7xk62a4rHxw"
+uri = "file://proposals/assets/screens/04-assets-new.jpg"
+type = "image"
+title = "04 — New asset form"
+
+[[outputs]]
+id = "vziKkyK25wtHCcKQhodeR"
+uri = "file://proposals/assets/screens/05-categories.jpg"
+type = "image"
+title = "05 — Categories"
+
+[[outputs]]
+id = "OQf6MceWCR2cA3EBl_O7D"
+uri = "file://proposals/assets/screens/06-reports.jpg"
+type = "image"
+title = "06 — Reports"
+
+[[outputs]]
+id = "3yHVHVI-X_RsTPSsI5zT6"
+uri = "file://proposals/assets/screens/07-users.jpg"
+type = "image"
+title = "07 — Users"
+
+[[outputs]]
+id = "Sjwx_VkrrcKlxPf9QUi5p"
+uri = "file://proposals/assets/screens/08-locations.jpg"
+type = "image"
+title = "08 — Locations"
+
+[[outputs]]
+id = "MfG1Crln3al3rFsxbqnAP"
+uri = "file://proposals/assets/screens/09-audit.jpg"
+type = "image"
+title = "09 — Audit sessions"
+
+[[outputs]]
+id = "w3gS8GNr-Gr9033ubKObU"
+uri = "file://proposals/assets/screens/10-maintenance.jpg"
+type = "image"
+title = "10 — Maintenance"
+
+[[outputs]]
+id = "Ca-6lvsnb411yYkVCs9mV"
+uri = "file://proposals/assets/screens/11-stock.jpg"
+type = "image"
+title = "11 — Stock"
+
+[[outputs]]
+id = "irAE1_So4Ohzj9ZT-7NS8"
+uri = "file://proposals/assets/screens/12-purchase-requests.jpg"
+type = "image"
+title = "12 — Purchase requests"
+
+[[outputs]]
+id = "Pqceb6QzZn-F5tDqwP8Bt"
+uri = "file://proposals/assets/screens/13-system-status.jpg"
+type = "image"
+title = "13 — System status"
+
+[[outputs]]
+id = "WcdbrgHy-D7eQIHa3CvRJ"
+uri = "file://proposals/assets/screens/14-gis.jpg"
+type = "image"
+title = "14 — GIS map"
+
+[[outputs]]
+id = "8AwYiWiF_Y1IosyqYwtqw"
+uri = "file://proposals/assets/screens/15-notifications.jpg"
+type = "image"
+title = "15 — Notifications"
+
+[[outputs]]
+id = "QqWfzbpItKBRhvrVhSQ-G"
+uri = "file://proposals/assets/screens/16-settings.jpg"
+type = "image"
+title = "16 — Settings"
+
+[[outputs]]
+id = "9IyqgHlDkzrZP5cywE1oM"
+uri = "file://proposals/assets/screens/17-asset-detail.jpg"
+type = "image"
+title = "17 — Asset detail"
+
+[[outputs]]
+id = "bilOqQqnmxQcHTXeuYoSV"
+uri = "file://proposals/assets/screens/18-stock-detail.jpg"
+type = "image"
+title = "18 — Stock detail"
+
+[[outputs]]
+id = "D80g99MAkpkvVIlq3WwQe"
+uri = "file://proposals/assets/screens/19-pr-detail.jpg"
+type = "image"
+title = "19 — Purchase request detail"
+
+[[outputs]]
+id = "NnUmuuxpXEOSAX6dcYCKW"
+uri = "file://proposals/assets/screens/21-public-asset.jpg"
+type = "image"
+title = "21 — Public asset verification"
