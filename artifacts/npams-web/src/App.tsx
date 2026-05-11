@@ -24,6 +24,9 @@ import Audit from "@/pages/audit";
 import AuditDetail from "@/pages/audit-detail";
 import AuditVerify from "@/pages/audit-verify";
 import Maintenance from "@/pages/maintenance";
+import StockPage from "@/pages/stock";
+import StockDetailPage from "@/pages/stock-detail";
+import SystemStatusPage from "@/pages/system-status";
 const GIS = lazy(() => import("@/pages/gis"));
 
 const queryClient = new QueryClient();
@@ -100,6 +103,9 @@ function Router() {
       <ProtectedRoute path="/audit/verify/:id" component={AuditVerify} />
       <ProtectedRoute path="/audit/:id" component={AuditDetail} />
       <ProtectedRoute path="/maintenance" component={Maintenance} />
+      <ProtectedRoute path="/stock" component={StockPage} />
+      <ProtectedRoute path="/stock/:id" component={StockDetailPage} />
+      <ProtectedRoute path="/system-status" component={SystemStatusPage} requiredRoles={ADMIN_ROLES} />
       <Route path="/gis">
         <AuthGuard>
           <Suspense fallback={<div className="flex items-center justify-center h-full p-12 text-muted-foreground">Loading map...</div>}>

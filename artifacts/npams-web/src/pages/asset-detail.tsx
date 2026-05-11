@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Edit, Printer, Download, Activity, ArrowRight, TrendingDown, ImageIcon, FileText, Wrench, CheckCircle, AlertTriangle, Trash2 } from "lucide-react";
 import { statusBadgeClass } from "@/lib/status";
 import QRCode from "react-qr-code";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiFetchJson, apiFetch } from "@/lib/api-fetch";
@@ -334,6 +334,7 @@ export default function AssetDetailPage() {
               <TabsTrigger value="depreciation">Depreciation</TabsTrigger>
               <TabsTrigger value="transfers">Transfer History</TabsTrigger>
               <TabsTrigger value="activity">Activity Log</TabsTrigger>
+              <TabsTrigger value="lifecycle">Lifecycle</TabsTrigger>
             </TabsList>
 
             <TabsContent value="details" className="space-y-6">
@@ -577,6 +578,10 @@ export default function AssetDetailPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            <TabsContent value="lifecycle">
+              <LifecycleTab assetId={id!} />
+            </TabsContent>
           </Tabs>
         </div>
 
@@ -789,5 +794,96 @@ export default function AssetDetailPage() {
         </Dialog>
       )}
     </div>
+  );
+}
+
+type LifecycleEvent = {
+  id: string;
+  actionType: string;
+  description: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  actorName: string | null;
+};
+type LifecycleData = {
+  asset: { id: string; assetTag: string; assetName: string; currentStatus: string; createdAt: string };
+  events: LifecycleEvent[];
+};
+
+function lifecycleIcon(actionType: string) {
+  if (actionType === "CREATE") return <CheckCircle className="w-4 h-4 text-green-600" />;
+  if (actionType === "TRANSFER") return <ArrowRight className="w-4 h-4 text-blue-600" />;
+  if (actionType.startsWith("MAINTENANCE")) return <Wrench className="w-4 h-4 text-amber-600" />;
+  if (actionType === "STATUS_DISPOSED") return <Trash2 className="w-4 h-4 text-red-600" />;
+  if (actionType === "STATUS_REPORTED_MISSING") return <AlertTriangle className="w-4 h-4 text-orange-600" />;
+  if (actionType === "STATUS_TO_MAINTENANCE") return <Wrench className="w-4 h-4 text-amber-600" />;
+  if (actionType === "STATUS_ACTIVATED") return <CheckCircle className="w-4 h-4 text-green-600" />;
+  return <Activity className="w-4 h-4 text-muted-foreground" />;
+}
+
+function LifecycleTab({ assetId }: { assetId: string }) {
+  const [data, setData] = useState<LifecycleData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    apiFetchJson<LifecycleData>(`/api/v1/assets/${assetId}/lifecycle`)
+      .then((r) => {
+        if (cancelled) return;
+        if (r.ok) setData(r.data);
+        else setError(r.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [assetId]);
+
+  if (loading) return <Skeleton className="h-40 w-full" />;
+  if (error) return <p className="text-sm text-destructive">{error}</p>;
+  if (!data || data.events.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          No lifecycle events recorded yet.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const events = [...data.events].reverse();
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Activity className="w-5 h-5" />
+          Asset Lifecycle Timeline
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ol className="relative border-l border-border ml-2 space-y-4">
+          {events.map((ev) => (
+            <li key={ev.id} className="ml-4">
+              <span className="absolute -left-[9px] flex items-center justify-center w-4 h-4 rounded-full bg-background border border-border">
+                {lifecycleIcon(ev.actionType)}
+              </span>
+              <div className="text-xs text-muted-foreground">
+                {format(new Date(ev.createdAt), "dd MMM yyyy, HH:mm")}
+                {ev.actorName ? ` · ${ev.actorName}` : ""}
+              </div>
+              <div className="text-sm font-medium capitalize">
+                {ev.actionType.replace(/_/g, " ").toLowerCase()}
+              </div>
+              {ev.description && (
+                <div className="text-sm text-muted-foreground">{ev.description}</div>
+              )}
+            </li>
+          ))}
+        </ol>
+      </CardContent>
+    </Card>
   );
 }

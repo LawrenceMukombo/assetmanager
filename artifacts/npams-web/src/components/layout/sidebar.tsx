@@ -31,6 +31,8 @@ import {
   Globe,
   ClipboardList,
   Wrench,
+  Boxes,
+  ServerCog,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
@@ -163,6 +165,15 @@ export function Sidebar() {
               </SidebarMenuItem>
 
               <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location.startsWith("/stock")}>
+                  <Link href="/stock">
+                    <Boxes />
+                    <span>Stock & Inventory</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={location === "/reports"}>
                   <Link href="/reports">
                     <FileBarChart />
@@ -195,6 +206,14 @@ export function Sidebar() {
                       <Link href="/locations">
                         <MapPin />
                         <span>Locations</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={location === "/system-status"}>
+                      <Link href="/system-status">
+                        <ServerCog />
+                        <span>System Status</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

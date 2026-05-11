@@ -13,6 +13,8 @@ import storageRouter from "./storage";
 import auditRouter from "./audit";
 import maintenanceRouter from "./maintenance";
 import agencyRouter from "./agency";
+import stockRouter from "./stock";
+import systemRouter from "./system";
 
 const router: IRouter = Router();
 
@@ -30,5 +32,7 @@ router.use(storageRouter);
 router.use(auditRouter);
 router.use(maintenanceRouter);
 router.use(agencyRouter);
+router.use(stockRouter);
+router.use(systemRouter);
 
 export default router;

@@ -364,8 +364,17 @@ router.get("/v1/assets/:id", requireAuth, async (req, res) => {
     }
 
     const logs = await db
-      .select()
+      .select({
+        id: activityLogs.id,
+        actionType: activityLogs.actionType,
+        description: activityLogs.description,
+        metadata: activityLogs.metadata,
+        createdAt: activityLogs.createdAt,
+        userId: activityLogs.userId,
+        actorName: users.fullName,
+      })
       .from(activityLogs)
+      .leftJoin(users, eq(activityLogs.userId, users.id))
       .where(and(eq(activityLogs.entityType, "asset"), eq(activityLogs.entityId, req.params.id as string)))
       .orderBy(desc(activityLogs.createdAt))
       .limit(20);
@@ -384,7 +393,7 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
 
   try {
     const [existing] = await db
-      .select({ id: assets.id, provinceId: assets.provinceId, agencyId: assets.agencyId, districtId: assets.districtId, facilityId: assets.facilityId, assetTag: assets.assetTag })
+      .select({ id: assets.id, provinceId: assets.provinceId, agencyId: assets.agencyId, districtId: assets.districtId, facilityId: assets.facilityId, assetTag: assets.assetTag, status: assets.status })
       .from(assets)
       .where(and(eq(assets.id, req.params.id as string), isNull(assets.deletedAt)))
       .limit(1);
@@ -450,6 +459,24 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
       entityId: req.params.id as string,
       description: `Updated asset ${updated.assetTag}`,
     });
+
+    // Lifecycle: record explicit status-change event when status differs
+    if (body.status && body.status !== existing.status) {
+      const statusActionMap: Record<string, string> = {
+        active: "STATUS_ACTIVATED",
+        under_maintenance: "STATUS_TO_MAINTENANCE",
+        missing: "STATUS_REPORTED_MISSING",
+        disposed: "STATUS_DISPOSED",
+      };
+      await db.insert(activityLogs).values({
+        userId: req.user.userId,
+        actionType: statusActionMap[body.status] ?? "STATUS_CHANGED",
+        entityType: "asset",
+        entityId: req.params.id as string,
+        description: `Status changed to ${body.status}`,
+        metadata: { from: existing.status, to: body.status },
+      }).catch(() => null);
+    }
 
     res.json({ success: true, message: "Asset updated", data: updated });
   } catch (err) {
@@ -698,6 +725,13 @@ router.post("/v1/assets/:id/transfer", requireAuth, requireAssetAdmin, async (re
       entityType: "asset",
       entityId: existing.id,
       description: `Transferred asset ${existing.assetTag}${reason ? ": " + reason : ""}`,
+      metadata: {
+        from_province_id: existing.provinceId,
+        to_province_id,
+        from_facility_id: existing.facilityId,
+        to_facility_id: to_facility_id ?? null,
+        reason: reason ?? null,
+      },
     });
 
     res.json({ success: true, message: "Asset transferred successfully", data: updated });
@@ -758,6 +792,55 @@ router.get("/v1/assets/:id/transfers", requireAuth, async (req, res) => {
     res.json({ success: true, message: "Transfers retrieved", data: transfers });
   } catch (err) {
     req.log.error({ err }, "Get transfers error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
+router.get("/v1/assets/:id/lifecycle", requireAuth, async (req, res) => {
+  if (!req.user) return;
+  try {
+    const [existing] = await db
+      .select({ id: assets.id, provinceId: assets.provinceId, agencyId: assets.agencyId, districtId: assets.districtId, facilityId: assets.facilityId, assetTag: assets.assetTag, assetName: assets.assetName, status: assets.status, createdAt: assets.createdAt })
+      .from(assets)
+      .where(and(eq(assets.id, req.params.id as string), isNull(assets.deletedAt)))
+      .limit(1);
+    if (!existing) {
+      res.status(404).json({ success: false, message: "Asset not found", data: null });
+      return;
+    }
+    if (!isWithinAssetScope(req.user, {
+      provinceId: existing.provinceId,
+      agencyId: existing.agencyId,
+      districtId: existing.districtId,
+      facilityId: existing.facilityId,
+    })) {
+      res.status(403).json({ success: false, message: "Access denied", data: null });
+      return;
+    }
+    const events = await db
+      .select({
+        id: activityLogs.id,
+        actionType: activityLogs.actionType,
+        description: activityLogs.description,
+        metadata: activityLogs.metadata,
+        createdAt: activityLogs.createdAt,
+        actorId: activityLogs.userId,
+        actorName: users.fullName,
+      })
+      .from(activityLogs)
+      .leftJoin(users, eq(activityLogs.userId, users.id))
+      .where(and(eq(activityLogs.entityType, "asset"), eq(activityLogs.entityId, req.params.id as string)))
+      .orderBy(desc(activityLogs.createdAt));
+    res.json({
+      success: true,
+      message: "Lifecycle retrieved",
+      data: {
+        asset: { id: existing.id, assetTag: existing.assetTag, assetName: existing.assetName, currentStatus: existing.status, createdAt: existing.createdAt },
+        events,
+      },
+    });
+  } catch (err) {
+    req.log.error({ err }, "Get lifecycle error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });

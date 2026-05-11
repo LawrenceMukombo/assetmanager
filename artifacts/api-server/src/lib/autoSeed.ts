@@ -14,6 +14,7 @@ import {
   assetCategories,
   assets,
   notifications,
+  stockItems,
 } from "@workspace/db";
 import { logger } from "./logger";
 
@@ -33,11 +34,6 @@ export async function autoSeedIfEmpty(): Promise<void> {
   const usersExist = (await db.select().from(users).limit(1)).length > 0;
   const agenciesExist = (await db.select().from(agencies).limit(1)).length > 0;
 
-  if (usersExist && agenciesExist) {
-    logger.info("Auto-seed: database already seeded, skipping");
-    return;
-  }
-
   if (!usersExist) {
     logger.info("Auto-seed: empty database detected — seeding all reference data...");
     await seedInitialData();
@@ -48,9 +44,15 @@ export async function autoSeedIfEmpty(): Promise<void> {
     await seedAgencies();
   }
 
+  // Idempotent — these check for existing rows themselves
   await seedAgencyAssets();
+  await seedAgencyStock();
 
-  logger.info("Auto-seed: complete. Default password: Admin1234!");
+  if (usersExist && agenciesExist) {
+    logger.info("Auto-seed: idempotent top-up complete");
+  } else {
+    logger.info("Auto-seed: complete. Default password: Admin1234!");
+  }
 }
 
 async function seedAgencyAssets(): Promise<void> {
@@ -138,6 +140,50 @@ async function seedAgencyAssets(): Promise<void> {
     inserted++;
   }
   logger.info({ count: inserted, agency: "PNGICA" }, "Auto-seed: agency assets");
+}
+
+async function seedAgencyStock(): Promise<void> {
+  const [ica] = await db.select({ id: agencies.id }).from(agencies).where(eq(agencies.agencyCode, "PNGICA")).limit(1);
+  if (!ica) return;
+
+  type Seed = {
+    itemCode: string; itemName: string; category: string;
+    unitOfMeasure: string; onHandQuantity: number; reorderLevel: number;
+    unitCost: string; supplier: string; notes: string;
+  };
+  const items: Seed[] = [
+    { itemCode: "PNGICA-STK-001", itemName: "Blank ePassport Booklet (32-page)",          category: "Passport Stationery",   unitOfMeasure: "booklet", onHandQuantity: 4500, reorderLevel: 1000, unitCost: "85.00",  supplier: "IDEMIA Australia",         notes: "Secure storage — passport vault, Konedobu HQ" },
+    { itemCode: "PNGICA-STK-002", itemName: "Blank ePassport Booklet (64-page)",          category: "Passport Stationery",   unitOfMeasure: "booklet", onHandQuantity: 850,  reorderLevel: 500,  unitCost: "120.00", supplier: "IDEMIA Australia",         notes: "Frequent traveller passports" },
+    { itemCode: "PNGICA-STK-003", itemName: "Visa Sticker (Type A)",                       category: "Visa Stationery",       unitOfMeasure: "sticker", onHandQuantity: 12000,reorderLevel: 3000, unitCost: "4.50",   supplier: "IDEMIA Australia",         notes: "Standard visa sticker — bonded stock" },
+    { itemCode: "PNGICA-STK-004", itemName: "Citizenship Certificate (Security Paper)",    category: "Citizenship Stationery",unitOfMeasure: "sheet",   onHandQuantity: 1500, reorderLevel: 300,  unitCost: "12.00",  supplier: "Note Printing Australia",  notes: "Watermarked certificate paper" },
+    { itemCode: "PNGICA-STK-005", itemName: "Border Stamp Ink Cartridge",                  category: "Office Consumables",    unitOfMeasure: "cartridge",onHandQuantity: 60,  reorderLevel: 20,   unitCost: "35.00",  supplier: "Office National PNG",      notes: "Self-inking border stamps — entry/exit" },
+    { itemCode: "PNGICA-STK-006", itemName: "A4 Bond Paper (80gsm, ream)",                 category: "Office Consumables",    unitOfMeasure: "ream",    onHandQuantity: 320,  reorderLevel: 100,  unitCost: "18.00",  supplier: "Office National PNG",      notes: "General office printing" },
+    { itemCode: "PNGICA-STK-007", itemName: "HP 305A Black Toner Cartridge",               category: "Office Consumables",    unitOfMeasure: "cartridge",onHandQuantity: 24,  reorderLevel: 10,   unitCost: "280.00", supplier: "Datec PNG Ltd",            notes: "Officer workstation printers" },
+    { itemCode: "PNGICA-STK-008", itemName: "Konica Bizhub C658 Toner (Cyan)",             category: "Office Consumables",    unitOfMeasure: "cartridge",onHandQuantity: 6,   reorderLevel: 4,    unitCost: "420.00", supplier: "Konica Minolta PNG",       notes: "Records section MFP" },
+    { itemCode: "PNGICA-STK-009", itemName: "Officer Uniform Shirt (white, embroidered)",  category: "Uniform & PPE",         unitOfMeasure: "each",    onHandQuantity: 180,  reorderLevel: 50,   unitCost: "65.00",  supplier: "PNG Garment Manufacturers",notes: "Border officer issue" },
+    { itemCode: "PNGICA-STK-010", itemName: "Officer Cap (with ICA badge)",                category: "Uniform & PPE",         unitOfMeasure: "each",    onHandQuantity: 95,   reorderLevel: 30,   unitCost: "45.00",  supplier: "PNG Garment Manufacturers",notes: "Standard issue uniform cap" },
+    { itemCode: "PNGICA-STK-011", itemName: "High-Visibility Safety Vest",                 category: "Uniform & PPE",         unitOfMeasure: "each",    onHandQuantity: 40,   reorderLevel: 25,   unitCost: "28.00",  supplier: "Brian Bell Hardware",      notes: "Apron/Tarmac duty — Jacksons" },
+    { itemCode: "PNGICA-STK-012", itemName: "Toyota Hilux Engine Oil 10W-40 (4L)",         category: "Vehicle Spares",        unitOfMeasure: "bottle",  onHandQuantity: 22,   reorderLevel: 10,   unitCost: "85.00",  supplier: "Ela Motors PNG",           notes: "Fleet servicing supplies" },
+    { itemCode: "PNGICA-STK-013", itemName: "Vehicle Air Filter — Hilux/Land Cruiser",     category: "Vehicle Spares",        unitOfMeasure: "each",    onHandQuantity: 8,    reorderLevel: 6,    unitCost: "55.00",  supplier: "Ela Motors PNG",           notes: "Routine maintenance stock" },
+  ];
+
+  let inserted = 0;
+  for (const it of items) {
+    await db.insert(stockItems).values({
+      itemCode: it.itemCode,
+      itemName: it.itemName,
+      category: it.category,
+      unitOfMeasure: it.unitOfMeasure,
+      onHandQuantity: it.onHandQuantity,
+      reorderLevel: it.reorderLevel,
+      unitCost: it.unitCost,
+      supplier: it.supplier,
+      notes: it.notes,
+      agencyId: ica.id,
+    }).onConflictDoNothing();
+    inserted++;
+  }
+  logger.info({ count: inserted, agency: "PNGICA" }, "Auto-seed: agency stock items");
 }
 
 async function seedInitialData(): Promise<void> {
