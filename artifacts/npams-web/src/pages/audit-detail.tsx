@@ -159,11 +159,48 @@ export default function AuditDetail() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3 flex-wrap">
-        <Button variant="ghost" size="sm" onClick={() => setLocation("/audit")}>
-          <ArrowLeft className="w-4 h-4 mr-1" /> Audit Sessions
-        </Button>
-      </div>
+      <PageHeader
+        icon={<ClipboardList className="w-5 h-5" />}
+        title={session.name}
+        subtitle={
+          <>
+            {session.description && <span className="block">{session.description}</span>}
+            <span className="flex items-center gap-4 mt-1 flex-wrap">
+              {session.provinceName && <span>Province: {session.provinceName}</span>}
+              {session.startDate && <span>Start: {format(new Date(session.startDate), "dd MMM yyyy")}</span>}
+              {session.endDate && <span>End: {format(new Date(session.endDate), "dd MMM yyyy")}</span>}
+              <span>By {session.createdByName ?? "system"}</span>
+            </span>
+          </>
+        }
+        breadcrumbs={[
+          { label: "Audit Sessions", href: "/audit" },
+          { label: session.name },
+        ]}
+        badge={<Badge className={`${STATUS_COLORS[session.status] ?? ""} text-sm`}>{cap(session.status)}</Badge>}
+        actions={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setLocation("/audit")}>
+              <ArrowLeft className="w-4 h-4 mr-1" /> Back
+            </Button>
+            {isAdmin && session.status === "planned" && (
+              <Button onClick={() => patchSession.mutate("active")} disabled={patchSession.isPending}>
+                <Play className="w-4 h-4 mr-2" /> Start Session
+              </Button>
+            )}
+            {isAdmin && session.status === "active" && (
+              <Button variant="outline" onClick={() => patchSession.mutate("completed")} disabled={patchSession.isPending}>
+                <CheckSquare className="w-4 h-4 mr-2" /> Complete Session
+              </Button>
+            )}
+            {isAdmin && session.status === "active" && (
+              <Button onClick={() => setShowAssign(true)}>
+                <Plus className="w-4 h-4 mr-2" /> Add Assignment
+              </Button>
+            )}
+          </>
+        }
+      />
 
       <NeighborsNav
         data={neighbors}
@@ -171,41 +208,6 @@ export default function AuditDetail() {
         onNavigate={goToNeighbor}
         noun="audit session"
       />
-
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-2xl sm:text-[1.75rem] font-semibold tracking-tight leading-tight">{session.name}</h2>
-            <Badge className={`${STATUS_COLORS[session.status] ?? ""} text-sm`}>{cap(session.status)}</Badge>
-          </div>
-          {session.description && <p className="text-muted-foreground mt-1">{session.description}</p>}
-          <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground flex-wrap">
-            {session.provinceName && <span>Province: {session.provinceName}</span>}
-            {session.startDate && <span>Start: {format(new Date(session.startDate), "dd MMM yyyy")}</span>}
-            {session.endDate && <span>End: {format(new Date(session.endDate), "dd MMM yyyy")}</span>}
-            <span>By {session.createdByName ?? "system"}</span>
-          </div>
-        </div>
-        {isAdmin && (
-          <div className="flex gap-2 flex-wrap">
-            {session.status === "planned" && (
-              <Button onClick={() => patchSession.mutate("active")} disabled={patchSession.isPending}>
-                <Play className="w-4 h-4 mr-2" /> Start Session
-              </Button>
-            )}
-            {session.status === "active" && (
-              <Button variant="outline" onClick={() => patchSession.mutate("completed")} disabled={patchSession.isPending}>
-                <CheckSquare className="w-4 h-4 mr-2" /> Complete Session
-              </Button>
-            )}
-            {session.status === "active" && (
-              <Button onClick={() => setShowAssign(true)}>
-                <Plus className="w-4 h-4 mr-2" /> Add Assignment
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
 
       {totalCount > 0 && (
         <div className="grid gap-4 sm:grid-cols-3">

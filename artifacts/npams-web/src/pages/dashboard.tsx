@@ -1201,15 +1201,10 @@ function ProvincialDashboard() {
       const agencyDisplayName = branding.provinceName ?? userAgencyName;
       return (
         <div className="space-y-6">
-          <div className="flex items-center gap-3">
-            <div>
-              <h2 className="text-3xl font-bold tracking-tight">
-                {agencyDisplayName
-                  ? `${agencyDisplayName} Dashboard`
-                  : "Agency Dashboard"}
-              </h2>
-            </div>
-          </div>
+          <PageHeader
+            title={agencyDisplayName ? `${agencyDisplayName} Dashboard` : "Agency Dashboard"}
+            breadcrumbs={[{ label: "Dashboard" }]}
+          />
           <DashboardSkeleton />
         </div>
       );

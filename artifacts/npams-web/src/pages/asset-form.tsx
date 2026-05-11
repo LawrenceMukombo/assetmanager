@@ -32,7 +32,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, ChevronRight, Save, Upload, X, Image } from "lucide-react";
+import { ArrowLeft, ChevronRight, Save, Upload, X, Image, Package } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 
 const assetSchema = z.object({
   asset_name: z.string().min(1, "Asset name is required"),
@@ -350,14 +351,21 @@ export default function AssetForm() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => setLocation(isEdit ? `/assets/${id}` : "/assets")}>
-          <ArrowLeft className="w-4 h-4" />
-        </Button>
-        <h2 className="text-3xl font-bold tracking-tight">
-          {isEdit ? "Edit Asset" : "Add New Asset"}
-        </h2>
-      </div>
+      <PageHeader
+        icon={<Package className="w-5 h-5" />}
+        title={isEdit ? "Edit Asset" : "Add New Asset"}
+        subtitle={isEdit ? "Update the details of an existing asset record." : "Register a new asset into the national register."}
+        breadcrumbs={[
+          { label: "Asset Register", href: "/assets" },
+          ...(isEdit && id ? [{ label: "Asset", href: `/assets/${id}` }] : []),
+          { label: isEdit ? "Edit" : "New" },
+        ]}
+        actions={
+          <Button variant="ghost" size="sm" onClick={() => setLocation(isEdit ? `/assets/${id}` : "/assets")}>
+            <ArrowLeft className="w-4 h-4 mr-1" /> Back
+          </Button>
+        }
+      />
 
       <div className="flex items-center justify-between mb-8">
         {[1, 2, 3, 4].map(i => (

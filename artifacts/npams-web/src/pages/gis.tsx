@@ -16,6 +16,7 @@ import {
   Globe,
   Layers,
 } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 
 // Maps DB province_code → PNG_PROVINCES id
 const DB_CODE_TO_GIS_ID: Record<string, string> = {
@@ -605,35 +606,36 @@ export default function GISPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b bg-background shrink-0">
-        <div className="flex items-center gap-3">
-          <Globe className="w-5 h-5 text-primary" />
-          <div>
-            <h2 className="text-lg font-bold leading-tight">GIS Province Map</h2>
-            <p className="text-xs text-muted-foreground">Papua New Guinea — Interactive Geographic Information System</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-md border overflow-hidden text-xs">
-            {(["osm", "satellite", "topo"] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => switchBasemap(s)}
-                className={`px-2.5 py-1.5 capitalize transition-colors ${mapStyle === s ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
-              >
-                {s === "osm" ? "Street" : s === "satellite" ? "Satellite" : "Topo"}
-              </button>
-            ))}
-          </div>
-          <Button variant={showDistricts ? "default" : "outline"} size="sm" onClick={toggleDistricts} className="text-xs" aria-pressed={showDistricts}>
-            <Layers className="w-3.5 h-3.5 mr-1" />
-            Districts
-          </Button>
-          <Button variant="outline" size="sm" onClick={resetView} className="text-xs">
-            <RotateCcw className="w-3.5 h-3.5 mr-1" />
-            Reset
-          </Button>
-        </div>
+      <div className="px-4 py-3 border-b bg-background shrink-0">
+        <PageHeader
+          icon={<Globe className="w-5 h-5" />}
+          title="GIS Province Map"
+          subtitle="Papua New Guinea — Interactive Geographic Information System"
+          breadcrumbs={[{ label: "GIS Province Map" }]}
+          actions={
+            <>
+              <div className="flex rounded-md border overflow-hidden text-xs">
+                {(["osm", "satellite", "topo"] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => switchBasemap(s)}
+                    className={`px-2.5 py-1.5 capitalize transition-colors ${mapStyle === s ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                  >
+                    {s === "osm" ? "Street" : s === "satellite" ? "Satellite" : "Topo"}
+                  </button>
+                ))}
+              </div>
+              <Button variant={showDistricts ? "default" : "outline"} size="sm" onClick={toggleDistricts} className="text-xs" aria-pressed={showDistricts}>
+                <Layers className="w-3.5 h-3.5 mr-1" />
+                Districts
+              </Button>
+              <Button variant="outline" size="sm" onClick={resetView} className="text-xs">
+                <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                Reset
+              </Button>
+            </>
+          }
+        />
       </div>
 
       <div className="flex flex-1 overflow-hidden">
