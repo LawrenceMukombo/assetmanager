@@ -1,4 +1,5 @@
-import { pgTable, uuid, varchar, text, integer, timestamp, pgEnum, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, text, integer, timestamp, pgEnum, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { provinces } from "./provinces";
 import { agencies } from "./agencies";
 import { facilities } from "./facilities";
@@ -41,6 +42,24 @@ export const stockItems = pgTable(
   ],
 );
 
+export const stockBalances = pgTable(
+  "stock_balances",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    stockItemId: uuid("stock_item_id").notNull().references(() => stockItems.id, { onDelete: "cascade" }),
+    facilityId: uuid("facility_id").references(() => facilities.id),
+    quantity: integer("quantity").notNull().default(0),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_stock_balances_item_id").on(t.stockItemId),
+    uniqueIndex("uq_stock_balances_item_facility").on(t.stockItemId, t.facilityId),
+    uniqueIndex("uq_stock_balances_item_unassigned")
+      .on(t.stockItemId)
+      .where(sql`${t.facilityId} IS NULL`),
+  ],
+);
+
 export const stockMovements = pgTable(
   "stock_movements",
   {
@@ -65,5 +84,6 @@ export const stockMovements = pgTable(
 
 export type StockItem = typeof stockItems.$inferSelect;
 export type InsertStockItem = typeof stockItems.$inferInsert;
+export type StockBalance = typeof stockBalances.$inferSelect;
 export type StockMovement = typeof stockMovements.$inferSelect;
 export type InsertStockMovement = typeof stockMovements.$inferInsert;

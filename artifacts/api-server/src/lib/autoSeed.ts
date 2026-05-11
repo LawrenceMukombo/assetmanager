@@ -15,6 +15,7 @@ import {
   assets,
   notifications,
   stockItems,
+  stockBalances,
 } from "@workspace/db";
 import { logger } from "./logger";
 
@@ -169,7 +170,7 @@ async function seedAgencyStock(): Promise<void> {
 
   let inserted = 0;
   for (const it of items) {
-    await db.insert(stockItems).values({
+    const [row] = await db.insert(stockItems).values({
       itemCode: it.itemCode,
       itemName: it.itemName,
       category: it.category,
@@ -180,7 +181,14 @@ async function seedAgencyStock(): Promise<void> {
       supplier: it.supplier,
       notes: it.notes,
       agencyId: ica.id,
-    }).onConflictDoNothing();
+    }).onConflictDoNothing().returning({ id: stockItems.id });
+    if (row) {
+      await db.insert(stockBalances).values({
+        stockItemId: row.id,
+        facilityId: null,
+        quantity: it.onHandQuantity,
+      }).onConflictDoNothing();
+    }
     inserted++;
   }
   logger.info({ count: inserted, agency: "PNGICA" }, "Auto-seed: agency stock items");

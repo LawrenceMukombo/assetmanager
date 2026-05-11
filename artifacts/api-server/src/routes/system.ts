@@ -41,8 +41,9 @@ router.get("/v1/system/status", requireAuth, async (req, res) => {
         cadence: "Automatic point-in-time recovery (PITR) — continuous WAL backups; daily full snapshots retained 7 days",
         database_started_at: pgStartedAt,
         earliest_restorable_point: earliestRestorablePoint,
-        last_known_snapshot_at: pgStartedAt,
-        notes: "Backups are managed by the Replit platform. The 'last_known_snapshot_at' value is the database server's last start time, which is the most recent guaranteed-consistent restore point visible to the application. Restore via Replit dashboard → Database → Restore from snapshot.",
+        last_known_snapshot_at: null,
+        last_known_snapshot_status: "unavailable",
+        notes: "Backups are managed by the Replit platform. Snapshot timestamps are not exposed via the database; verify the most recent snapshot in Replit dashboard → Database → Snapshots.",
       },
       data_retention: {
         activity_logs: "Retained indefinitely",

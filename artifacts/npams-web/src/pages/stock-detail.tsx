@@ -50,6 +50,7 @@ type StockDetail = {
   supplier: string | null;
   notes: string | null;
   facility?: { id: string; facilityName: string } | null;
+  balances?: Array<{ facilityId: string | null; facilityName: string | null; quantity: number }>;
   movements: Movement[];
 };
 
@@ -264,6 +265,30 @@ export default function StockDetailPage() {
         </CardContent>
       </Card>
 
+      {data.balances && data.balances.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-sm">Balances by location</CardTitle></CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Location</TableHead>
+                  <TableHead className="text-right">Quantity</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.balances.map((b, i) => (
+                  <TableRow key={b.facilityId ?? `unassigned-${i}`}>
+                    <TableCell>{b.facilityName ?? "Unassigned / Agency reserve"}</TableCell>
+                    <TableCell className="text-right font-mono">{b.quantity.toLocaleString()} {data.unitOfMeasure}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader><CardTitle>Movement history</CardTitle></CardHeader>
         <CardContent className="p-0">
@@ -321,11 +346,6 @@ export default function StockDetailPage() {
               <Label>Quantity *</Label>
               <Input type="number" min="1" value={movementForm.quantity} onChange={(e) => setMovementForm({ ...movementForm, quantity: e.target.value })} />
             </div>
-            {movementType === "transfer" && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-                Transfers relocate the full on-hand balance ({data.onHandQuantity.toLocaleString()} {data.unitOfMeasure}) to the destination. Quantity must equal current on-hand. Partial transfers require per-location balances (planned).
-              </p>
-            )}
             {movementType === "transfer" && (
               <div>
                 <Label>Destination facility *</Label>

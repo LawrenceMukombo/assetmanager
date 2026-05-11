@@ -1,12 +1,11 @@
 import { Router } from "express";
 import { eq, and, isNull, ilike, or, sql, desc } from "drizzle-orm";
-import { db, stockItems, stockMovements, facilities, districts, users, provinces, agencies, activityLogs } from "@workspace/db";
+import { db, stockItems, stockBalances, stockMovements, facilities, districts, users, provinces, agencies, activityLogs } from "@workspace/db";
 import type { Request, Response, NextFunction } from "express";
 import { requireAuth, requireAssetAdmin, isWithinAssetScope } from "../lib/auth";
 
 const router = Router();
 
-// Stock catalog management (create/edit items): admin-only — excludes Provincial Asset Officer
 const STOCK_ADMIN_ROLES = ["Super Admin", "National Asset Controller", "Provincial Admin", "Agency Admin"];
 function requireStockAdmin(req: Request, res: Response, next: NextFunction): void {
   if (!req.user) {
@@ -84,11 +83,10 @@ router.post("/v1/stock", requireAuth, requireStockAdmin, async (req, res) => {
     res.status(400).json({ success: false, message: "item_code and item_name are required", data: null });
     return;
   }
-  // Enforce strict scope: non-national users cannot place stock outside their scope.
   const isAgency = req.user.scopeLevel === "agency" || !!req.user.agencyId;
   let agencyId: string | null;
   let provinceId: string | null;
-  let facilityId: string | null = orNull(body.facility_id);
+  const facilityId: string | null = orNull(body.facility_id);
   if (isAgency) {
     agencyId = req.user.agencyId ?? null;
     provinceId = null;
@@ -96,7 +94,6 @@ router.post("/v1/stock", requireAuth, requireStockAdmin, async (req, res) => {
       res.status(403).json({ success: false, message: "User has no agency scope", data: null });
       return;
     }
-    // Body cannot override agency
     if (body.agency_id && body.agency_id !== agencyId) {
       res.status(403).json({ success: false, message: "Cannot create stock outside your agency", data: null });
       return;
@@ -105,7 +102,6 @@ router.post("/v1/stock", requireAuth, requireStockAdmin, async (req, res) => {
     agencyId = orNull(body.agency_id);
     provinceId = orNull(body.province_id);
   } else {
-    // Province / facility scoped users: force province from token
     agencyId = null;
     provinceId = req.user.provinceId ?? null;
     if (!provinceId) {
@@ -121,24 +117,33 @@ router.post("/v1/stock", requireAuth, requireStockAdmin, async (req, res) => {
       return;
     }
   }
+  const initialQty = body.on_hand_quantity != null ? Number(body.on_hand_quantity) : 0;
   try {
-    const [row] = await db.insert(stockItems).values({
-      itemCode: body.item_code,
-      itemName: body.item_name,
-      category: orNull(body.category),
-      description: orNull(body.description),
-      unitOfMeasure: body.unit_of_measure ?? "each",
-      onHandQuantity: body.on_hand_quantity != null ? Number(body.on_hand_quantity) : 0,
-      reorderLevel: body.reorder_level != null ? Number(body.reorder_level) : 0,
-      unitCost: orNull(body.unit_cost),
-      supplier: orNull(body.supplier),
-      notes: orNull(body.notes),
-      provinceId,
-      agencyId,
-      facilityId,
-      createdBy: req.user.userId,
-    }).returning();
-    res.status(201).json({ success: true, message: "Stock item created", data: row });
+    const result = await db.transaction(async (tx) => {
+      const [row] = await tx.insert(stockItems).values({
+        itemCode: body.item_code,
+        itemName: body.item_name,
+        category: orNull(body.category),
+        description: orNull(body.description),
+        unitOfMeasure: body.unit_of_measure ?? "each",
+        onHandQuantity: initialQty,
+        reorderLevel: body.reorder_level != null ? Number(body.reorder_level) : 0,
+        unitCost: orNull(body.unit_cost),
+        supplier: orNull(body.supplier),
+        notes: orNull(body.notes),
+        provinceId,
+        agencyId,
+        facilityId,
+        createdBy: req.user!.userId,
+      }).returning();
+      await tx.insert(stockBalances).values({
+        stockItemId: row.id,
+        facilityId,
+        quantity: initialQty,
+      });
+      return row;
+    });
+    res.status(201).json({ success: true, message: "Stock item created", data: result });
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "23505") {
       res.status(409).json({ success: false, message: "Item code already exists", data: null });
@@ -182,6 +187,16 @@ router.get("/v1/stock/:id", requireAuth, async (req, res) => {
       res.status(404).json({ success: false, message: "Stock item not found", data: null });
       return;
     }
+    const balances = await db
+      .select({
+        facilityId: stockBalances.facilityId,
+        facilityName: facilities.facilityName,
+        quantity: stockBalances.quantity,
+      })
+      .from(stockBalances)
+      .leftJoin(facilities, eq(stockBalances.facilityId, facilities.id))
+      .where(eq(stockBalances.stockItemId, req.params.id))
+      .orderBy(facilities.facilityName);
     const movements = await db
       .select({
         id: stockMovements.id,
@@ -200,7 +215,7 @@ router.get("/v1/stock/:id", requireAuth, async (req, res) => {
       .where(eq(stockMovements.stockItemId, req.params.id))
       .orderBy(desc(stockMovements.createdAt))
       .limit(100);
-    res.json({ success: true, message: "Stock item retrieved", data: { ...row, movements } });
+    res.json({ success: true, message: "Stock item retrieved", data: { ...row, balances, movements } });
   } catch (err) {
     req.log.error({ err }, "Get stock item error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
@@ -243,17 +258,10 @@ router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (re
     res.status(400).json({ success: false, message: "movement_type and positive quantity are required", data: null });
     return;
   }
-  const delta = movementType === "receive" ? quantity
-    : movementType === "issue" ? -quantity
-    : movementType === "transfer" ? 0
-    : quantity; // adjust = positive delta
 
-  // Validate transfer destination is in caller scope. Single-location stock model:
-  // transfer fully relocates the item to the new facility; per-location partial balances
-  // are tracked in follow-up #7. The quantity field on transfers is informational
-  // (must equal on-hand at txn time, validated below).
+  let toFacilityId: string | null = null;
   if (movementType === "transfer") {
-    const toFacilityId = orNull(body.to_facility_id);
+    toFacilityId = orNull(body.to_facility_id);
     if (!toFacilityId) {
       res.status(400).json({ success: false, message: "to_facility_id is required for transfers", data: null });
       return;
@@ -268,9 +276,6 @@ router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (re
       res.status(400).json({ success: false, message: "Destination facility not found", data: null });
       return;
     }
-    // Agency-scoped users own stock by agencyId, not by facility location — they can
-    // transfer to any facility their agency operates in. Geographic-scoped users
-    // (national/provincial/district/facility) must transfer within their location scope.
     const isAgencyScoped = req.user.scopeLevel === "agency" || !!req.user.agencyId;
     if (!isAgencyScoped && !isWithinAssetScope(req.user, {
       provinceId: destFacility.provinceId ?? null,
@@ -281,40 +286,99 @@ router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (re
       return;
     }
   }
+
   try {
     const result = await db.transaction(async (tx) => {
       const conditions = [eq(stockItems.id, req.params.id), isNull(stockItems.deletedAt), ...scopeFilter(req.user!)];
-      const lockedRows = await tx
+      const [item] = await tx
         .select({
           id: stockItems.id,
           itemCode: stockItems.itemCode,
           itemName: stockItems.itemName,
           unitOfMeasure: stockItems.unitOfMeasure,
           onHandQuantity: stockItems.onHandQuantity,
+          facilityId: stockItems.facilityId,
         })
         .from(stockItems)
         .where(and(...conditions))
         .for("update")
         .limit(1);
-      const item = lockedRows[0];
       if (!item) return { status: 404 as const, message: "Stock item not found" };
-      const newQty = item.onHandQuantity + delta;
-      if (newQty < 0) return { status: 400 as const, message: "Insufficient stock for issue" };
-      // Single-location stock model: transfer must move the entire on-hand balance.
-      // Partial-quantity transfers require per-location balances (follow-up #7).
-      if (movementType === "transfer" && quantity !== item.onHandQuantity) {
-        return {
-          status: 400 as const,
-          message: `Transfer quantity must equal current on-hand (${item.onHandQuantity} ${item.unitOfMeasure}). Partial transfers require per-location balances and will be supported in a future release.`,
-        };
+
+      const fromFacilityId = orNull(body.from_facility_id) ?? item.facilityId ?? null;
+
+      const lockBalance = async (facilityId: string | null) => {
+        const where = facilityId === null
+          ? and(eq(stockBalances.stockItemId, item.id), isNull(stockBalances.facilityId))
+          : and(eq(stockBalances.stockItemId, item.id), eq(stockBalances.facilityId, facilityId));
+        const rows = await tx
+          .select({ id: stockBalances.id, quantity: stockBalances.quantity })
+          .from(stockBalances)
+          .where(where)
+          .for("update")
+          .limit(1);
+        return rows[0] ?? null;
+      };
+
+      const upsertBalance = async (facilityId: string | null, delta: number) => {
+        const existing = await lockBalance(facilityId);
+        if (existing) {
+          const newQty = existing.quantity + delta;
+          if (newQty < 0) return { ok: false as const, currentQty: existing.quantity };
+          await tx.update(stockBalances)
+            .set({ quantity: newQty, updatedAt: new Date() })
+            .where(eq(stockBalances.id, existing.id));
+          return { ok: true as const };
+        }
+        if (delta < 0) return { ok: false as const, currentQty: 0 };
+        await tx.insert(stockBalances).values({
+          stockItemId: item.id,
+          facilityId,
+          quantity: delta,
+        });
+        return { ok: true as const };
+      };
+
+      let aggregateDelta = 0;
+      if (movementType === "receive") {
+        const r = await upsertBalance(fromFacilityId, quantity);
+        if (!r.ok) return { status: 400 as const, message: "Could not update balance" };
+        aggregateDelta = quantity;
+      } else if (movementType === "issue") {
+        const r = await upsertBalance(fromFacilityId, -quantity);
+        if (!r.ok) {
+          return {
+            status: 400 as const,
+            message: `Insufficient stock at source location (have ${r.currentQty} ${item.unitOfMeasure})`,
+          };
+        }
+        aggregateDelta = -quantity;
+      } else if (movementType === "adjust") {
+        const r = await upsertBalance(fromFacilityId, quantity);
+        if (!r.ok) return { status: 400 as const, message: "Could not update balance" };
+        aggregateDelta = quantity;
+      } else {
+        const src = await lockBalance(fromFacilityId);
+        if (!src || src.quantity < quantity) {
+          return {
+            status: 400 as const,
+            message: `Insufficient stock at source facility (have ${src?.quantity ?? 0} ${item.unitOfMeasure})`,
+          };
+        }
+        await tx.update(stockBalances)
+          .set({ quantity: src.quantity - quantity, updatedAt: new Date() })
+          .where(eq(stockBalances.id, src.id));
+        const dst = await upsertBalance(toFacilityId, quantity);
+        if (!dst.ok) return { status: 400 as const, message: "Could not update destination balance" };
+        aggregateDelta = 0;
       }
 
       await tx.insert(stockMovements).values({
         stockItemId: item.id,
         movementType,
         quantity,
-        fromFacilityId: orNull(body.from_facility_id),
-        toFacilityId: orNull(body.to_facility_id),
+        fromFacilityId,
+        toFacilityId,
         issuedToUser: orNull(body.issued_to_user),
         issuedToName: orNull(body.issued_to_name),
         reference: orNull(body.reference),
@@ -322,19 +386,21 @@ router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (re
         actorUserId: req.user!.userId,
       });
 
+      const newAggregate = item.onHandQuantity + aggregateDelta;
       let persistedQty = item.onHandQuantity;
-      if (delta !== 0) {
-        const [updated] = await tx.update(stockItems)
-          .set({ onHandQuantity: newQty, updatedAt: new Date() })
-          .where(eq(stockItems.id, item.id))
-          .returning({ onHandQuantity: stockItems.onHandQuantity });
-        persistedQty = updated.onHandQuantity;
+      const update: Record<string, unknown> = { updatedAt: new Date() };
+      if (aggregateDelta !== 0) update.onHandQuantity = newAggregate;
+      if (movementType === "transfer" && toFacilityId && item.facilityId === fromFacilityId) {
+        const remaining = await lockBalance(fromFacilityId);
+        if (remaining && remaining.quantity === 0) {
+          update.facilityId = toFacilityId;
+        }
       }
-      if (movementType === "transfer" && body.to_facility_id) {
-        await tx.update(stockItems)
-          .set({ facilityId: String(body.to_facility_id), updatedAt: new Date() })
-          .where(eq(stockItems.id, item.id));
-      }
+      const [updated] = await tx.update(stockItems)
+        .set(update)
+        .where(eq(stockItems.id, item.id))
+        .returning({ onHandQuantity: stockItems.onHandQuantity });
+      persistedQty = updated.onHandQuantity;
 
       await tx.insert(activityLogs).values({
         userId: req.user!.userId,
@@ -342,7 +408,7 @@ router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (re
         entityType: "stock_item",
         entityId: item.id,
         description: `${movementType} ${quantity} ${item.unitOfMeasure} of ${item.itemName} (${item.itemCode})`,
-        metadata: { quantity, reference: body.reference ?? null },
+        metadata: { quantity, from_facility_id: fromFacilityId, to_facility_id: toFacilityId, reference: body.reference ?? null },
       });
 
       return { status: 201 as const, onHandQuantity: persistedQty };
