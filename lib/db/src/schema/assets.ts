@@ -1,5 +1,6 @@
 import { pgTable, uuid, varchar, text, numeric, date, integer, timestamp, pgEnum, index } from "drizzle-orm/pg-core";
 import { provinces } from "./provinces";
+import { agencies } from "./agencies";
 import { districts } from "./districts";
 import { facilities } from "./facilities";
 import { users } from "./users";
@@ -52,7 +53,8 @@ export const assets = pgTable(
     notes: text("notes"),
     status: assetStatusEnum("status").notNull().default("active"),
     condition: assetConditionEnum("condition").notNull().default("good"),
-    provinceId: uuid("province_id").notNull().references(() => provinces.id),
+    provinceId: uuid("province_id").references(() => provinces.id),
+    agencyId: uuid("agency_id").references(() => agencies.id),
     districtId: uuid("district_id").references(() => districts.id),
     facilityId: uuid("facility_id").references(() => facilities.id),
     assignedToUser: uuid("assigned_to_user").references(() => users.id),
@@ -64,6 +66,7 @@ export const assets = pgTable(
   (t) => [
     index("idx_assets_asset_tag").on(t.assetTag),
     index("idx_assets_province_id").on(t.provinceId),
+    index("idx_assets_agency_id").on(t.agencyId),
     index("idx_assets_district_id").on(t.districtId),
     index("idx_assets_facility_id").on(t.facilityId),
     index("idx_assets_status").on(t.status),

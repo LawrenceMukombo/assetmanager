@@ -58,6 +58,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           flagColors: string[];
           themeAccentColor: string | null;
         } | null;
+        agency_branding?: {
+          agencyName: string;
+          agencyCode: string;
+          flagUrl: string | null;
+          flagColors: string[];
+          themeAccentColor: string | null;
+        } | null;
       };
       const { access_token, refresh_token, user } = responseData;
 
@@ -67,6 +74,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (user?.scope_level === "national") {
         clearBranding();
+      } else if (responseData.agency_branding) {
+        applyBranding({
+          provinceName: responseData.agency_branding.agencyName,
+          flagUrl: responseData.agency_branding.flagUrl,
+          themeAccentColor: responseData.agency_branding.themeAccentColor,
+          flagColors: responseData.agency_branding.flagColors,
+        });
       } else if (responseData.province_branding) {
         applyBranding({
           provinceName: responseData.province_branding.provinceName,

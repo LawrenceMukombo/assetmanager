@@ -4,6 +4,7 @@ import {
   db,
   tenants,
   provinces,
+  agencies,
   districts,
   facilities,
   roles,
@@ -29,13 +30,28 @@ function facilityPrefix(districtName: string): string {
 }
 
 export async function autoSeedIfEmpty(): Promise<void> {
-  const existing = await db.select().from(users).limit(1);
-  if (existing.length > 0) {
+  const usersExist = (await db.select().from(users).limit(1)).length > 0;
+  const agenciesExist = (await db.select().from(agencies).limit(1)).length > 0;
+
+  if (usersExist && agenciesExist) {
     logger.info("Auto-seed: database already seeded, skipping");
     return;
   }
 
-  logger.info("Auto-seed: empty database detected — seeding all reference data...");
+  if (!usersExist) {
+    logger.info("Auto-seed: empty database detected — seeding all reference data...");
+    await seedInitialData();
+  }
+
+  if (!agenciesExist) {
+    logger.info("Auto-seed: agencies missing — seeding agencies and agency users...");
+    await seedAgencies();
+  }
+
+  logger.info("Auto-seed: complete. Default password: Admin1234!");
+}
+
+async function seedInitialData(): Promise<void> {
 
   // ── TENANT ──────────────────────────────────────────────────────────────────
   const [tenant] = await db
@@ -406,5 +422,91 @@ export async function autoSeedIfEmpty(): Promise<void> {
     { userId: userMap["ncd.admin@npams.gov.pg"],title: "Welcome to NPAMS",                message: "Your National Capital District Asset Registry is now active.", readStatus: false },
   ]).onConflictDoNothing();
 
-  logger.info("Auto-seed: complete — all 27 users, 95 districts, 385 facilities, 31 assets ready. Password: Admin1234!");
+  logger.info("Auto-seed: initial data complete — 27 users, 95 districts, 385 facilities, 31 assets.");
+}
+
+async function seedAgencies(): Promise<void> {
+  const [tenant] = await db
+    .insert(tenants)
+    .values({ name: "Papua New Guinea Government", code: "PNG" })
+    .onConflictDoUpdate({ target: tenants.code, set: { name: "Papua New Guinea Government" } })
+    .returning();
+
+  // Ensure the Agency Admin role exists (with new "agency" scope level)
+  const [agencyRole] = await db
+    .insert(roles)
+    .values({
+      roleName: "Agency Admin",
+      description: "Full access within agency / parastatal",
+      scopeLevel: "agency" as const,
+    })
+    .onConflictDoUpdate({
+      target: roles.roleName,
+      set: { description: "Full access within agency / parastatal", scopeLevel: "agency" as const },
+    })
+    .returning();
+
+  // ── AGENCIES ────────────────────────────────────────────────────────────────
+  // Logos live at /agencies/{code}.svg (placeholder emblems — replace with real logos when ready)
+  const agencyData = [
+    { agencyCode: "PNGICA",    agencyName: "PNG Immigration & Citizenship Authority", agencyType: "Authority",      logoUrl: "/agencies/pngica.svg",    themeAccentColor: "#0F4C81", flagColors: ["#0F4C81", "#FFFFFF"] },
+    { agencyCode: "OMBUDSMAN", agencyName: "Ombudsman Commission",                    agencyType: "Commission",     logoUrl: "/agencies/ombudsman.svg", themeAccentColor: "#5B2C6F", flagColors: ["#5B2C6F", "#FFD700"] },
+    { agencyCode: "RPNGC",     agencyName: "Royal Papua New Guinea Constabulary",     agencyType: "Police",         logoUrl: "/agencies/rpngc.svg",     themeAccentColor: "#003366", flagColors: ["#003366", "#FFD700"] },
+    { agencyCode: "PNGDF",     agencyName: "Papua New Guinea Defence Force",          agencyType: "Defence",        logoUrl: "/agencies/pngdf.svg",     themeAccentColor: "#1B4332", flagColors: ["#1B4332", "#FFD700"] },
+    { agencyCode: "PNGCS",     agencyName: "Papua New Guinea Customs Service",        agencyType: "Service",        logoUrl: "/agencies/customs.svg",   themeAccentColor: "#7B1F1F", flagColors: ["#7B1F1F", "#FFD700"] },
+    { agencyCode: "IRC",       agencyName: "Internal Revenue Commission",             agencyType: "Commission",     logoUrl: "/agencies/irc.svg",       themeAccentColor: "#0E5C2F", flagColors: ["#0E5C2F", "#FFFFFF"] },
+    { agencyCode: "TREASURY",  agencyName: "Department of Treasury",                  agencyType: "Department",     logoUrl: "/agencies/treasury.svg",  themeAccentColor: "#1A3A5C", flagColors: ["#1A3A5C", "#D4AF37"] },
+  ];
+
+  const agencyMap: Record<string, string> = {};
+  for (const a of agencyData) {
+    const [row] = await db
+      .insert(agencies)
+      .values({ ...a, tenantId: tenant.id })
+      .onConflictDoUpdate({
+        target: agencies.agencyCode,
+        set: {
+          agencyName: a.agencyName,
+          agencyType: a.agencyType,
+          logoUrl: a.logoUrl,
+          themeAccentColor: a.themeAccentColor,
+          flagColors: a.flagColors,
+        },
+      })
+      .returning();
+    agencyMap[a.agencyCode] = row.id;
+  }
+  logger.info({ count: Object.keys(agencyMap).length }, "Auto-seed: agencies");
+
+  // ── AGENCY ADMIN USERS ─────────────────────────────────────────────────────
+  const hash = await bcrypt.hash(DEFAULT_PASSWORD, HASH_ROUNDS);
+  const agencyUsers = [
+    { fullName: "Immigration Admin",  email: "immigration.admin@npams.gov.pg", agencyCode: "PNGICA"    },
+    { fullName: "Ombudsman Admin",    email: "ombudsman.admin@npams.gov.pg",   agencyCode: "OMBUDSMAN" },
+    { fullName: "Police Admin",       email: "police.admin@npams.gov.pg",      agencyCode: "RPNGC"     },
+    { fullName: "Defence Admin",      email: "defence.admin@npams.gov.pg",     agencyCode: "PNGDF"     },
+    { fullName: "Customs Admin",      email: "customs.admin@npams.gov.pg",     agencyCode: "PNGCS"     },
+    { fullName: "IRC Admin",          email: "irc.admin@npams.gov.pg",         agencyCode: "IRC"       },
+    { fullName: "Treasury Admin",     email: "treasury.admin@npams.gov.pg",    agencyCode: "TREASURY"  },
+  ];
+
+  for (const u of agencyUsers) {
+    const existing = await db.select().from(users).where(eq(users.email, u.email)).limit(1);
+    let userId: string;
+    if (existing.length > 0) {
+      userId = existing[0].id;
+    } else {
+      const [row] = await db
+        .insert(users)
+        .values({ fullName: u.fullName, email: u.email, passwordHash: hash })
+        .returning();
+      userId = row.id;
+    }
+    await db.insert(userRoles).values({ userId, roleId: agencyRole.id }).onConflictDoNothing();
+    await db
+      .insert(userScope)
+      .values({ userId, agencyId: agencyMap[u.agencyCode]! })
+      .onConflictDoUpdate({ target: userScope.userId, set: { agencyId: agencyMap[u.agencyCode]!, provinceId: null } });
+  }
+  logger.info({ count: agencyUsers.length }, "Auto-seed: agency users");
 }

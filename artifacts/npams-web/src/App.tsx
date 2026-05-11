@@ -32,6 +32,7 @@ export const ADMIN_ROLES = [
   "Super Admin",
   "Provincial Admin",
   "National Asset Controller",
+  "Agency Admin",
 ] as const;
 
 export const OFFICER_ROLES = [
@@ -39,6 +40,7 @@ export const OFFICER_ROLES = [
   "Provincial Admin",
   "National Asset Controller",
   "Provincial Asset Officer",
+  "Agency Admin",
 ] as const;
 
 interface ProtectedRouteProps {

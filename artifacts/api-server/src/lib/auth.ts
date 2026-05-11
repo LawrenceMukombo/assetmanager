@@ -23,9 +23,11 @@ export interface TokenPayload {
   roleName: string;
   scopeLevel: string;
   provinceId: string | null;
+  agencyId: string | null;
   districtId: string | null;
   facilityId: string | null;
   scopedProvinceId?: string | null;
+  scopedAgencyId?: string | null;
   scopedDistrictId?: string | null;
   scopedFacilityId?: string | null;
 }
@@ -104,6 +106,7 @@ async function loadDbScope(userId: string): Promise<TokenPayload | null> {
     roleName: roleRow?.role.roleName ?? "",
     scopeLevel: roleRow?.role.scopeLevel ?? "provincial",
     provinceId: scope?.provinceId ?? null,
+    agencyId: scope?.agencyId ?? null,
     districtId: scope?.districtId ?? null,
     facilityId: scope?.facilityId ?? null,
   };
@@ -170,12 +173,12 @@ export function requireNational(req: Request, res: Response, next: NextFunction)
 }
 
 export function requireUserAdmin(req: Request, res: Response, next: NextFunction): void {
-  const userAdminRoles = ["Super Admin", "Provincial Admin"];
+  const userAdminRoles = ["Super Admin", "Provincial Admin", "Agency Admin"];
   checkRole(req, res, next, (u) => userAdminRoles.includes(u.roleName), "Insufficient privileges for user administration");
 }
 
 export function requireAssetAdmin(req: Request, res: Response, next: NextFunction): void {
-  const assetAdminRoles = ["Super Admin", "National Asset Controller", "Provincial Admin", "Provincial Asset Officer"];
+  const assetAdminRoles = ["Super Admin", "National Asset Controller", "Provincial Admin", "Provincial Asset Officer", "Agency Admin"];
   checkRole(req, res, next, (u) => assetAdminRoles.includes(u.roleName), "Insufficient privileges");
 }
 
@@ -185,6 +188,7 @@ export function requireAdminRole(req: Request, res: Response, next: NextFunction
 
 export interface EffectiveScope {
   provinceId: string | null;
+  agencyId: string | null;
   districtId: string | null;
   facilityId: string | null;
 }
@@ -192,19 +196,26 @@ export interface EffectiveScope {
 export function resolveEffectiveScope(user: TokenPayload): EffectiveScope {
   return {
     provinceId: user.scopedProvinceId ?? null,
+    agencyId: user.scopedAgencyId ?? null,
     districtId: user.scopedDistrictId ?? null,
     facilityId: user.scopedFacilityId ?? null,
   };
 }
 
 export interface AssetScopeCheckFields {
-  provinceId: string;
+  provinceId: string | null;
+  agencyId?: string | null;
   districtId?: string | null;
   facilityId?: string | null;
 }
 
 export function isWithinAssetScope(user: TokenPayload, asset: AssetScopeCheckFields): boolean {
   if (user.scopeLevel === "national") return true;
+
+  // Agency-scoped users can only see assets owned by their agency
+  if (user.scopeLevel === "agency" || user.agencyId) {
+    return !!user.agencyId && asset.agencyId === user.agencyId;
+  }
 
   if (user.facilityId) {
     return asset.facilityId === user.facilityId;
@@ -233,6 +244,26 @@ export function enforceScopeFilter(
 
   if (req.user.scopeLevel === "national") {
     req.user.scopedProvinceId = null;
+    req.user.scopedAgencyId = null;
+    req.user.scopedDistrictId = null;
+    req.user.scopedFacilityId = null;
+    next();
+    return;
+  }
+
+  // Agency-scoped users: lock province/district/facility, force agencyId to user's agency
+  if (req.user.scopeLevel === "agency" || req.user.agencyId) {
+    if (!req.user.agencyId) {
+      res.status(403).json({ success: false, message: "Agency scope required but no agency assigned", data: null });
+      return;
+    }
+    const requestedAgencyId = (req.query.agency_id as string | undefined) || (req.body?.agency_id as string | undefined) || (req.params?.agency_id as string | undefined) || undefined;
+    if (requestedAgencyId !== undefined && requestedAgencyId !== req.user.agencyId) {
+      res.status(403).json({ success: false, message: "Access denied: outside your agency scope", data: null });
+      return;
+    }
+    req.user.scopedProvinceId = null;
+    req.user.scopedAgencyId = req.user.agencyId;
     req.user.scopedDistrictId = null;
     req.user.scopedFacilityId = null;
     next();
@@ -259,6 +290,7 @@ export function enforceScopeFilter(
   }
 
   req.user.scopedProvinceId = requestedProvinceId ?? req.user.provinceId ?? null;
+  req.user.scopedAgencyId = null;
   req.user.scopedDistrictId = requestedDistrictId ?? req.user.districtId ?? null;
   req.user.scopedFacilityId = requestedFacilityId ?? req.user.facilityId ?? null;
 

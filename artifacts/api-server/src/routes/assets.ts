@@ -77,13 +77,19 @@ router.get("/v1/assets", requireAuth, enforceScopeFilter, async (req, res) => {
 
     const conditions = [isNull(assets.deletedAt)];
 
-    const effectiveProvinceId = province_id || req.user?.scopedProvinceId || undefined;
-    const effectiveDistrictId = district_id || req.user?.scopedDistrictId || undefined;
-    const effectiveFacilityId = facility_id || req.user?.scopedFacilityId || undefined;
+    const effectiveAgencyId = req.user?.scopedAgencyId || undefined;
+    if (effectiveAgencyId) {
+      // Agency users see ONLY their agency's assets — never province/district/facility filters
+      conditions.push(eq(assets.agencyId, effectiveAgencyId));
+    } else {
+      const effectiveProvinceId = province_id || req.user?.scopedProvinceId || undefined;
+      const effectiveDistrictId = district_id || req.user?.scopedDistrictId || undefined;
+      const effectiveFacilityId = facility_id || req.user?.scopedFacilityId || undefined;
 
-    if (effectiveProvinceId) conditions.push(eq(assets.provinceId, effectiveProvinceId));
-    if (effectiveDistrictId) conditions.push(eq(assets.districtId, effectiveDistrictId));
-    if (effectiveFacilityId) conditions.push(eq(assets.facilityId, effectiveFacilityId));
+      if (effectiveProvinceId) conditions.push(eq(assets.provinceId, effectiveProvinceId));
+      if (effectiveDistrictId) conditions.push(eq(assets.districtId, effectiveDistrictId));
+      if (effectiveFacilityId) conditions.push(eq(assets.facilityId, effectiveFacilityId));
+    }
     if (category_id) conditions.push(eq(assets.categoryId, category_id));
     const VALID_STATUSES = ["active", "disposed", "missing", "under_maintenance"] as const;
     const VALID_CONDITIONS = ["excellent", "good", "fair", "poor"] as const;
@@ -207,6 +213,8 @@ router.post("/v1/assets", requireAuth, requireAssetAdmin, async (req, res) => {
 
   const scopeLevel = req.user.scopeLevel;
   const userProvinceId = req.user.provinceId;
+  const userAgencyId = req.user.agencyId;
+  const isAgencyScoped = scopeLevel === "agency" || !!userAgencyId;
 
   const body = req.body;
 
@@ -215,7 +223,17 @@ router.post("/v1/assets", requireAuth, requireAssetAdmin, async (req, res) => {
     return;
   }
 
-  if (scopeLevel !== "national" && body.province_id) {
+  // Agency users: assets MUST belong to their agency (no province)
+  if (isAgencyScoped) {
+    if (body.province_id) {
+      res.status(403).json({ success: false, message: "Agency users cannot assign assets to a province", data: null });
+      return;
+    }
+    if (body.agency_id && body.agency_id !== userAgencyId) {
+      res.status(403).json({ success: false, message: "Cannot create asset outside your agency scope", data: null });
+      return;
+    }
+  } else if (scopeLevel !== "national" && body.province_id) {
     if (!isWithinAssetScope(req.user, {
       provinceId: body.province_id as string,
       districtId: body.district_id as string | undefined,
@@ -247,9 +265,10 @@ router.post("/v1/assets", requireAuth, requireAssetAdmin, async (req, res) => {
         notes: orNull(body.notes),
         status: body.status ?? "active",
         condition: body.condition ?? "good",
-        provinceId: orNull(body.province_id) ?? userProvinceId ?? null,
-        districtId: orNull(body.district_id),
-        facilityId: orNull(body.facility_id),
+        provinceId: isAgencyScoped ? null : (orNull(body.province_id) ?? userProvinceId ?? null),
+        agencyId: isAgencyScoped ? userAgencyId : null,
+        districtId: isAgencyScoped ? null : orNull(body.district_id),
+        facilityId: isAgencyScoped ? null : orNull(body.facility_id),
         assignedToUser: orNull(body.assigned_to_user),
         createdBy: req.user.userId,
       })
@@ -365,7 +384,7 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
 
   try {
     const [existing] = await db
-      .select({ id: assets.id, provinceId: assets.provinceId, districtId: assets.districtId, facilityId: assets.facilityId, assetTag: assets.assetTag })
+      .select({ id: assets.id, provinceId: assets.provinceId, agencyId: assets.agencyId, districtId: assets.districtId, facilityId: assets.facilityId, assetTag: assets.assetTag })
       .from(assets)
       .where(and(eq(assets.id, req.params.id as string), isNull(assets.deletedAt)))
       .limit(1);
@@ -377,6 +396,7 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
 
     if (!isWithinAssetScope(req.user, {
       provinceId: existing.provinceId,
+      agencyId: existing.agencyId,
       districtId: existing.districtId,
       facilityId: existing.facilityId,
     })) {
@@ -440,7 +460,7 @@ router.delete("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res)
 
   try {
     const [existing] = await db
-      .select({ id: assets.id, provinceId: assets.provinceId, districtId: assets.districtId, facilityId: assets.facilityId, assetTag: assets.assetTag })
+      .select({ id: assets.id, provinceId: assets.provinceId, agencyId: assets.agencyId, districtId: assets.districtId, facilityId: assets.facilityId, assetTag: assets.assetTag })
       .from(assets)
       .where(and(eq(assets.id, req.params.id as string), isNull(assets.deletedAt)))
       .limit(1);
@@ -452,6 +472,7 @@ router.delete("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res)
 
     if (!isWithinAssetScope(req.user, {
       provinceId: existing.provinceId,
+      agencyId: existing.agencyId,
       districtId: existing.districtId,
       facilityId: existing.facilityId,
     })) {

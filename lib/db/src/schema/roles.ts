@@ -5,6 +5,7 @@ export const scopeLevelEnum = pgEnum("scope_level", [
   "provincial",
   "district",
   "facility",
+  "agency",
 ]);
 
 export const roles = pgTable("roles", {

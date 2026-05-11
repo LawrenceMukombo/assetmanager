@@ -13,11 +13,16 @@ const VALID_CONDITIONS = ["new", "good", "fair", "poor", "unserviceable"] as con
 router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
   if (!req.user) return;
 
-  const provinceId = req.user.scopeLevel === "national"
-    ? (req.query.province_id as string | undefined)
-    : req.user.provinceId;
+  const isAgencyScoped = req.user.scopeLevel === "agency" || !!req.user.agencyId;
+  const agencyId = isAgencyScoped ? req.user.agencyId : null;
 
-  if (!provinceId) {
+  const provinceId = isAgencyScoped
+    ? null
+    : (req.user.scopeLevel === "national"
+        ? (req.query.province_id as string | undefined) ?? null
+        : req.user.provinceId);
+
+  if (!isAgencyScoped && !provinceId) {
     res.status(400).json({ success: false, message: "province_id required for national users", data: null });
     return;
   }
@@ -33,7 +38,10 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
   const safeCondition = conditionFilter && VALID_CONDITIONS.includes(conditionFilter as typeof VALID_CONDITIONS[number]) ? conditionFilter : undefined;
 
   try {
-    const baseConditions = [isNull(assets.deletedAt), eq(assets.provinceId, provinceId)];
+    const baseConditions = [
+      isNull(assets.deletedAt),
+      isAgencyScoped ? eq(assets.agencyId, agencyId!) : eq(assets.provinceId, provinceId!),
+    ];
 
     // Optional district/facility scope on baseConditions
     if (districtId) baseConditions.push(eq(assets.districtId, districtId));

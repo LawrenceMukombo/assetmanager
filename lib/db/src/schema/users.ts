@@ -1,6 +1,7 @@
 import { pgTable, uuid, varchar, text, boolean, timestamp, date, unique } from "drizzle-orm/pg-core";
 import { roles } from "./roles";
 import { provinces } from "./provinces";
+import { agencies } from "./agencies";
 import { districts } from "./districts";
 import { facilities } from "./facilities";
 
@@ -30,6 +31,7 @@ export const userScope = pgTable("user_scope", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().unique().references(() => users.id),
   provinceId: uuid("province_id").references(() => provinces.id),
+  agencyId: uuid("agency_id").references(() => agencies.id),
   districtId: uuid("district_id").references(() => districts.id),
   facilityId: uuid("facility_id").references(() => facilities.id),
 });

@@ -1,6 +1,7 @@
 export * from "./tenants";
 export * from "./roles";
 export * from "./provinces";
+export * from "./agencies";
 export * from "./districts";
 export * from "./facilities";
 export * from "./users";

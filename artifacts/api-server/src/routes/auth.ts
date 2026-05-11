@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { users, userRoles, roles, userScope, provinces } from "@workspace/db";
+import { users, userRoles, roles, userScope, provinces, agencies } from "@workspace/db";
 import {
   signAccessToken,
   issueRefreshToken,
@@ -59,6 +59,7 @@ router.post("/v1/auth/login", async (req, res) => {
       roleName: userRoleRow?.role.roleName ?? "",
       scopeLevel: userRoleRow?.role.scopeLevel ?? "provincial",
       provinceId: scope?.provinceId ?? null,
+      agencyId: scope?.agencyId ?? null,
       districtId: scope?.districtId ?? null,
       facilityId: scope?.facilityId ?? null,
     };
@@ -73,6 +74,13 @@ router.post("/v1/auth/login", async (req, res) => {
       themeAccentColor: string | null;
     } | null = null;
     let provinceCode: string | null = null;
+    let agencyBranding: {
+      agencyName: string;
+      agencyCode: string;
+      flagUrl: string | null;
+      flagColors: string[];
+      themeAccentColor: string | null;
+    } | null = null;
 
     if (scope?.provinceId) {
       const [prov] = await db
@@ -98,6 +106,30 @@ router.post("/v1/auth/login", async (req, res) => {
       }
     }
 
+    if (scope?.agencyId) {
+      const [ag] = await db
+        .select({
+          agencyName: agencies.agencyName,
+          agencyCode: agencies.agencyCode,
+          logoUrl: agencies.logoUrl,
+          flagColors: agencies.flagColors,
+          themeAccentColor: agencies.themeAccentColor,
+        })
+        .from(agencies)
+        .where(eq(agencies.id, scope.agencyId))
+        .limit(1);
+
+      if (ag) {
+        agencyBranding = {
+          agencyName: ag.agencyName,
+          agencyCode: ag.agencyCode,
+          flagUrl: ag.logoUrl ?? null,
+          flagColors: Array.isArray(ag.flagColors) ? (ag.flagColors as string[]) : [],
+          themeAccentColor: ag.themeAccentColor ?? null,
+        };
+      }
+    }
+
     res.json({
       success: true,
       message: "Login successful",
@@ -115,11 +147,15 @@ router.post("/v1/auth/login", async (req, res) => {
             province_id: scope?.provinceId ?? null,
             province_name: provinceBranding?.provinceName ?? null,
             province_code: provinceCode,
+            agency_id: scope?.agencyId ?? null,
+            agency_name: agencyBranding?.agencyName ?? null,
+            agency_code: agencyBranding?.agencyCode ?? null,
             district_id: scope?.districtId ?? null,
             facility_id: scope?.facilityId ?? null,
           },
         },
         province_branding: provinceBranding,
+        agency_branding: agencyBranding,
       },
     });
   } catch (err) {
@@ -167,6 +203,7 @@ router.post("/v1/auth/refresh", async (req, res) => {
       roleName: userRoleRow?.role.roleName ?? "",
       scopeLevel: userRoleRow?.role.scopeLevel ?? "provincial",
       provinceId: scope?.provinceId ?? null,
+      agencyId: scope?.agencyId ?? null,
       districtId: scope?.districtId ?? null,
       facilityId: scope?.facilityId ?? null,
     };
