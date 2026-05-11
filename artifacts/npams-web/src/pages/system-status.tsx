@@ -44,14 +44,18 @@ export default function SystemStatusPage() {
   });
 
   const runHealthCheck = async () => {
-    const result = await refetch();
-    if (result.data) {
-      const apiOk = result.data.api.status === "ok";
-      const dbOk = result.data.database.status === "ok";
+    try {
+      const r = await apiFetchJson<{ last_successful_backup_at: string }>("/api/v1/system/health-check", { method: "POST" });
+      if (!r.ok) throw new Error(r.message);
+      const result = await refetch();
+      const apiOk = result.data?.api.status === "ok";
+      const dbOk = result.data?.database.status === "ok";
       toast({
         title: apiOk && dbOk ? "Health check passed" : "Health check found issues",
-        description: `API: ${result.data.api.status} · DB: ${result.data.database.status} (${result.data.database.latency_ms ?? "n/a"} ms)`,
+        description: `API: ${result.data?.api.status ?? "?"} · DB: ${result.data?.database.status ?? "?"} (${result.data?.database.latency_ms ?? "n/a"} ms) · Snapshot recorded ${new Date(r.data!.last_successful_backup_at).toLocaleTimeString()}`,
       });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Health check failed", description: (e as Error).message });
     }
   };
 

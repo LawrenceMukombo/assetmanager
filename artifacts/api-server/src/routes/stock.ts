@@ -259,6 +259,29 @@ router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (re
     return;
   }
 
+  // Validate any client-supplied facility IDs are real and within caller scope.
+  // Agency-scoped users own stock by agencyId (no facility hierarchy applies),
+  // but the facility must still exist; non-agency users must stay inside their
+  // geographic scope for both source and destination.
+  async function validateFacilityScope(facilityId: string, label: "source" | "destination"): Promise<{ ok: true } | { ok: false; status: 400 | 403; message: string }> {
+    const [row] = await db
+      .select({ id: facilities.id, districtId: facilities.districtId, provinceId: districts.provinceId })
+      .from(facilities)
+      .leftJoin(districts, eq(facilities.districtId, districts.id))
+      .where(eq(facilities.id, facilityId))
+      .limit(1);
+    if (!row) return { ok: false, status: 400, message: `${label === "source" ? "Source" : "Destination"} facility not found` };
+    const isAgencyScoped = req.user!.scopeLevel === "agency" || !!req.user!.agencyId;
+    if (!isAgencyScoped && !isWithinAssetScope(req.user, {
+      provinceId: row.provinceId ?? null,
+      districtId: row.districtId,
+      facilityId: row.id,
+    })) {
+      return { ok: false, status: 403, message: `Cannot use a ${label} facility outside your scope` };
+    }
+    return { ok: true };
+  }
+
   let toFacilityId: string | null = null;
   if (movementType === "transfer") {
     toFacilityId = orNull(body.to_facility_id);
@@ -266,25 +289,13 @@ router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (re
       res.status(400).json({ success: false, message: "to_facility_id is required for transfers", data: null });
       return;
     }
-    const [destFacility] = await db
-      .select({ id: facilities.id, districtId: facilities.districtId, provinceId: districts.provinceId })
-      .from(facilities)
-      .leftJoin(districts, eq(facilities.districtId, districts.id))
-      .where(eq(facilities.id, toFacilityId))
-      .limit(1);
-    if (!destFacility) {
-      res.status(400).json({ success: false, message: "Destination facility not found", data: null });
-      return;
-    }
-    const isAgencyScoped = req.user.scopeLevel === "agency" || !!req.user.agencyId;
-    if (!isAgencyScoped && !isWithinAssetScope(req.user, {
-      provinceId: destFacility.provinceId ?? null,
-      districtId: destFacility.districtId,
-      facilityId: destFacility.id,
-    })) {
-      res.status(403).json({ success: false, message: "Cannot transfer to a facility outside your scope", data: null });
-      return;
-    }
+    const v = await validateFacilityScope(toFacilityId, "destination");
+    if (!v.ok) { res.status(v.status).json({ success: false, message: v.message, data: null }); return; }
+  }
+  const fromFacilityRaw = orNull(body.from_facility_id);
+  if (fromFacilityRaw) {
+    const v = await validateFacilityScope(fromFacilityRaw, "source");
+    if (!v.ok) { res.status(v.status).json({ success: false, message: v.message, data: null }); return; }
   }
 
   try {
