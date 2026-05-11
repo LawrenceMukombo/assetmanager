@@ -1,8 +1,10 @@
 import { Router } from "express";
-import { eq, and, sql, desc, inArray } from "drizzle-orm";
+import crypto from "crypto";
+import { eq, and, sql, desc, inArray, asc } from "drizzle-orm";
 import {
   db,
   purchaseRequests,
+  purchaseRequestEvents,
   stockItems,
   stockBalances,
   stockMovements,
@@ -69,6 +71,24 @@ function isWithinStockScope(
   return false;
 }
 
+const SIGNATURE_SECRET = process.env.JWT_SECRET ?? process.env.SESSION_SECRET ?? "npams-dev-secret-do-not-use-in-prod";
+function computeSignedHash(parts: { userId: string; action: string; requestId: string; timestamp: string; signedName: string }): string {
+  // HMAC-SHA256 keyed by server secret so signatures are tamper-evident and not
+  // reproducible by anyone who only knows the public payload fields.
+  const payload = `v1|${parts.userId}|${parts.action}|${parts.requestId}|${parts.timestamp}|${parts.signedName}`;
+  return crypto.createHmac("sha256", SIGNATURE_SECRET).update(payload).digest("hex");
+}
+
+function requireSignedName(body: unknown): { ok: true; name: string } | { ok: false; message: string } {
+  const name = typeof (body as { signed_name?: unknown })?.signed_name === "string"
+    ? (body as { signed_name: string }).signed_name.trim()
+    : "";
+  if (name.length < 2) {
+    return { ok: false, message: "signed_name is required (type your full name to sign this action)" };
+  }
+  return { ok: true, name };
+}
+
 function generateRequestNumber(): string {
   const d = new Date();
   const yyyy = d.getUTCFullYear();
@@ -118,6 +138,7 @@ const REQUEST_SELECT = {
   approvedAt: purchaseRequests.approvedAt,
   receivedAt: purchaseRequests.receivedAt,
   closedAt: purchaseRequests.closedAt,
+  requiredByDate: purchaseRequests.requiredByDate,
   createdAt: purchaseRequests.createdAt,
   updatedAt: purchaseRequests.updatedAt,
   stockItem: {
@@ -208,6 +229,11 @@ router.post("/v1/purchase-requests", requireAuth, async (req, res) => {
     res.status(400).json({ success: false, message: "stock_item_id and positive integer quantity are required", data: null });
     return;
   }
+  const submitSig = requireSignedName(body);
+  if (!submitSig.ok) {
+    res.status(400).json({ success: false, message: submitSig.message, data: null });
+    return;
+  }
 
   try {
     const [item] = await db
@@ -238,6 +264,8 @@ router.post("/v1/purchase-requests", requireAuth, async (req, res) => {
     const supplier = orNull(body.supplier) ?? item.supplier ?? null;
     const unitCost = orNull(body.unit_cost) ?? item.unitCost ?? null;
     const notes = orNull(body.notes);
+    const rawRequiredBy = orNull(body.required_by_date);
+    const requiredByDate = rawRequiredBy && /^\d{4}-\d{2}-\d{2}$/.test(rawRequiredBy) ? rawRequiredBy : null;
 
     let attempts = 0;
     let created;
@@ -256,6 +284,7 @@ router.post("/v1/purchase-requests", requireAuth, async (req, res) => {
           agencyId: item.agencyId,
           facilityId: item.facilityId,
           requestedBy: req.user.userId,
+          requiredByDate,
         }).returning();
         created = row;
         break;
@@ -284,6 +313,21 @@ router.post("/v1/purchase-requests", requireAuth, async (req, res) => {
     if (approverNotifs.length > 0) {
       await db.insert(notifications).values(approverNotifs).catch(() => null);
     }
+
+    const submitTs = new Date();
+    await db.insert(purchaseRequestEvents).values({
+      requestId: created.id,
+      eventType: "submitted",
+      actorUserId: req.user.userId,
+      actorRole: req.user.roleName,
+      signedName: submitSig.name,
+      signedAt: submitTs,
+      signedHash: computeSignedHash({
+        userId: req.user.userId, action: "submitted", requestId: created.id,
+        timestamp: submitTs.toISOString(), signedName: submitSig.name,
+      }),
+      payload: { quantity, supplier, unit_cost: unitCost, required_by_date: requiredByDate, notes },
+    });
 
     await db.insert(activityLogs).values({
       userId: req.user.userId,
@@ -336,6 +380,8 @@ async function loadRequestForAction(reqId: string, user: NonNullable<Express.Req
 
 router.post("/v1/purchase-requests/:id/approve", requireAuth, requireApprover, async (req, res) => {
   if (!req.user) return;
+  const sig = requireSignedName(req.body);
+  if (!sig.ok) { res.status(400).json({ success: false, message: sig.message, data: null }); return; }
   try {
     const row = await loadRequestForAction(req.params.id as string, req.user);
     if (!row) { res.status(404).json({ success: false, message: "Purchase request not found", data: null }); return; }
@@ -344,11 +390,25 @@ router.post("/v1/purchase-requests/:id/approve", requireAuth, requireApprover, a
       res.status(400).json({ success: false, message: `Cannot approve a request in status "${row.status}"`, data: null });
       return;
     }
+    const approvedAt = new Date();
     const [updated] = await db
       .update(purchaseRequests)
-      .set({ status: "approved", approvedBy: req.user.userId, approvedAt: new Date(), updatedAt: new Date() })
+      .set({ status: "approved", approvedBy: req.user.userId, approvedAt, updatedAt: approvedAt })
       .where(eq(purchaseRequests.id, row.id))
       .returning();
+
+    await db.insert(purchaseRequestEvents).values({
+      requestId: row.id,
+      eventType: "approved",
+      actorUserId: req.user.userId,
+      actorRole: req.user.roleName,
+      signedName: sig.name,
+      signedAt: approvedAt,
+      signedHash: computeSignedHash({
+        userId: req.user.userId, action: "approved", requestId: row.id,
+        timestamp: approvedAt.toISOString(), signedName: sig.name,
+      }),
+    });
 
     await db.insert(notifications).values({
       userId: row.requestedBy,
@@ -373,6 +433,8 @@ router.post("/v1/purchase-requests/:id/approve", requireAuth, requireApprover, a
 
 router.post("/v1/purchase-requests/:id/reject", requireAuth, requireApprover, async (req, res) => {
   if (!req.user) return;
+  const sig = requireSignedName(req.body);
+  if (!sig.ok) { res.status(400).json({ success: false, message: sig.message, data: null }); return; }
   const reason = orNull(req.body?.reason);
   try {
     const row = await loadRequestForAction(req.params.id as string, req.user);
@@ -382,18 +444,33 @@ router.post("/v1/purchase-requests/:id/reject", requireAuth, requireApprover, as
       res.status(400).json({ success: false, message: `Cannot reject a request in status "${row.status}"`, data: null });
       return;
     }
+    const ts = new Date();
     const [updated] = await db
       .update(purchaseRequests)
       .set({
         status: "rejected",
         approvedBy: req.user.userId,
-        approvedAt: new Date(),
+        approvedAt: ts,
         rejectedReason: reason,
-        closedAt: new Date(),
-        updatedAt: new Date(),
+        closedAt: ts,
+        updatedAt: ts,
       })
       .where(eq(purchaseRequests.id, row.id))
       .returning();
+
+    await db.insert(purchaseRequestEvents).values({
+      requestId: row.id,
+      eventType: "rejected",
+      actorUserId: req.user.userId,
+      actorRole: req.user.roleName,
+      signedName: sig.name,
+      signedAt: ts,
+      reason,
+      signedHash: computeSignedHash({
+        userId: req.user.userId, action: "rejected", requestId: row.id,
+        timestamp: ts.toISOString(), signedName: sig.name,
+      }),
+    });
 
     await db.insert(notifications).values({
       userId: row.requestedBy,
@@ -420,6 +497,8 @@ router.post("/v1/purchase-requests/:id/reject", requireAuth, requireApprover, as
 router.post("/v1/purchase-requests/:id/receive", requireAuth, requireAssetAdmin, async (req, res) => {
   if (!req.user) return;
   const body = req.body ?? {};
+  const sig = requireSignedName(body);
+  if (!sig.ok) { res.status(400).json({ success: false, message: sig.message, data: null }); return; }
   const receiveQty = Number(body.quantity);
   if (!Number.isInteger(receiveQty) || receiveQty <= 0) {
     res.status(400).json({ success: false, message: "quantity must be a positive integer", data: null });
@@ -540,6 +619,22 @@ router.post("/v1/purchase-requests/:id/receive", requireAuth, requireAssetAdmin,
 
     const { pr, snapshot, fullyReceived, receivedQty } = result;
 
+    const evTs = new Date();
+    await db.insert(purchaseRequestEvents).values({
+      requestId: snapshot.id,
+      eventType: fullyReceived ? "closed" : "received",
+      actorUserId: req.user.userId,
+      actorRole: req.user.roleName,
+      signedName: sig.name,
+      signedAt: evTs,
+      reason,
+      signedHash: computeSignedHash({
+        userId: req.user.userId, action: fullyReceived ? "closed" : "received",
+        requestId: snapshot.id, timestamp: evTs.toISOString(), signedName: sig.name,
+      }),
+      payload: { received_quantity: receivedQty, reference, fully_received: fullyReceived },
+    });
+
     await db.insert(notifications).values({
       userId: snapshot.requestedBy,
       title: fullyReceived ? "Purchase request closed" : "Goods received against your request",
@@ -560,6 +655,44 @@ router.post("/v1/purchase-requests/:id/receive", requireAuth, requireAssetAdmin,
     res.status(201).json({ success: true, message: fullyReceived ? "Request closed" : "Receipt recorded", data: pr });
   } catch (err) {
     req.log.error({ err }, "Receive purchase request error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
+// ── Events / timeline for a purchase request ─────────────────────────────────
+router.get("/v1/purchase-requests/:id/events", requireAuth, async (req, res) => {
+  if (!req.user) return;
+  try {
+    const conditions = [eq(purchaseRequests.id, req.params.id as string), ...scopeFilter(req.user)];
+    const [exists] = await db
+      .select({ id: purchaseRequests.id })
+      .from(purchaseRequests)
+      .where(and(...conditions))
+      .limit(1);
+    if (!exists) {
+      res.status(404).json({ success: false, message: "Purchase request not found", data: null });
+      return;
+    }
+    const rows = await db
+      .select({
+        id: purchaseRequestEvents.id,
+        eventType: purchaseRequestEvents.eventType,
+        actorRole: purchaseRequestEvents.actorRole,
+        signedName: purchaseRequestEvents.signedName,
+        signedHash: purchaseRequestEvents.signedHash,
+        signedAt: purchaseRequestEvents.signedAt,
+        reason: purchaseRequestEvents.reason,
+        payload: purchaseRequestEvents.payload,
+        createdAt: purchaseRequestEvents.createdAt,
+        actorName: users.fullName,
+      })
+      .from(purchaseRequestEvents)
+      .leftJoin(users, eq(users.id, purchaseRequestEvents.actorUserId))
+      .where(eq(purchaseRequestEvents.requestId, req.params.id as string))
+      .orderBy(asc(purchaseRequestEvents.createdAt));
+    res.json({ success: true, message: "Events", data: rows });
+  } catch (err) {
+    req.log.error({ err }, "List PR events error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });

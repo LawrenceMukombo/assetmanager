@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_ROLES } from "@/App";
 import { apiFetchJson } from "@/lib/api-fetch";
+import { Link } from "wouter";
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from "@/components/ui/card";
@@ -15,14 +16,19 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  Tabs, TabsList, TabsTrigger, TabsContent,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Tabs, TabsContent, ColorfulTabsList, ColorfulTabsTrigger,
 } from "@/components/ui/tabs";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { ClipboardList, Check, X, PackageCheck } from "lucide-react";
+import {
+  ClipboardList, Check, X, PackageCheck, Plus, ShieldCheck, ChevronRight, Inbox, FileSpreadsheet, ListChecks,
+} from "lucide-react";
 import { format } from "date-fns";
 
 type PurchaseRequest = {
@@ -38,12 +44,24 @@ type PurchaseRequest = {
   approvedAt: string | null;
   receivedAt: string | null;
   closedAt: string | null;
+  requiredByDate: string | null;
   createdAt: string;
   stockItem: { id: string; itemCode: string; itemName: string; unitOfMeasure: string; onHandQuantity: number; reorderLevel: number };
   requester: { id: string; fullName: string } | null;
   agency?: { id: string; agencyName: string; agencyCode: string } | null;
   province?: { id: string; provinceName: string } | null;
   facility?: { id: string; facilityName: string } | null;
+};
+
+type StockItem = {
+  id: string;
+  itemCode: string;
+  itemName: string;
+  unitOfMeasure: string;
+  onHandQuantity: number;
+  reorderLevel: number;
+  unitCost: string | null;
+  supplier: string | null;
 };
 
 const STATUS_BADGE: Record<PurchaseRequest["status"], string> = {
@@ -69,9 +87,14 @@ export default function PurchaseRequestsPage() {
   const [tab, setTab] = useState<"pending" | "mine" | "all">(isAdmin ? "pending" : "mine");
   const [rejectTarget, setRejectTarget] = useState<PurchaseRequest | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [rejectSign, setRejectSign] = useState("");
+  const [approveTarget, setApproveTarget] = useState<PurchaseRequest | null>(null);
+  const [approveSign, setApproveSign] = useState("");
   const [receiveTarget, setReceiveTarget] = useState<PurchaseRequest | null>(null);
   const [receiveQty, setReceiveQty] = useState("");
   const [receiveRef, setReceiveRef] = useState("");
+  const [receiveSign, setReceiveSign] = useState("");
+  const [newOpen, setNewOpen] = useState(false);
 
   const { data: rows, isLoading } = useQuery<PurchaseRequest[]>({
     queryKey: ["purchase-requests", tab],
@@ -85,12 +108,18 @@ export default function PurchaseRequestsPage() {
   });
 
   const approve = useMutation({
-    mutationFn: async (id: string) => {
-      const r = await apiFetchJson(`/api/v1/purchase-requests/${id}/approve`, { method: "POST" });
+    mutationFn: async () => {
+      if (!approveTarget) throw new Error("No request selected");
+      if (approveSign.trim().length < 2) throw new Error("Type your full name to sign this approval");
+      const r = await apiFetchJson(`/api/v1/purchase-requests/${approveTarget.id}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ signed_name: approveSign.trim() }),
+      });
       if (!r.ok) throw new Error(r.message);
     },
     onSuccess: () => {
       toast({ title: "Request approved" });
+      setApproveTarget(null); setApproveSign("");
       qc.invalidateQueries({ queryKey: ["purchase-requests"] });
     },
     onError: (e) => toast({ variant: "destructive", title: "Approval failed", description: (e as Error).message }),
@@ -99,16 +128,16 @@ export default function PurchaseRequestsPage() {
   const reject = useMutation({
     mutationFn: async () => {
       if (!rejectTarget) throw new Error("No request selected");
+      if (rejectSign.trim().length < 2) throw new Error("Type your full name to sign this rejection");
       const r = await apiFetchJson(`/api/v1/purchase-requests/${rejectTarget.id}/reject`, {
         method: "POST",
-        body: JSON.stringify({ reason: rejectReason || undefined }),
+        body: JSON.stringify({ reason: rejectReason || undefined, signed_name: rejectSign.trim() }),
       });
       if (!r.ok) throw new Error(r.message);
     },
     onSuccess: () => {
       toast({ title: "Request rejected" });
-      setRejectTarget(null);
-      setRejectReason("");
+      setRejectTarget(null); setRejectReason(""); setRejectSign("");
       qc.invalidateQueries({ queryKey: ["purchase-requests"] });
     },
     onError: (e) => toast({ variant: "destructive", title: "Reject failed", description: (e as Error).message }),
@@ -119,17 +148,16 @@ export default function PurchaseRequestsPage() {
       if (!receiveTarget) throw new Error("No request selected");
       const qty = Number(receiveQty);
       if (!Number.isFinite(qty) || qty <= 0) throw new Error("Enter a valid quantity");
+      if (receiveSign.trim().length < 2) throw new Error("Type your full name to sign this receipt");
       const r = await apiFetchJson(`/api/v1/purchase-requests/${receiveTarget.id}/receive`, {
         method: "POST",
-        body: JSON.stringify({ quantity: qty, reference: receiveRef || undefined }),
+        body: JSON.stringify({ quantity: qty, reference: receiveRef || undefined, signed_name: receiveSign.trim() }),
       });
       if (!r.ok) throw new Error(r.message);
     },
     onSuccess: () => {
       toast({ title: "Goods received" });
-      setReceiveTarget(null);
-      setReceiveQty("");
-      setReceiveRef("");
+      setReceiveTarget(null); setReceiveQty(""); setReceiveRef(""); setReceiveSign("");
       qc.invalidateQueries({ queryKey: ["purchase-requests"] });
       qc.invalidateQueries({ queryKey: ["stock"] });
     },
@@ -148,6 +176,7 @@ export default function PurchaseRequestsPage() {
             <TableHead>Item</TableHead>
             <TableHead className="text-right">Qty</TableHead>
             <TableHead>Supplier</TableHead>
+            <TableHead>Required by</TableHead>
             <TableHead>Requested by</TableHead>
             <TableHead>Created</TableHead>
             <TableHead>Status</TableHead>
@@ -159,7 +188,11 @@ export default function PurchaseRequestsPage() {
             const remaining = r.quantity - r.receivedQuantity;
             return (
               <TableRow key={r.id}>
-                <TableCell className="font-mono text-xs">{r.requestNumber}</TableCell>
+                <TableCell className="font-mono text-xs">
+                  <Link href={`/purchase-requests/${r.id}`} className="text-primary hover:underline inline-flex items-center gap-1">
+                    {r.requestNumber} <ChevronRight className="w-3 h-3" />
+                  </Link>
+                </TableCell>
                 <TableCell>
                   <div className="font-medium">{r.stockItem.itemName}</div>
                   <div className="text-xs text-muted-foreground font-mono">{r.stockItem.itemCode}</div>
@@ -171,6 +204,7 @@ export default function PurchaseRequestsPage() {
                   )}
                 </TableCell>
                 <TableCell className="text-sm">{r.supplier ?? <span className="text-muted-foreground">—</span>}</TableCell>
+                <TableCell className="text-sm">{r.requiredByDate ? format(new Date(r.requiredByDate), "dd MMM yyyy") : <span className="text-muted-foreground">—</span>}</TableCell>
                 <TableCell className="text-sm">{r.requester?.fullName ?? "—"}</TableCell>
                 <TableCell className="text-sm">{format(new Date(r.createdAt), "dd MMM yyyy")}</TableCell>
                 <TableCell><StatusBadge status={r.status} /></TableCell>
@@ -178,18 +212,18 @@ export default function PurchaseRequestsPage() {
                   <div className="flex justify-end gap-2 flex-wrap">
                     {isAdmin && r.status === "submitted" && (
                       <>
-                        <Button size="sm" variant="outline" disabled={approve.isPending}
-                          onClick={() => approve.mutate(r.id)}>
+                        <Button size="sm" variant="outline"
+                          onClick={() => { setApproveTarget(r); setApproveSign(user?.full_name ?? ""); }}>
                           <Check className="w-4 h-4 mr-1" /> Approve
                         </Button>
                         <Button size="sm" variant="outline" className="text-destructive"
-                          onClick={() => { setRejectTarget(r); setRejectReason(""); }}>
+                          onClick={() => { setRejectTarget(r); setRejectReason(""); setRejectSign(user?.full_name ?? ""); }}>
                           <X className="w-4 h-4 mr-1" /> Reject
                         </Button>
                       </>
                     )}
                     {isAdmin && (r.status === "approved" || r.status === "received") && remaining > 0 && (
-                      <Button size="sm" onClick={() => { setReceiveTarget(r); setReceiveQty(String(remaining)); setReceiveRef(""); }}>
+                      <Button size="sm" onClick={() => { setReceiveTarget(r); setReceiveQty(String(remaining)); setReceiveRef(""); setReceiveSign(user?.full_name ?? ""); }}>
                         <PackageCheck className="w-4 h-4 mr-1" /> Receive
                       </Button>
                     )}
@@ -205,19 +239,32 @@ export default function PurchaseRequestsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <ClipboardList className="w-6 h-6" /> Purchase Requests
-        </h1>
-        <p className="text-sm text-muted-foreground">Reorder requests for low-stock items, routed to admins for approval.</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold flex items-center gap-2">
+            <ClipboardList className="w-6 h-6 text-blue-600" /> Purchase Requests
+          </h1>
+          <p className="text-sm text-muted-foreground">Reorder requests for low-stock items, routed to admins for approval.</p>
+        </div>
+        <Button onClick={() => setNewOpen(true)} className="bg-blue-600 hover:bg-blue-700">
+          <Plus className="w-4 h-4 mr-1" /> New purchase request
+        </Button>
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-        <TabsList>
-          {isAdmin && <TabsTrigger value="pending">Pending approval</TabsTrigger>}
-          <TabsTrigger value="mine">My requests</TabsTrigger>
-          <TabsTrigger value="all">All</TabsTrigger>
-        </TabsList>
+        <ColorfulTabsList>
+          {isAdmin && (
+            <ColorfulTabsTrigger value="pending" tone="amber">
+              <Inbox className="w-4 h-4" /> Pending approval
+            </ColorfulTabsTrigger>
+          )}
+          <ColorfulTabsTrigger value="mine" tone="emerald">
+            <FileSpreadsheet className="w-4 h-4" /> My requests
+          </ColorfulTabsTrigger>
+          <ColorfulTabsTrigger value="all" tone="violet">
+            <ListChecks className="w-4 h-4" /> All
+          </ColorfulTabsTrigger>
+        </ColorfulTabsList>
         <TabsContent value={tab}>
           <Card>
             <CardHeader>
@@ -240,6 +287,26 @@ export default function PurchaseRequestsPage() {
         </TabsContent>
       </Tabs>
 
+      {/* Approve dialog with signature */}
+      <Dialog open={!!approveTarget} onOpenChange={(o) => !o && setApproveTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Approve purchase request</DialogTitle>
+            <DialogDescription>
+              {approveTarget && `${approveTarget.requestNumber} — ${approveTarget.stockItem.itemName} (${approveTarget.quantity} ${approveTarget.stockItem.unitOfMeasure})`}
+            </DialogDescription>
+          </DialogHeader>
+          <SignaturePad value={approveSign} onChange={setApproveSign} action="approve" />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApproveTarget(null)}>Cancel</Button>
+            <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => approve.mutate()} disabled={approve.isPending || approveSign.trim().length < 2}>
+              <ShieldCheck className="w-4 h-4 mr-1" /> Sign &amp; approve
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject dialog with signature */}
       <Dialog open={!!rejectTarget} onOpenChange={(o) => !o && setRejectTarget(null)}>
         <DialogContent>
           <DialogHeader>
@@ -252,15 +319,17 @@ export default function PurchaseRequestsPage() {
             <Label>Reason (sent to the requester)</Label>
             <Textarea rows={3} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
           </div>
+          <SignaturePad value={rejectSign} onChange={setRejectSign} action="reject" />
           <DialogFooter>
             <Button variant="outline" onClick={() => setRejectTarget(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => reject.mutate()} disabled={reject.isPending}>
-              Reject request
+            <Button variant="destructive" onClick={() => reject.mutate()} disabled={reject.isPending || rejectSign.trim().length < 2}>
+              <ShieldCheck className="w-4 h-4 mr-1" /> Sign &amp; reject
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Receive dialog with signature */}
       <Dialog open={!!receiveTarget} onOpenChange={(o) => !o && setReceiveTarget(null)}>
         <DialogContent>
           <DialogHeader>
@@ -284,15 +353,212 @@ export default function PurchaseRequestsPage() {
               <Label>Delivery reference (e.g. invoice / GRN #)</Label>
               <Input value={receiveRef} onChange={(e) => setReceiveRef(e.target.value)} />
             </div>
+            <SignaturePad value={receiveSign} onChange={setReceiveSign} action="receive" />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setReceiveTarget(null)}>Cancel</Button>
-            <Button onClick={() => receive.mutate()} disabled={receive.isPending || !receiveQty || Number(receiveQty) <= 0}>
-              Record receipt
+            <Button onClick={() => receive.mutate()} disabled={receive.isPending || !receiveQty || Number(receiveQty) <= 0 || receiveSign.trim().length < 2}>
+              <ShieldCheck className="w-4 h-4 mr-1" /> Sign &amp; record receipt
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <NewPurchaseRequestDialog
+        open={newOpen}
+        onOpenChange={setNewOpen}
+        onSubmitted={() => qc.invalidateQueries({ queryKey: ["purchase-requests"] })}
+      />
     </div>
+  );
+}
+
+// ─── Signature pad (typed name) ──────────────────────────────────────────────
+export function SignaturePad({
+  value, onChange, action,
+}: { value: string; onChange: (v: string) => void; action: string }) {
+  return (
+    <div className="rounded-md border bg-blue-50/50 p-3">
+      <Label className="flex items-center gap-1.5 text-blue-900">
+        <ShieldCheck className="w-4 h-4" /> Digital signature *
+      </Label>
+      <Input
+        className="mt-1 bg-white font-serif italic"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Type your full name"
+      />
+      <p className="mt-1 text-xs text-muted-foreground">
+        Typing your name records a SHA-256 signature on the {action} action.
+      </p>
+    </div>
+  );
+}
+
+// ─── New PR dialog ───────────────────────────────────────────────────────────
+function NewPurchaseRequestDialog({
+  open, onOpenChange, onSubmitted,
+}: { open: boolean; onOpenChange: (o: boolean) => void; onSubmitted: () => void }) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [stockItemId, setStockItemId] = useState<string>("");
+  const [quantity, setQuantity] = useState("");
+  const [supplier, setSupplier] = useState("");
+  const [unitCost, setUnitCost] = useState("");
+  const [requiredBy, setRequiredBy] = useState("");
+  const [notes, setNotes] = useState("");
+  const [signedName, setSignedName] = useState("");
+  const [search, setSearch] = useState("");
+
+  const { data: items, isLoading: itemsLoading } = useQuery<StockItem[]>({
+    queryKey: ["stock", "for-pr"],
+    queryFn: async () => {
+      const r = await apiFetchJson<StockItem[]>("/api/v1/stock");
+      return r.data ?? [];
+    },
+    enabled: open,
+  });
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items ?? [];
+    return (items ?? []).filter((it) =>
+      it.itemName.toLowerCase().includes(q) || it.itemCode.toLowerCase().includes(q),
+    );
+  }, [items, search]);
+
+  const selected = useMemo(() => (items ?? []).find((it) => it.id === stockItemId) || null, [items, stockItemId]);
+
+  function reset() {
+    setStockItemId(""); setQuantity(""); setSupplier(""); setUnitCost("");
+    setRequiredBy(""); setNotes(""); setSignedName(""); setSearch("");
+  }
+
+  const submit = useMutation({
+    mutationFn: async () => {
+      if (!selected) throw new Error("Pick a stock item");
+      const qty = Number(quantity);
+      if (!Number.isFinite(qty) || qty <= 0) throw new Error("Enter a valid quantity");
+      if (signedName.trim().length < 2) throw new Error("Type your full name to sign this request");
+      const r = await apiFetchJson("/api/v1/purchase-requests", {
+        method: "POST",
+        body: JSON.stringify({
+          stock_item_id: selected.id,
+          quantity: qty,
+          supplier: supplier || undefined,
+          unit_cost: unitCost || undefined,
+          required_by_date: requiredBy || undefined,
+          notes: notes || undefined,
+          signed_name: signedName.trim(),
+        }),
+      });
+      if (!r.ok) throw new Error(r.message);
+      return r.data;
+    },
+    onSuccess: () => {
+      toast({ title: "Purchase request submitted" });
+      onOpenChange(false);
+      reset();
+      onSubmitted();
+    },
+    onError: (e) => toast({ variant: "destructive", title: "Could not submit", description: (e as Error).message }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Plus className="w-5 h-5 text-blue-600" /> New purchase request
+          </DialogTitle>
+          <DialogDescription>
+            Pick a stock item from your scope and submit a request for approval.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label>Stock item *</Label>
+            <Input
+              placeholder="Search by name or code…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="mb-2"
+            />
+            <Select value={stockItemId} onValueChange={(v) => {
+              setStockItemId(v);
+              const it = (items ?? []).find((x) => x.id === v);
+              if (it) {
+                setSupplier(it.supplier ?? "");
+                setUnitCost(it.unitCost ?? "");
+                if (!quantity) setQuantity(String(Math.max(it.reorderLevel * 2 - it.onHandQuantity, 1)));
+              }
+            }}>
+              <SelectTrigger>
+                <SelectValue placeholder={itemsLoading ? "Loading items…" : "Select an item"} />
+              </SelectTrigger>
+              <SelectContent>
+                {filtered.length === 0 && (
+                  <div className="px-2 py-3 text-sm text-muted-foreground">No items match.</div>
+                )}
+                {filtered.slice(0, 100).map((it) => (
+                  <SelectItem key={it.id} value={it.id}>
+                    <span className="font-medium">{it.itemName}</span>
+                    <span className="text-xs text-muted-foreground font-mono ml-2">{it.itemCode}</span>
+                    <span className="text-xs text-muted-foreground ml-2">on hand {it.onHandQuantity} {it.unitOfMeasure}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selected && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                On hand {selected.onHandQuantity} {selected.unitOfMeasure} • reorder level {selected.reorderLevel}
+              </p>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Quantity *</Label>
+              <Input type="number" min="1" step="1" value={quantity} onChange={(e) => setQuantity(e.target.value.replace(/[^0-9]/g, ""))} />
+            </div>
+            <div>
+              <Label>Unit cost (PGK)</Label>
+              <Input value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />
+            </div>
+            <div className="col-span-2">
+              <Label>Supplier</Label>
+              <Input value={supplier} onChange={(e) => setSupplier(e.target.value)} />
+            </div>
+            <div className="col-span-2">
+              <Label>Required by</Label>
+              <Input type="date" value={requiredBy} onChange={(e) => setRequiredBy(e.target.value)} />
+            </div>
+            <div className="col-span-2">
+              <Label>Notes</Label>
+              <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </div>
+          </div>
+          <SignaturePad value={signedName} onChange={setSignedName} action="submit" />
+          {!signedName && user?.full_name && (
+            <button
+              type="button"
+              className="text-xs text-blue-600 hover:underline"
+              onClick={() => setSignedName(user.full_name ?? "")}
+            >
+              Use my name ({user.full_name})
+            </button>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button
+            className="bg-blue-600 hover:bg-blue-700"
+            onClick={() => submit.mutate()}
+            disabled={submit.isPending || !selected || !quantity || Number(quantity) <= 0 || signedName.trim().length < 2}
+          >
+            <ShieldCheck className="w-4 h-4 mr-1" /> Sign &amp; submit
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

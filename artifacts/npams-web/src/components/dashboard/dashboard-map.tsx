@@ -85,6 +85,7 @@ export default function DashboardMap({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const geoLayerRef = useRef<L.GeoJSON | null>(null);
+  const markerLayerRef = useRef<L.LayerGroup | null>(null);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [geoData, setGeoData] = useState<GeoJSON.FeatureCollection | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -215,6 +216,43 @@ export default function DashboardMap({
 
     layer.addTo(map);
     geoLayerRef.current = layer;
+
+    // ── Graduated-circle overlay: per-province asset distribution markers
+    if (markerLayerRef.current) {
+      markerLayerRef.current.remove();
+      markerLayerRef.current = null;
+    }
+    const markers = L.layerGroup();
+    layer.eachLayer((fl) => {
+      const f = (fl as L.GeoJSON & { feature: GeoJSON.Feature }).feature;
+      if (!f) return;
+      const gadmName = f.properties?.NAME_1 as string;
+      const dbCode = GADM_TO_DB_CODE[gadmName];
+      const row = dbCode ? assetMap.get(dbCode) : undefined;
+      if (!row || row.total_assets <= 0) return;
+      const center = (fl as L.Path & { getBounds(): L.LatLngBounds }).getBounds().getCenter();
+      const ratio = Math.sqrt(row.total_assets / maxAssets);
+      const radius = Math.max(6, Math.min(28, 6 + ratio * 22));
+      const region = CODE_TO_REGION[dbCode] ?? "";
+      const fill = REGION_COLORS[region] ?? "#0F4C81";
+      const marker = L.circleMarker(center, {
+        radius,
+        weight: 2,
+        color: "#ffffff",
+        fillColor: fill,
+        fillOpacity: 0.85,
+      });
+      marker.bindTooltip(
+        `<strong>${row.province_name}</strong><br/>${row.total_assets} assets`,
+        { direction: "top", offset: [0, -radius], className: "leaflet-asset-tooltip" }
+      );
+      marker.on("click", () => {
+        if (dbCode) onProvinceClickRef.current?.(dbCode, row.province_name, row.province_id);
+      });
+      markers.addLayer(marker);
+    });
+    markers.addTo(map);
+    markerLayerRef.current = markers;
   }, [geoData, assetsByProvince, selectedRegion, selectedProvinceCode, mapReady, maxAssets]);
 
   // Fly to selected province

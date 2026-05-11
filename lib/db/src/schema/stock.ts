@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, integer, timestamp, pgEnum, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, text, integer, timestamp, pgEnum, index, uniqueIndex, jsonb, date } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { provinces } from "./provinces";
 import { agencies } from "./agencies";
@@ -113,6 +113,7 @@ export const purchaseRequests = pgTable(
     rejectedReason: text("rejected_reason"),
     receivedAt: timestamp("received_at"),
     closedAt: timestamp("closed_at"),
+    requiredByDate: date("required_by_date"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -133,3 +134,27 @@ export type StockMovement = typeof stockMovements.$inferSelect;
 export type InsertStockMovement = typeof stockMovements.$inferInsert;
 export type PurchaseRequest = typeof purchaseRequests.$inferSelect;
 export type InsertPurchaseRequest = typeof purchaseRequests.$inferInsert;
+
+export const purchaseRequestEvents = pgTable(
+  "purchase_request_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requestId: uuid("request_id").notNull().references(() => purchaseRequests.id, { onDelete: "cascade" }),
+    eventType: varchar("event_type", { length: 32 }).notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id),
+    actorRole: varchar("actor_role", { length: 64 }),
+    signedName: varchar("signed_name", { length: 255 }),
+    signedHash: varchar("signed_hash", { length: 128 }),
+    signedAt: timestamp("signed_at"),
+    reason: text("reason"),
+    payload: jsonb("payload"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_pr_events_request").on(t.requestId),
+    index("idx_pr_events_created").on(t.createdAt),
+  ],
+);
+
+export type PurchaseRequestEvent = typeof purchaseRequestEvents.$inferSelect;
+export type InsertPurchaseRequestEvent = typeof purchaseRequestEvents.$inferInsert;
