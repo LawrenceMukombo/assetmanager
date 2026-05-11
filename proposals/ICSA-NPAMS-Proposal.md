@@ -63,19 +63,15 @@ ICSA above and beyond the per‑user subscription described in §6.
 
 ## 3. Asset Categories in Scope
 
-NPAMS will manage, at minimum, the following ICSA asset classes. Each category
-is configurable; ICSA Asset Officers can add additional classes without vendor
-intervention.
+NPAMS organises every ICSA asset into one of three top‑level groups,
+aligned to the Zyntrix taxonomy. Each group is configurable and ICSA
+Asset Officers can add sub‑classes without vendor intervention.
 
-| Category | Examples |
-|---|---|
-| Secure Stock | Blank ePassport booklets (32‑page / 64‑page), visa stickers, security inks, holographic foils |
-| ICT Hardware | Biometric capture stations, fingerprint scanners, document scanners, secure printers, servers |
-| Office Equipment | Workstations, laptops, photocopiers, networking gear |
-| Vehicles & Plant | Pool vehicles, generators, UPS units |
-| Furniture & Fittings | Office furniture, secure cabinets, safes |
-| Border Post Estate | Buildings, perimeter fencing, signage, inspection lanes |
-| Uniforms & PPE | Officer uniforms, body armour, inspection PPE |
+| Group | Sub‑classes managed in NPAMS | Examples |
+|---|---|---|
+| **Digital & IT** | ICT Hardware, Office Equipment, Software Licences, Network & Cyber assets | Biometric capture stations, fingerprint & document scanners, secure printers, servers, workstations, laptops, photocopiers, switches / routers / firewalls, software entitlements |
+| **Physical & Operational** | Secure Stock, Furniture & Fittings, Border Post Estate, Uniforms & PPE | Blank ePassport booklets (32 / 64‑page), visa stickers, security inks, holographic foils, office furniture, secure cabinets and safes, buildings, perimeter fencing, signage, inspection lanes, officer uniforms, body armour, inspection PPE |
+| **Mobile & Distributed** | Vehicles & Plant, Mobile Biometric Kits, Field Equipment, Generators / UPS | Pool vehicles, patrol vehicles, marine craft, generators, UPS units, ruggedised mobile enrolment kits, handheld document readers deployed across border posts and provincial offices |
 
 Every asset record carries: unique asset code, category, location (province →
 district → facility), custodian, acquisition cost, depreciation, condition,
@@ -285,10 +281,21 @@ weeks of post‑go‑live hyper‑care.
 The following screenshots are taken from the running production build of NPAMS
 on the date of issue and reflect the system that ICSA will inherit.
 
-* **Figure A1** — Sign‑in screen with PNG branding and tenant theming.
-* **Figure A2** — ICSA Authority dashboard scoped to the PNGICA tenant.
-* **Figure A3** — Purchase Requests workflow page (HMAC‑signed pipeline).
-* **Figure A4** — GIS Province Map (Leaflet, all 22 PNG provinces).
+**Figure A1** — Sign‑in screen with PNG branding and tenant theming.
+
+![Figure A1 — Sign-in screen](assets/01-login.jpg)
+
+**Figure A2** — ICSA Authority dashboard scoped to the PNGICA tenant.
+
+![Figure A2 — Dashboard](assets/02-dashboard.jpg)
+
+**Figure A3** — Purchase Requests workflow page (HMAC‑signed pipeline).
+
+![Figure A3 — Purchase Requests](assets/03-purchase-requests.jpg)
+
+**Figure A4** — GIS Province Map (Leaflet, all 22 PNG provinces).
+
+![Figure A4 — GIS Map](assets/04-gis.jpg)
 
 ### Annex A1 — Signature ledger evidence (live data)
 

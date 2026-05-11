@@ -187,17 +187,23 @@ p("Because NPAMS is multi-tenant from the database upward, ICSA does not pay for
 
 // ─── §3 Asset Categories ────────────────────────────────────────────────────
 h1("3. Asset Categories in Scope");
-p("NPAMS will manage, at minimum, the following ICSA asset classes. Each category is configurable; ICSA Asset Officers can add additional classes without vendor intervention.");
+p("NPAMS organises every ICSA asset into one of three top-level groups, aligned to the Zyntrix taxonomy. Each group is configurable and ICSA Asset Officers can add sub-classes without vendor intervention.");
 table({
-  cols: [{ label: "Category", w: 0.32 }, { label: "Examples", w: 0.68 }],
+  cols: [
+    { label: "Group",        w: 0.20 },
+    { label: "Sub-classes",  w: 0.32 },
+    { label: "Examples",     w: 0.48 },
+  ],
   rows: [
-    ["Secure Stock",        "Blank ePassport booklets (32-page / 64-page), visa stickers, security inks, holographic foils"],
-    ["ICT Hardware",        "Biometric capture stations, fingerprint scanners, document scanners, secure printers, servers"],
-    ["Office Equipment",    "Workstations, laptops, photocopiers, networking gear"],
-    ["Vehicles & Plant",    "Pool vehicles, generators, UPS units"],
-    ["Furniture & Fittings","Office furniture, secure cabinets, safes"],
-    ["Border Post Estate",  "Buildings, perimeter fencing, signage, inspection lanes"],
-    ["Uniforms & PPE",      "Officer uniforms, body armour, inspection PPE"],
+    ["Digital & IT",
+     "ICT Hardware, Office Equipment, Software Licences, Network & Cyber assets",
+     "Biometric capture stations, fingerprint & document scanners, secure printers, servers, workstations, laptops, photocopiers, switches / routers / firewalls, software entitlements"],
+    ["Physical & Operational",
+     "Secure Stock, Furniture & Fittings, Border Post Estate, Uniforms & PPE",
+     "Blank ePassport booklets (32 / 64-page), visa stickers, security inks, holographic foils, office furniture, secure cabinets and safes, buildings, perimeter fencing, signage, inspection lanes, officer uniforms, body armour, inspection PPE"],
+    ["Mobile & Distributed",
+     "Vehicles & Plant, Mobile Biometric Kits, Field Equipment, Generators / UPS",
+     "Pool vehicles, patrol vehicles, marine craft, generators, UPS units, ruggedised mobile enrolment kits, handheld document readers deployed across border posts and provincial offices"],
   ],
 });
 p("Every asset record carries: unique asset code, category, location (province -> district -> facility), custodian, acquisition cost, depreciation, condition, service history, photographs, and a public verification QR code.");
