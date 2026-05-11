@@ -354,10 +354,17 @@ router.get("/v1/assets/:id", requireAuth, async (req, res) => {
       return;
     }
 
+    const [scopeRow] = await db
+      .select({ agencyId: assets.agencyId, provinceId: assets.provinceId, districtId: assets.districtId, facilityId: assets.facilityId })
+      .from(assets)
+      .where(eq(assets.id, req.params.id as string))
+      .limit(1);
+
     if (!isWithinAssetScope(req.user!, {
-      provinceId: row.province?.id ?? "",
-      districtId: row.district?.id,
-      facilityId: row.facility?.id,
+      agencyId: scopeRow?.agencyId ?? null,
+      provinceId: scopeRow?.provinceId ?? null,
+      districtId: scopeRow?.districtId ?? null,
+      facilityId: scopeRow?.facilityId ?? null,
     })) {
       res.status(403).json({ success: false, message: "Access denied", data: null });
       return;
