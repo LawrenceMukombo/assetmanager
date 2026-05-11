@@ -25,16 +25,16 @@ export function statusBadgeClass(status?: string): string {
   switch (status?.toLowerCase()) {
     case "active":
     case "operational":
-      return "bg-green-600 hover:bg-green-700 text-white";
+      return "bg-[hsl(var(--success))] hover:bg-[hsl(var(--success)/0.9)] text-[hsl(var(--success-foreground))]";
     case "under_maintenance":
     case "maintenance":
-      return "bg-amber-500 hover:bg-amber-600 text-white";
+      return "bg-[hsl(var(--warning))] hover:bg-[hsl(var(--warning)/0.9)] text-[hsl(var(--warning-foreground))]";
     case "disposed":
     case "retired":
-      return "bg-gray-400 hover:bg-gray-500 text-white";
+      return "bg-muted hover:bg-muted/80 text-muted-foreground";
     case "missing":
     case "lost":
-      return "bg-red-600 hover:bg-red-700 text-white";
+      return "bg-destructive hover:bg-destructive/90 text-destructive-foreground";
     default:
       return "";
   }
@@ -44,13 +44,61 @@ export function conditionBadgeClass(condition?: string): string {
   switch (condition?.toLowerCase()) {
     case "excellent":
     case "good":
-      return "bg-green-100 text-green-800 border-green-200";
+      return "bg-[hsl(var(--success)/0.15)] text-[hsl(var(--success))] border-[hsl(var(--success)/0.3)]";
     case "fair":
-      return "bg-yellow-100 text-yellow-800 border-yellow-200";
+      return "bg-[hsl(var(--warning)/0.15)] text-[hsl(var(--warning))] border-[hsl(var(--warning)/0.3)]";
     case "poor":
     case "critical":
-      return "bg-red-100 text-red-800 border-red-200";
+      return "bg-destructive/15 text-destructive border-destructive/30";
     default:
       return "";
   }
 }
+
+/**
+ * Shared CSS-variable color map for chart fills and inline status indicators.
+ * Returning `hsl(var(--token))` strings keeps the values theme-aware so they
+ * automatically adapt to dark mode.
+ */
+export const STATUS_COLOR_MAP: Record<string, string> = {
+  active:            "hsl(var(--success))",
+  operational:       "hsl(var(--success))",
+  missing:           "hsl(var(--destructive))",
+  lost:              "hsl(var(--destructive))",
+  under_maintenance: "hsl(var(--warning))",
+  maintenance:       "hsl(var(--warning))",
+  disposed:          "hsl(var(--muted-foreground))",
+  retired:           "hsl(var(--muted-foreground))",
+  transferred:       "hsl(var(--info))",
+};
+
+export const CONDITION_COLOR_MAP: Record<string, string> = {
+  new:           "hsl(var(--success))",
+  excellent:     "hsl(var(--success))",
+  good:          "hsl(var(--success))",
+  fair:          "hsl(var(--warning))",
+  poor:          "hsl(var(--destructive))",
+  critical:      "hsl(var(--destructive))",
+  unserviceable: "hsl(var(--muted-foreground))",
+};
+
+export const FALLBACK_STATUS_COLOR = "hsl(var(--muted-foreground))";
+
+/**
+ * Foreground color paired with each entry in STATUS_COLOR_MAP. Use these
+ * together when rendering inline status pills via inline `style` so the text
+ * keeps proper contrast against the (theme-aware) background in both modes.
+ */
+export const STATUS_TEXT_COLOR_MAP: Record<string, string> = {
+  active:            "hsl(var(--success-foreground))",
+  operational:       "hsl(var(--success-foreground))",
+  missing:           "hsl(var(--destructive-foreground))",
+  lost:              "hsl(var(--destructive-foreground))",
+  under_maintenance: "hsl(var(--warning-foreground))",
+  maintenance:       "hsl(var(--warning-foreground))",
+  disposed:          "hsl(var(--background))",
+  retired:           "hsl(var(--background))",
+  transferred:       "hsl(var(--info-foreground))",
+};
+
+export const FALLBACK_STATUS_TEXT_COLOR = "hsl(var(--background))";

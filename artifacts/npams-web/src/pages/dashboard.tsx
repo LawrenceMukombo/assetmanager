@@ -24,29 +24,29 @@ import {
 } from "recharts";
 import { useLocation } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
+import {
+  STATUS_COLOR_MAP as STATUS_COLORS,
+  STATUS_TEXT_COLOR_MAP as STATUS_TEXT_COLORS,
+  CONDITION_COLOR_MAP as CONDITION_COLORS,
+  FALLBACK_STATUS_COLOR,
+  FALLBACK_STATUS_TEXT_COLOR,
+} from "@/lib/status";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STATUS_COLORS: Record<string, string> = {
-  active:            "#22c55e",
-  missing:           "#ef4444",
-  under_maintenance: "#f59e0b",
-  disposed:          "#94a3b8",
-  transferred:       "#6366f1",
-};
-
-const CONDITION_COLORS: Record<string, string> = {
-  new:           "#22c55e",
-  good:          "#84cc16",
-  fair:          "#f59e0b",
-  poor:          "#ef4444",
-  unserviceable: "#94a3b8",
-};
-
 const CATEGORY_COLORS = [
-  "#6366f1","#f59e0b","#10b981","#3b82f6","#ec4899",
-  "#8b5cf6","#14b8a6","#f97316","#ef4444","#84cc16",
-  "#06b6d4","#a855f7",
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-3))",
+  "hsl(var(--chart-2))",
+  "hsl(var(--info))",
+  "hsl(var(--chart-5))",
+  "hsl(var(--chart-4))",
+  "hsl(var(--chart-2) / 0.7)",
+  "hsl(var(--warning))",
+  "hsl(var(--destructive))",
+  "hsl(var(--success))",
+  "hsl(var(--info) / 0.7)",
+  "hsl(var(--chart-5) / 0.7)",
 ];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -450,8 +450,11 @@ function DetailSheet({ title, subtitle, params, open, onClose }: DetailSheetProp
                       )}
                     </TableCell>
                     <TableCell>
-                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium text-white"
-                        style={{ backgroundColor: STATUS_COLORS[asset.status] ?? "#94a3b8" }}>
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                        style={{
+                          backgroundColor: STATUS_COLORS[asset.status] ?? FALLBACK_STATUS_COLOR,
+                          color: STATUS_TEXT_COLORS[asset.status] ?? FALLBACK_STATUS_TEXT_COLOR,
+                        }}>
                         {STATUS_LABELS[asset.status] ?? capitalize(asset.status)}
                       </span>
                     </TableCell>
@@ -701,8 +704,8 @@ function NationalDashboard() {
   }, [d?.assets_by_province, sortKey, sortDir]);
 
   // Chart data
-  const statusData  = (d?.assets_by_status  ?? []).map(s => ({ name: s.status,    label: STATUS_LABELS[s.status] ?? capitalize(s.status),    value: s.count, fill: STATUS_COLORS[s.status]    ?? "#94a3b8", raw: s.value }));
-  const condData    = (d?.assets_by_condition ?? []).map(c => ({ name: c.condition, label: CONDITION_LABELS[c.condition] ?? capitalize(c.condition), value: c.count, fill: CONDITION_COLORS[c.condition] ?? "#94a3b8", raw: c.value }));
+  const statusData  = (d?.assets_by_status  ?? []).map(s => ({ name: s.status,    label: STATUS_LABELS[s.status] ?? capitalize(s.status),    value: s.count, fill: STATUS_COLORS[s.status]    ?? FALLBACK_STATUS_COLOR, raw: s.value }));
+  const condData    = (d?.assets_by_condition ?? []).map(c => ({ name: c.condition, label: CONDITION_LABELS[c.condition] ?? capitalize(c.condition), value: c.count, fill: CONDITION_COLORS[c.condition] ?? FALLBACK_STATUS_COLOR, raw: c.value }));
   const catData     = (d?.top_categories     ?? []).filter(c => c.category_name).map((c, i) => ({ name: c.category_name!, value: c.count, fill: CATEGORY_COLORS[i % CATEGORY_COLORS.length], raw: c.total_value }));
   const trendData   = d?.acquisition_trend  ?? [];
 
@@ -1186,8 +1189,8 @@ function ProvincialDashboard() {
   };
 
   // Chart data
-  const statusData  = (d?.assets_by_status    ?? []).map(s => ({ name: s.status,     label: STATUS_LABELS[s.status]        ?? capitalize(s.status),     value: s.count, fill: STATUS_COLORS[s.status]     ?? "#94a3b8", raw: s.value }));
-  const condData    = (d?.assets_by_condition  ?? []).map(c => ({ name: c.condition, label: CONDITION_LABELS[c.condition]   ?? capitalize(c.condition),  value: c.count, fill: CONDITION_COLORS[c.condition] ?? "#94a3b8", raw: c.value }));
+  const statusData  = (d?.assets_by_status    ?? []).map(s => ({ name: s.status,     label: STATUS_LABELS[s.status]        ?? capitalize(s.status),     value: s.count, fill: STATUS_COLORS[s.status]     ?? FALLBACK_STATUS_COLOR, raw: s.value }));
+  const condData    = (d?.assets_by_condition  ?? []).map(c => ({ name: c.condition, label: CONDITION_LABELS[c.condition]   ?? capitalize(c.condition),  value: c.count, fill: CONDITION_COLORS[c.condition] ?? FALLBACK_STATUS_COLOR, raw: c.value }));
   const catData     = (d?.assets_by_category   ?? []).filter(c => c.category_name).map((c, i) => ({ name: c.category_name!, value: c.count, fill: CATEGORY_COLORS[i % CATEGORY_COLORS.length], raw: c.value }));
   const distData    = (d?.assets_by_district   ?? []).map(dist => ({ name: dist.district_name, id: dist.district_id, assets: dist.total_assets, missing: dist.missing_assets, value: dist.total_value }));
   const trendData   = d?.acquisition_trend    ?? [];
@@ -1599,8 +1602,11 @@ function ProvincialDashboard() {
                   <TableCell className="text-sm">{asset.categoryName ?? "—"}</TableCell>
                   <TableCell><Badge variant="outline" className="capitalize text-xs">{asset.condition}</Badge></TableCell>
                   <TableCell>
-                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium text-white"
-                      style={{ backgroundColor: STATUS_COLORS[asset.status] ?? "#94a3b8" }}>
+                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                      style={{
+                        backgroundColor: STATUS_COLORS[asset.status] ?? FALLBACK_STATUS_COLOR,
+                        color: STATUS_TEXT_COLORS[asset.status] ?? FALLBACK_STATUS_TEXT_COLOR,
+                      }}>
                       {STATUS_LABELS[asset.status] ?? capitalize(asset.status)}
                     </span>
                   </TableCell>
