@@ -6,8 +6,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type CreateCategoryBody = {
-  category_name: string;
-  category_code?: string;
-  description?: string;
+export type SetStockBalanceReorderBody = {
+  /** Null = agency reserve / unassigned */
+  facility_id?: string | null;
+  /** @minimum 0 */
+  reorder_level: number;
 };

@@ -412,6 +412,8 @@ paths:
               properties:
                 category_name:
                   type: string
+                category_code:
+                  type: string
                 description:
                   type: string
               required: [category_name]
@@ -444,6 +446,8 @@ paths:
               type: object
               properties:
                 category_name:
+                  type: string
+                category_code:
                   type: string
                 description:
                   type: string
@@ -1296,9 +1300,13 @@ components:
           type: string
         categoryName:
           type: string
+        categoryCode:
+          type: string
         description:
           type: string
           nullable: true
+        assetCount:
+          type: integer
         createdAt:
           type: string
           format: date-time

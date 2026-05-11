@@ -39,6 +39,11 @@ import {
 
 const categorySchema = z.object({
   category_name: z.string().min(1, "Category name is required"),
+  category_code: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{2,5}$/u, "Code must be 2-5 letters"),
   description: z.string().optional(),
 });
 
@@ -87,19 +92,23 @@ export default function Categories() {
 
   const form = useForm<z.infer<typeof categorySchema>>({
     resolver: zodResolver(categorySchema),
-    defaultValues: { category_name: "", description: "" }
+    defaultValues: { category_name: "", category_code: "", description: "" }
   });
 
   if (!isAdmin) return <Redirect to="/dashboard" />;
 
   const openCreate = () => {
-    form.reset({ category_name: "", description: "" });
+    form.reset({ category_name: "", category_code: "", description: "" });
     setEditingId(null);
     setIsModalOpen(true);
   };
 
   const openEdit = (category: AssetCategory) => {
-    form.reset({ category_name: category.categoryName ?? "", description: category.description ?? "" });
+    form.reset({
+      category_name: category.categoryName ?? "",
+      category_code: category.categoryCode ?? "",
+      description: category.description ?? "",
+    });
     setEditingId(category.id ?? null);
     setIsModalOpen(true);
   };
@@ -127,6 +136,7 @@ export default function Categories() {
           <TableHeader>
             <TableRow>
               <TableHead>Category Name</TableHead>
+              <TableHead className="w-[100px]">Code</TableHead>
               <TableHead>Description</TableHead>
               <TableHead className="w-[120px] text-right">Asset Count</TableHead>
               <TableHead className="w-[100px]">Actions</TableHead>
@@ -144,7 +154,7 @@ export default function Categories() {
               ))
             ) : data?.data?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No categories found.</TableCell>
+                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No categories found.</TableCell>
               </TableRow>
             ) : data?.data?.map((cat) => (
               <TableRow
@@ -153,6 +163,7 @@ export default function Categories() {
                 onClick={() => openEdit(cat)}
               >
                 <TableCell className="font-medium">{cat.categoryName}</TableCell>
+                <TableCell className="font-mono text-sm">{cat.categoryCode || "-"}</TableCell>
                 <TableCell className="text-muted-foreground">{cat.description || "-"}</TableCell>
                 <TableCell className="text-right font-mono text-sm">{cat.assetCount ?? 0}</TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
@@ -185,6 +196,25 @@ export default function Categories() {
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="category_code"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Code</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        maxLength={5}
+                        placeholder="e.g. ICT"
+                        className="font-mono uppercase"
+                        onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

@@ -49,6 +49,7 @@ import type {
   RecordStockMovementBody,
   RefreshResponse,
   RefreshTokenBody,
+  SetStockBalanceReorderBody,
   SuccessResponse,
   UpdateAssetRequest,
   UpdateCategoryBody,
@@ -3035,6 +3036,94 @@ export const useUpdateStockItem = <
   TContext
 > => {
   return useMutation(getUpdateStockItemMutationOptions(options));
+};
+
+/**
+ * @summary Set the per-location reorder threshold (admin only)
+ */
+export const getSetStockBalanceReorderUrl = (id: string) => {
+  return `/api/v1/stock/${id}/balances`;
+};
+
+export const setStockBalanceReorder = async (
+  id: string,
+  setStockBalanceReorderBody: SetStockBalanceReorderBody,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getSetStockBalanceReorderUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(setStockBalanceReorderBody),
+  });
+};
+
+export const getSetStockBalanceReorderMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setStockBalanceReorder>>,
+    TError,
+    { id: string; data: BodyType<SetStockBalanceReorderBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setStockBalanceReorder>>,
+  TError,
+  { id: string; data: BodyType<SetStockBalanceReorderBody> },
+  TContext
+> => {
+  const mutationKey = ["setStockBalanceReorder"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setStockBalanceReorder>>,
+    { id: string; data: BodyType<SetStockBalanceReorderBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return setStockBalanceReorder(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetStockBalanceReorderMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setStockBalanceReorder>>
+>;
+export type SetStockBalanceReorderMutationBody =
+  BodyType<SetStockBalanceReorderBody>;
+export type SetStockBalanceReorderMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Set the per-location reorder threshold (admin only)
+ */
+export const useSetStockBalanceReorder = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setStockBalanceReorder>>,
+    TError,
+    { id: string; data: BodyType<SetStockBalanceReorderBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setStockBalanceReorder>>,
+  TError,
+  { id: string; data: BodyType<SetStockBalanceReorderBody> },
+  TContext
+> => {
+  return useMutation(getSetStockBalanceReorderMutationOptions(options));
 };
 
 export const getListStockMovementsUrl = (id: string) => {

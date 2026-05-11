@@ -28,6 +28,7 @@ export const depreciationMethodEnum = pgEnum("depreciation_method", [
 export const assetCategories = pgTable("asset_categories", {
   id: uuid("id").primaryKey().defaultRandom(),
   categoryName: varchar("category_name", { length: 255 }).notNull().unique(),
+  categoryCode: varchar("category_code", { length: 10 }).notNull().default(""),
   description: text("description"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

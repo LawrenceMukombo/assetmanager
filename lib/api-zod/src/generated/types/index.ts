@@ -76,6 +76,7 @@ export * from "./refreshResponse";
 export * from "./refreshResponseData";
 export * from "./refreshTokenBody";
 export * from "./roleInfo";
+export * from "./setStockBalanceReorderBody";
 export * from "./successResponse";
 export * from "./updateAssetRequest";
 export * from "./updateAssetRequestCondition";

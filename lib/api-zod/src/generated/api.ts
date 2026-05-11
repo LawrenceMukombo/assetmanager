@@ -348,7 +348,9 @@ export const GetCategoriesResponse = zod.object({
       zod.object({
         id: zod.string().optional(),
         categoryName: zod.string().optional(),
+        categoryCode: zod.string().optional(),
         description: zod.string().nullish(),
+        assetCount: zod.number().optional(),
         createdAt: zod.coerce.date().optional(),
       }),
     )
@@ -360,6 +362,7 @@ export const GetCategoriesResponse = zod.object({
  */
 export const CreateCategoryBody = zod.object({
   category_name: zod.string(),
+  category_code: zod.string().optional(),
   description: zod.string().optional(),
 });
 
@@ -372,6 +375,7 @@ export const UpdateCategoryParams = zod.object({
 
 export const UpdateCategoryBody = zod.object({
   category_name: zod.string().optional(),
+  category_code: zod.string().optional(),
   description: zod.string().optional(),
 });
 
@@ -915,6 +919,31 @@ export const UpdateStockItemParams = zod.object({
 export const UpdateStockItemBody = zod.object({}).passthrough();
 
 export const UpdateStockItemResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
+
+/**
+ * @summary Set the per-location reorder threshold (admin only)
+ */
+export const SetStockBalanceReorderParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const setStockBalanceReorderBodyReorderLevelMin = 0;
+
+export const SetStockBalanceReorderBody = zod.object({
+  facility_id: zod
+    .string()
+    .nullish()
+    .describe("Null = agency reserve \/ unassigned"),
+  reorder_level: zod.number().min(setStockBalanceReorderBodyReorderLevelMin),
+});
+
+export const SetStockBalanceReorderResponse = zod
   .object({
     success: zod.boolean(),
     message: zod.string(),

@@ -167,20 +167,13 @@ export default function AssetForm() {
   const selectedDistrict = form.watch("district_id");
   const selectedCategoryId = form.watch("category_id");
 
-  // Map asset category names to the 3-letter type code used in `[AGENCY]-[TYPE]-[NNN]`
-  // asset tags. Anything not in this map falls back to the first 3 letters of
-  // the category name (e.g. "Communication Equipment" → "COM").
-  const CATEGORY_TYPE_MAP: Record<string, string> = {
-    "Buildings & Infrastructure": "BLD",
-    "Vehicles & Transport": "VEH",
-    "Office Furniture": "OFF",
-    "ICT Equipment": "ICT",
-    "Communication Equipment": "COM",
-  };
-
-  const categoryToTypeCode = (name?: string | null): string | null => {
-    if (!name) return null;
-    if (CATEGORY_TYPE_MAP[name]) return CATEGORY_TYPE_MAP[name];
+  // Use the explicit `categoryCode` stored on each asset_category row as the
+  // [TYPE] portion of `[AGENCY]-[TYPE]-[NNN]` asset tags. Fall back to the
+  // first letters of the category name only if the code is missing (legacy).
+  const resolveTypeCode = (cat?: { categoryCode?: string | null; categoryName?: string | null } | null): string | null => {
+    const code = (cat?.categoryCode ?? "").toUpperCase().trim();
+    if (/^[A-Z]{2,5}$/.test(code)) return code;
+    const name = cat?.categoryName ?? "";
     const letters = name.replace(/[^A-Za-z]/g, "").toUpperCase();
     return letters.length >= 2 ? letters.slice(0, 3) : null;
   };
@@ -195,7 +188,7 @@ export default function AssetForm() {
   useEffect(() => {
     if (isEdit) return;
     const cat = categoriesData?.data?.find((c) => c.id === selectedCategoryId);
-    const type = categoryToTypeCode(cat?.categoryName);
+    const type = resolveTypeCode(cat);
     if (!type) return;
     let cancelled = false;
     (async () => {

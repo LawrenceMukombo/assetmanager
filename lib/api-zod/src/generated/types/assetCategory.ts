@@ -9,6 +9,8 @@
 export interface AssetCategory {
   id?: string;
   categoryName?: string;
+  categoryCode?: string;
   description?: string | null;
+  assetCount?: number;
   createdAt?: Date;
 }

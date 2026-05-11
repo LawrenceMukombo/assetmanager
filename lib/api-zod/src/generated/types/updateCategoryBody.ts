@@ -8,5 +8,6 @@
 
 export type UpdateCategoryBody = {
   category_name?: string;
+  category_code?: string;
   description?: string;
 };

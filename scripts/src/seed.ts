@@ -155,22 +155,25 @@ async function main() {
   console.log("Facilities seeded:", Object.keys(facilityMap).length);
 
   // --- ASSET CATEGORIES ---
-  const categoryNames = [
-    "ICT Equipment",
-    "Vehicles & Transport",
-    "Office Furniture",
-    "Medical Equipment",
-    "Heavy Machinery",
-    "Buildings & Infrastructure",
-    "Communication Equipment",
+  const categorySeeds: { name: string; code: string }[] = [
+    { name: "ICT Equipment", code: "ICT" },
+    { name: "Vehicles & Transport", code: "VEH" },
+    { name: "Office Furniture", code: "OFF" },
+    { name: "Medical Equipment", code: "MED" },
+    { name: "Heavy Machinery", code: "MCH" },
+    { name: "Buildings & Infrastructure", code: "BLD" },
+    { name: "Communication Equipment", code: "COM" },
   ];
 
   const categoryMap: Record<string, string> = {};
-  for (const name of categoryNames) {
+  for (const { name, code } of categorySeeds) {
     const [row] = await db
       .insert(assetCategories)
-      .values({ categoryName: name })
-      .onConflictDoUpdate({ target: assetCategories.categoryName, set: { categoryName: name } })
+      .values({ categoryName: name, categoryCode: code })
+      .onConflictDoUpdate({
+        target: assetCategories.categoryName,
+        set: { categoryName: name, categoryCode: code },
+      })
       .returning();
     categoryMap[name] = row.id;
   }

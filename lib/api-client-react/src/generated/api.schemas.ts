@@ -144,7 +144,9 @@ export interface CreateUserRequest {
 export interface AssetCategory {
   id?: string;
   categoryName?: string;
+  categoryCode?: string;
   description?: string | null;
+  assetCount?: number;
   createdAt?: string;
 }
 
@@ -483,11 +485,13 @@ export type GetCategories200 = {
 
 export type CreateCategoryBody = {
   category_name: string;
+  category_code?: string;
   description?: string;
 };
 
 export type UpdateCategoryBody = {
   category_name?: string;
+  category_code?: string;
   description?: string;
 };
 
@@ -600,6 +604,13 @@ export type CreateStockItemBody = {
 };
 
 export type UpdateStockItemBody = { [key: string]: unknown };
+
+export type SetStockBalanceReorderBody = {
+  /** Null = agency reserve / unassigned */
+  facility_id?: string | null;
+  /** @minimum 0 */
+  reorder_level: number;
+};
 
 export type RecordStockMovementBodyMovementType =
   (typeof RecordStockMovementBodyMovementType)[keyof typeof RecordStockMovementBodyMovementType];
