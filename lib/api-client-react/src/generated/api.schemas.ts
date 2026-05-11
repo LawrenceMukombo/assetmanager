@@ -170,6 +170,7 @@ export interface AssetFacilityInfo {
 export interface AssetCategoryInfo {
   id?: string;
   categoryName?: string;
+  categoryCode?: string | null;
 }
 
 export interface AssetUserInfo {

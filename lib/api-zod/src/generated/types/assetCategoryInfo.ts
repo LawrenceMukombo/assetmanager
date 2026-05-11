@@ -9,4 +9,5 @@
 export interface AssetCategoryInfo {
   id?: string;
   categoryName?: string;
+  categoryCode?: string | null;
 }

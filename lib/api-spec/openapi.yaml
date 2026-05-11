@@ -1348,6 +1348,9 @@ components:
           type: string
         categoryName:
           type: string
+        categoryCode:
+          type: string
+          nullable: true
 
     AssetUserInfo:
       type: object

@@ -326,9 +326,12 @@ export default function Assets() {
 
   if (categoryId) {
     const cat = categoriesData?.data?.find((c) => c.id === categoryId);
+    const catLabel = cat
+      ? `${cat.categoryName}${cat.categoryCode ? ` (${cat.categoryCode})` : ""}`
+      : categoryId;
     activeFilterChips.push({
       key: "category",
-      label: `Category: ${cat?.categoryName || categoryId}`,
+      label: `Category: ${catLabel}`,
       onRemove: () => {
         setCategoryId("");
         setPage(1);
@@ -612,7 +615,19 @@ export default function Assets() {
                           : "bg-background text-foreground border-border hover:border-primary/50 hover:bg-accent"
                       )}
                     >
-                      {c.categoryName}
+                      <span>{c.categoryName}</span>
+                      {c.categoryCode && (
+                        <span
+                          className={cn(
+                            "ml-1.5 font-mono text-[10px] px-1 py-0.5 rounded",
+                            isSelected
+                              ? "bg-primary-foreground/20 text-primary-foreground"
+                              : "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          {c.categoryCode}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -709,7 +724,18 @@ export default function Assets() {
                       {asset.assetName}
                     </TableCell>
                     <TableCell>
-                      {asset.category?.categoryName || "N/A"}
+                      {asset.category?.categoryName ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <span>{asset.category.categoryName}</span>
+                          {asset.category.categoryCode && (
+                            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                              {asset.category.categoryCode}
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        "N/A"
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="capitalize">

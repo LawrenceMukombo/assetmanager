@@ -448,6 +448,7 @@ export const GetAssetsResponse = zod.object({
               .object({
                 id: zod.string().optional(),
                 categoryName: zod.string().optional(),
+                categoryCode: zod.string().nullish(),
               })
               .optional(),
             province: zod
@@ -545,6 +546,7 @@ export const GetAssetByIdResponse = zod.object({
         .object({
           id: zod.string().optional(),
           categoryName: zod.string().optional(),
+          categoryCode: zod.string().nullish(),
         })
         .optional(),
       province: zod

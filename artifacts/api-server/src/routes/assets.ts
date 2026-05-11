@@ -151,6 +151,7 @@ router.get("/v1/assets", requireAuth, enforceScopeFilter, async (req, res) => {
         category: {
           id: assetCategories.id,
           categoryName: assetCategories.categoryName,
+          categoryCode: assetCategories.categoryCode,
         },
         province: {
           id: provinces.id,
@@ -379,6 +380,7 @@ router.get("/v1/assets/:id", requireAuth, async (req, res) => {
         category: {
           id: assetCategories.id,
           categoryName: assetCategories.categoryName,
+          categoryCode: assetCategories.categoryCode,
         },
         province: {
           id: provinces.id,

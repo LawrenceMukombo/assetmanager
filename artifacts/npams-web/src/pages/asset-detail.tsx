@@ -345,7 +345,14 @@ export default function AssetDetailPage() {
                 <CardContent className="grid sm:grid-cols-2 gap-y-4 gap-x-6">
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Category</p>
-                    <p className="font-medium">{asset.category?.categoryName || "N/A"}</p>
+                    <p className="font-medium flex items-center gap-2">
+                      <span>{asset.category?.categoryName || "N/A"}</span>
+                      {asset.category?.categoryCode && (
+                        <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                          {asset.category.categoryCode}
+                        </span>
+                      )}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Condition</p>

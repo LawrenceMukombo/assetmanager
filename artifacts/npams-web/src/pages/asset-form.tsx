@@ -422,7 +422,9 @@ export default function AssetForm() {
                           <FormControl><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger></FormControl>
                           <SelectContent>
                             {categoriesData?.data?.map(c => (
-                              <SelectItem key={c.id} value={c.id!}>{c.categoryName}</SelectItem>
+                              <SelectItem key={c.id} value={c.id!}>
+                                {c.categoryName}{c.categoryCode ? ` (${c.categoryCode})` : ""}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
