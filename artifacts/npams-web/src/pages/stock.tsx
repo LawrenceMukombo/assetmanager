@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -104,6 +104,50 @@ export default function StockPage() {
   });
 
   const lowCount = (items ?? []).filter((i) => (i.lowLocationCount ?? 0) > 0).length;
+
+  // Prefill the item code from the latest existing item in the user's scope
+  // when the New Stock Item dialog opens. Format: `[AGENCY]-STK-[NNN]` with
+  // the numeric suffix incremented while preserving its zero-padding width.
+  // Falls back to `[AGENCY]-STK-001` when no items exist yet, or leaves the
+  // field blank when the latest code doesn't match the expected pattern.
+  const [codeHint, setCodeHint] = useState<string>("");
+  useEffect(() => {
+    if (!showCreate) {
+      // Reset on close so the next open recomputes from the latest sequence
+      // rather than retaining a stale value from a previous open.
+      setCodeHint("");
+      setForm((f) => ({ ...f, item_code: "" }));
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await apiFetchJson<{ latestCode: string | null; agencyCode: string | null }>(
+          "/api/v1/stock/latest-code",
+        );
+        if (cancelled || !r.ok) return;
+        const latest = r.data?.latestCode ?? null;
+        const agencyCode = r.data?.agencyCode ?? null;
+        let nextCode = "";
+        if (latest) {
+          const m = latest.match(/^([A-Z0-9]+)-STK-(\d+)$/);
+          if (m) {
+            const prefix = m[1];
+            const num = m[2];
+            const next = String(Number(num) + 1).padStart(num.length, "0");
+            nextCode = `${prefix}-STK-${next}`;
+          }
+        } else if (agencyCode) {
+          nextCode = `${agencyCode}-STK-001`;
+        }
+        setCodeHint(nextCode);
+        setForm((f) => (f.item_code ? f : { ...f, item_code: nextCode }));
+      } catch {
+        // Leave the field as-is on failure; user can type a code manually.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [showCreate]);
 
   return (
     <div className="p-6 space-y-6">
@@ -246,7 +290,14 @@ export default function StockPage() {
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-1">
               <Label>Item code *</Label>
-              <Input value={form.item_code} onChange={(e) => setForm({ ...form, item_code: e.target.value })} />
+              <Input
+                value={form.item_code}
+                placeholder={codeHint || "AGENCY-STK-001"}
+                onChange={(e) => setForm({ ...form, item_code: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Suggested next code in the [AGENCY]-STK-[NNN] sequence. Editable.
+              </p>
             </div>
             <div className="col-span-1">
               <Label>Unit of measure</Label>

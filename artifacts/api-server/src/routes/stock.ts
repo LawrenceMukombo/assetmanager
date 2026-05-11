@@ -140,6 +140,44 @@ router.get("/v1/stock", requireAuth, async (req, res) => {
   }
 });
 
+// Returns the latest item_code in scope that matches `[AGENCY]-STK-[NNN]`,
+// sorted by the numeric suffix. Used by the UI to prefill the next code in
+// the New Stock Item dialog. Also returns the caller's agency code so the
+// client can fall back to `[AGENCY]-STK-001` when no items exist yet.
+router.get("/v1/stock/latest-code", requireAuth, async (req, res) => {
+  if (!req.user) return;
+  try {
+    let agencyCode: string | null = null;
+    if (req.user.agencyId) {
+      const [ag] = await db
+        .select({ agencyCode: agencies.agencyCode })
+        .from(agencies)
+        .where(eq(agencies.id, req.user.agencyId))
+        .limit(1);
+      agencyCode = ag?.agencyCode ?? null;
+    }
+    const conditions = [
+      isNull(stockItems.deletedAt),
+      sql`${stockItems.itemCode} ~ '^[A-Z0-9]+-STK-[0-9]+$'`,
+      ...scopeFilter(req.user),
+    ];
+    const [row] = await db
+      .select({ itemCode: stockItems.itemCode })
+      .from(stockItems)
+      .where(and(...conditions))
+      .orderBy(sql`CAST(SPLIT_PART(${stockItems.itemCode}, '-', 3) AS INTEGER) DESC`)
+      .limit(1);
+    res.json({
+      success: true,
+      message: "Latest stock code retrieved",
+      data: { latestCode: row?.itemCode ?? null, agencyCode },
+    });
+  } catch (err) {
+    req.log.error({ err }, "Get latest stock code error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
 router.post("/v1/stock", requireAuth, requireStockAdmin, async (req, res) => {
   if (!req.user) return;
   const body = req.body;

@@ -424,7 +424,6 @@ ledgerEvidence([
   { event: "approved",  at: "2026-05-11 19:26:45 UTC", signer: "Immigration Admin", role: "Agency Admin",
     hash: "afaaa07ffba697d56087029da25564066eaf0b0c62b536ba9d7bac596da1c4da" },
 ]);
-
 // ─── Annex B — Comparison ───────────────────────────────────────────────────
 ensure(400);
 h1("Annex B — Comparison vs Reference Proposal");
@@ -606,7 +605,6 @@ function ganttChart(tasks, weeks) {
 function fmtMoney(n) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-
 function ledgerEvidence(events) {
   const padX = 10, padY = 8, rowH = 60;
   const totalH = rowH * events.length;
