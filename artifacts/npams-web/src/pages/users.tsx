@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_ROLES } from "@/App";
 import { apiFetchJson } from "@/lib/api-fetch";
@@ -40,7 +41,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, ShieldCheck, Users as UsersIcon, Trash2 } from "lucide-react";
+import { Plus, Pencil, ShieldCheck, Users as UsersIcon, Trash2, Activity as ActivityIcon } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Label } from "@/components/ui/label";
 
@@ -168,6 +169,22 @@ const editUserSchema = z.object({
 });
 type EditUserFormValues = z.infer<typeof editUserSchema>;
 
+interface ActivityEntry {
+  id: string;
+  actionType: string;
+  entityType: string | null;
+  entityId: string | null;
+  description: string | null;
+  createdAt: string;
+}
+
+function formatActionType(action: string): string {
+  return action
+    .split(/[._-]/)
+    .map((p) => (p ? p[0].toUpperCase() + p.slice(1).toLowerCase() : ""))
+    .join(" ");
+}
+
 export default function Users() {
   const { user } = useAuth();
   const isAdmin = ADMIN_ROLES.includes(user?.role as typeof ADMIN_ROLES[number]);
@@ -275,6 +292,17 @@ export default function Users() {
       queryKey: getGetFacilitiesByDistrictQueryKey(editDistrictId),
       enabled: !!editDistrictId,
     },
+  });
+
+  const editUserId = editUser?.id ?? "";
+  const { data: activityData, isLoading: isActivityLoading, isError: isActivityError } = useQuery<ActivityEntry[]>({
+    queryKey: ["/api/v1/users", editUserId, "activity"],
+    queryFn: async () => {
+      const result = await apiFetchJson<ActivityEntry[]>(`/api/v1/users/${editUserId}/activity`);
+      if (!result.ok) throw new Error(result.message);
+      return result.data ?? [];
+    },
+    enabled: !!editUserId,
   });
 
   if (!isAdmin) return <Redirect to="/dashboard" />;
@@ -758,6 +786,44 @@ export default function Users() {
                     <Label>Email (login identity)</Label>
                     <Input value={editUser.email ?? ""} readOnly disabled />
                     <p className="text-xs text-muted-foreground">Email is the user's login and cannot be changed.</p>
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wider flex items-center gap-1">
+                      <ActivityIcon className="w-3 h-3" /> Recent Activity
+                    </p>
+                    <div className="rounded-md border bg-muted/30 max-h-56 overflow-y-auto">
+                      {isActivityLoading ? (
+                        <div className="p-3 text-xs text-muted-foreground">Loading activity…</div>
+                      ) : isActivityError ? (
+                        <div className="p-3 text-xs text-destructive">Couldn't load activity.</div>
+                      ) : !activityData || activityData.length === 0 ? (
+                        <div className="p-3 text-xs text-muted-foreground">No recent activity recorded for this user.</div>
+                      ) : (
+                        <ul className="divide-y">
+                          {activityData.map((entry) => (
+                            <li key={entry.id} className="p-2.5 text-xs">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="font-medium text-foreground">
+                                    {formatActionType(entry.actionType)}
+                                    {entry.entityType && (
+                                      <span className="text-muted-foreground font-normal"> · {entry.entityType}</span>
+                                    )}
+                                  </div>
+                                  {entry.description && (
+                                    <div className="text-muted-foreground truncate">{entry.description}</div>
+                                  )}
+                                </div>
+                                <div className="text-muted-foreground whitespace-nowrap shrink-0">
+                                  {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   </div>
 
                   <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wider pt-2">Account Details</p>

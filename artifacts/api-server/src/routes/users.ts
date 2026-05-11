@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq, and, or } from "drizzle-orm";
+import { eq, and, or, desc } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import {
   db,
@@ -273,6 +273,56 @@ router.get("/v1/users/:id", requireAuth, async (req, res) => {
     res.json({ success: true, message: "User retrieved", data: row });
   } catch (err) {
     req.log.error({ err }, "Get user error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
+router.get("/v1/users/:id/activity", requireAuth, async (req, res) => {
+  if (!req.user) return;
+  const targetId = req.params.id as string;
+
+  try {
+    const [targetScope] = await db
+      .select()
+      .from(userScope)
+      .where(eq(userScope.userId, targetId))
+      .limit(1);
+
+    const viewer = req.user;
+    if (viewer.scopeLevel !== "national" && viewer.userId !== targetId) {
+      let allowed = false;
+      if (viewer.scopeLevel === "agency" || viewer.agencyId) {
+        allowed = !!viewer.agencyId && !!targetScope && targetScope.agencyId === viewer.agencyId;
+      } else if (viewer.facilityId) {
+        allowed = !!targetScope && targetScope.facilityId === viewer.facilityId;
+      } else if (viewer.districtId) {
+        allowed = !!targetScope && targetScope.districtId === viewer.districtId;
+      } else if (viewer.provinceId) {
+        allowed = !!targetScope && targetScope.provinceId === viewer.provinceId;
+      }
+      if (!allowed) {
+        res.status(403).json({ success: false, message: "Access denied", data: null });
+        return;
+      }
+    }
+
+    const rows = await db
+      .select({
+        id: activityLogs.id,
+        actionType: activityLogs.actionType,
+        entityType: activityLogs.entityType,
+        entityId: activityLogs.entityId,
+        description: activityLogs.description,
+        createdAt: activityLogs.createdAt,
+      })
+      .from(activityLogs)
+      .where(eq(activityLogs.userId, targetId))
+      .orderBy(desc(activityLogs.createdAt))
+      .limit(10);
+
+    res.json({ success: true, message: "Activity retrieved", data: rows });
+  } catch (err) {
+    req.log.error({ err }, "Get user activity error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });
