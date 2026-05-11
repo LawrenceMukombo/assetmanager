@@ -12,6 +12,7 @@ import { useGetNotifications, getGetNotificationsQueryKey } from "@workspace/api
 import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatDistanceToNow } from "date-fns";
+import { GlobalSearch } from "@/components/global-search";
 
 export function Header() {
   const { user } = useAuth();
@@ -100,6 +101,10 @@ export function Header() {
           ) : null}
           <h1 className="font-semibold text-base lg:text-lg tracking-tight hidden sm:block truncate max-w-[28rem] lg:max-w-[40rem]">{headerTitle}</h1>
         </div>
+      </div>
+
+      <div className="flex-1 flex justify-center px-4 max-w-2xl">
+        <GlobalSearch />
       </div>
 
       <div className="flex items-center gap-4">
