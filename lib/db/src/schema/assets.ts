@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, numeric, date, integer, timestamp, pgEnum, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, text, numeric, date, integer, timestamp, pgEnum, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { provinces } from "./provinces";
 import { agencies } from "./agencies";
 import { districts } from "./districts";
@@ -25,13 +25,19 @@ export const depreciationMethodEnum = pgEnum("depreciation_method", [
   "declining_balance",
 ]);
 
-export const assetCategories = pgTable("asset_categories", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  categoryName: varchar("category_name", { length: 255 }).notNull().unique(),
-  categoryCode: varchar("category_code", { length: 10 }).notNull().default(""),
-  description: text("description"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+export const assetCategories = pgTable(
+  "asset_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    categoryName: varchar("category_name", { length: 255 }).notNull().unique(),
+    categoryCode: varchar("category_code", { length: 10 }).notNull().default(""),
+    description: text("description"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uniq_asset_categories_category_code").on(t.categoryCode),
+  ],
+);
 
 export const assets = pgTable(
   "assets",

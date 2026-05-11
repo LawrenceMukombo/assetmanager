@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { db, assetCategories, assets } from "@workspace/db";
 import { requireAuth, requireAssetAdmin } from "../lib/auth";
 import { count } from "drizzle-orm";
@@ -62,14 +62,31 @@ router.post("/v1/categories", requireAuth, requireAssetAdmin, async (req, res) =
     ? normalized.code
     : deriveCategoryCode(category_name);
   try {
+    const existingCode = await db
+      .select({ id: assetCategories.id })
+      .from(assetCategories)
+      .where(eq(assetCategories.categoryCode, finalCode))
+      .limit(1);
+    if (existingCode.length > 0) {
+      res.status(409).json({
+        success: false,
+        message: `Code "${finalCode}" is already used by another category`,
+        data: null,
+      });
+      return;
+    }
     const [row] = await db
       .insert(assetCategories)
       .values({ categoryName: category_name, categoryCode: finalCode, description })
       .returning();
     res.status(201).json({ success: true, message: "Category created", data: row });
   } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === "23505") {
-      res.status(409).json({ success: false, message: "Category name already exists", data: null });
+    const pgErr = err as NodeJS.ErrnoException & { constraint?: string };
+    if (pgErr.code === "23505") {
+      const message = pgErr.constraint === "uniq_asset_categories_category_code"
+        ? `Code "${finalCode}" is already used by another category`
+        : "Category name already exists";
+      res.status(409).json({ success: false, message, data: null });
       return;
     }
     req.log.error({ err }, "Create category error");
@@ -89,11 +106,31 @@ router.put("/v1/categories/:id", requireAuth, requireAssetAdmin, async (req, res
       categoryName: category_name,
       description,
     };
+    let nextCode: string | undefined;
     if (normalized.provided) {
       // Caller explicitly sent a code: use it, or derive from name when cleared.
-      updates.categoryCode = normalized.code
+      nextCode = normalized.code
         ? normalized.code
         : (category_name ? deriveCategoryCode(category_name) : undefined);
+      if (nextCode !== undefined) updates.categoryCode = nextCode;
+    }
+    if (nextCode) {
+      const clash = await db
+        .select({ id: assetCategories.id })
+        .from(assetCategories)
+        .where(and(
+          eq(assetCategories.categoryCode, nextCode),
+          ne(assetCategories.id, req.params.id as string),
+        ))
+        .limit(1);
+      if (clash.length > 0) {
+        res.status(409).json({
+          success: false,
+          message: `Code "${nextCode}" is already used by another category`,
+          data: null,
+        });
+        return;
+      }
     }
     const [row] = await db
       .update(assetCategories)
@@ -105,7 +142,15 @@ router.put("/v1/categories/:id", requireAuth, requireAssetAdmin, async (req, res
       return;
     }
     res.json({ success: true, message: "Category updated", data: row });
-  } catch (err) {
+  } catch (err: unknown) {
+    const pgErr = err as NodeJS.ErrnoException & { constraint?: string };
+    if (pgErr.code === "23505") {
+      const message = pgErr.constraint === "uniq_asset_categories_category_code"
+        ? "That code is already used by another category"
+        : "Category name already exists";
+      res.status(409).json({ success: false, message, data: null });
+      return;
+    }
     req.log.error({ err }, "Update category error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
   }

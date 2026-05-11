@@ -66,7 +66,10 @@ export default function Categories() {
         toast({ title: "Category created" });
         refetch();
         setIsModalOpen(false);
-      }
+      },
+      onError: (err: Error) => {
+        toast({ variant: "destructive", title: "Failed to create category", description: err.message });
+      },
     }
   });
 
@@ -76,7 +79,10 @@ export default function Categories() {
         toast({ title: "Category updated" });
         refetch();
         setIsModalOpen(false);
-      }
+      },
+      onError: (err: Error) => {
+        toast({ variant: "destructive", title: "Failed to update category", description: err.message });
+      },
     }
   });
 
@@ -86,7 +92,10 @@ export default function Categories() {
         toast({ title: "Category deleted" });
         refetch();
         setDeleteId(null);
-      }
+      },
+      onError: (err: Error) => {
+        toast({ variant: "destructive", title: "Failed to delete category", description: err.message });
+      },
     }
   });
 
