@@ -449,8 +449,8 @@ async function seedAgencies(): Promise<void> {
   // ── AGENCIES ────────────────────────────────────────────────────────────────
   // Logos live at /agencies/{code}.svg (placeholder emblems — replace with real logos when ready)
   const agencyData = [
-    { agencyCode: "PNGICA",    agencyName: "PNG Immigration & Citizenship Authority", agencyType: "Authority",      logoUrl: "/agencies/pngica.svg",    themeAccentColor: "#0F4C81", flagColors: ["#0F4C81", "#FFFFFF"] },
-    { agencyCode: "OMBUDSMAN", agencyName: "Ombudsman Commission",                    agencyType: "Commission",     logoUrl: "/agencies/ombudsman.svg", themeAccentColor: "#5B2C6F", flagColors: ["#5B2C6F", "#FFD700"] },
+    { agencyCode: "PNGICA",    agencyName: "PNG Immigration & Citizenship Authority", agencyType: "Authority",      logoUrl: "/agencies/pngica.png",    themeAccentColor: "#0F4C81", flagColors: ["#0F4C81", "#FFFFFF"] },
+    { agencyCode: "OMBUDSMAN", agencyName: "Ombudsman Commission",                    agencyType: "Commission",     logoUrl: "/agencies/ombudsman.jpg", themeAccentColor: "#5B2C6F", flagColors: ["#5B2C6F", "#FFD700"] },
     { agencyCode: "RPNGC",     agencyName: "Royal Papua New Guinea Constabulary",     agencyType: "Police",         logoUrl: "/agencies/rpngc.svg",     themeAccentColor: "#003366", flagColors: ["#003366", "#FFD700"] },
     { agencyCode: "PNGDF",     agencyName: "Papua New Guinea Defence Force",          agencyType: "Defence",        logoUrl: "/agencies/pngdf.svg",     themeAccentColor: "#1B4332", flagColors: ["#1B4332", "#FFD700"] },
     { agencyCode: "PNGCS",     agencyName: "Papua New Guinea Customs Service",        agencyType: "Service",        logoUrl: "/agencies/customs.svg",   themeAccentColor: "#7B1F1F", flagColors: ["#7B1F1F", "#FFD700"] },
