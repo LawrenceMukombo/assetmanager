@@ -282,6 +282,7 @@ table({
     ["PII",             "Limited to officer profile data needed for workflow attribution; no citizen biometric data is processed."],
     ["Disaster Recovery","RPO 24h, RTO 8h. Documented runbook handed over at Go-Live."],
     ["Service Level",   "99.5% monthly uptime; P1 1h, P2 4h, P3 next business day."],
+    ["Vulnerability management", "Monthly dependency CVE scan (npm audit + Snyk); SAST run on every release; critical CVEs patched within 7 days, high within 30 days; quarterly external penetration test summary delivered to ICSA."],
   ],
 });
 p("NPAMS aligns with the PNG Government Digital Strategy and is designed to be auditable by the Auditor-General's office on demand.");
@@ -292,19 +293,19 @@ p("All amounts in Papua New Guinea Kina (PGK). GST applied at 10% per the Goods 
 
 h2("6.1 Year 1 Cost Build-Up");
 costTable([
-  ["1", "Platform Licence — Year 1",            "Tenant subscription for 15 named concurrent web users (K 600 / user / yr)", 9_000],
-  ["2", "Implementation & Configuration",       "Tenant provisioning, branding, role catalogue, agency / province / district / facility hierarchy, identity stub", 28_000],
-  ["3", "Data Migration & Seeding",             "Migration of legacy asset register (CSV / Excel), stock balances, custodians, locations and facility tree", 8_500],
-  ["4", "User Training",                        "Three (3) sessions: Asset Officers, Agency Admins, Auditors. Includes printed quick-reference guides", 7_500],
-  ["5", "Cloud Hosting (12 months)",            "Autoscaling app + managed PostgreSQL + Object Storage + CDN + daily backups", 12_000],
-  ["6", "Annual Support & Maintenance — Year 1","SLA-backed L1-L3 support, monthly security patches, minor enhancements (<= 8 hrs/mo)", 30_000],
+  ["1", "Platform Licence — Year 1",             "Named concurrent web user / year",       600,    15, 9_000],
+  ["2", "Implementation & Configuration",        "Fixed-price work package (one-off)",     28_000,  1, 28_000],
+  ["3", "Data Migration & Seeding",              "Fixed-price work package (one-off)",     8_500,   1, 8_500],
+  ["4", "User Training",                         "Classroom / online session",             2_500,   3, 7_500],
+  ["5", "Cloud Hosting (12 months)",             "Hosting bundle / month (app + DB + CDN + backups)", 1_000, 12, 12_000],
+  ["6", "Annual Support & Maintenance — Year 1", "SLA support bundle / month (incl. <= 8 hrs/mo enhancements)", 2_500, 12, 30_000],
 ]);
 
 h2("6.2 Recurring Cost — Year 2 onwards");
 costTable([
-  ["1", "Platform Licence (15 users)",       "",  9_000],
-  ["2", "Cloud Hosting",                     "", 12_000],
-  ["3", "Annual Support & Maintenance",      "", 30_000],
+  ["1", "Platform Licence",            "Named concurrent web user / year",        600,   15, 9_000],
+  ["2", "Cloud Hosting",               "Hosting bundle / month",                  1_000, 12, 12_000],
+  ["3", "Annual Support & Maintenance","SLA support bundle / month",              2_500, 12, 30_000],
 ], { totalLabel: "Recurring Total / yr (incl. GST)" });
 
 p("Additional concurrent users may be added at any time at PGK 600 / user / year (prorated). No volume change requires a re-contract.");
@@ -389,22 +390,34 @@ h1("Annex A — Live Application Screenshots");
 p("The following screenshots are taken from the running production build of NPAMS on the date of issue and reflect the system that ICSA will inherit.");
 
 const shots = [
-  { file: "01-login.jpg",            caption: "Figure A1 — Sign-in screen with PNG branding and tenant theming." },
-  { file: "02-app-shell.jpg",        caption: "Figure A2 — Authenticated application shell (PNG ICSA tenant) showing the global navigation, branded header and logged-in officer profile." },
-  { file: "03-purchase-requests.jpg",caption: "Figure A3 — Purchase Requests workflow page (the digital signature pipeline that ICSA will use to govern stock replenishment of ePassport booklets, visa stickers and other secure consumables)." },
+  { file: "01-login.jpg",             caption: "Figure A1 — Sign-in screen with PNG branding and tenant theming." },
+  { file: "02-dashboard.jpg",         caption: "Figure A2 — ICSA Authority dashboard: KPI cards (Total / Active / Missing / Under Maintenance / Disposed), portfolio value, status & condition charts and the most-recently added assets, all scoped to the PNGICA tenant." },
+  { file: "03-purchase-requests.jpg", caption: "Figure A3 — Purchase Requests workflow page — the digital signature pipeline that ICSA will use to govern stock replenishment of ePassport booklets, visa stickers and other secure consumables." },
+  { file: "04-gis.jpg",               caption: "Figure A4 — GIS Province Map: interactive Leaflet map of all 22 PNG provinces with district overlays, basemap selector and per-province asset / population profile (Street / Satellite / Topo)." },
 ];
 for (const s of shots) {
   const fp = path.join(ASSETS, s.file);
   if (!fs.existsSync(fp)) continue;
   ensure(280);
   const imgW = CW;
-  const imgH = imgW * (800 / 1280); // captured at 1280x800 / 1024x800
   doc.image(fp, M, doc.y, { width: imgW });
-  doc.y += Math.min(imgH, 320) + 6;
-  doc.font("Helvetica-Oblique").fontSize(9).fillColor(C.mute).text(s.caption, { width: CW });
-  doc.moveDown(1);
+  doc.y += Math.min(imgW * 0.62, 380) + 6;
+  doc.font("Helvetica-Oblique").fontSize(9).fillColor(C.mute).text(s.caption, M, doc.y, { width: CW });
+  doc.x = M; doc.moveDown(1);
   setBody();
 }
+
+// Signature ledger evidence — pulled from the live database for the seeded
+// purchase request PR-20260511-5092 (id d05460c6-62fd-4fd9-a342-fdb7e3547712).
+ensure(220);
+h2("Annex A1 — Signature ledger evidence (live data)");
+p("The two events below were generated by the running NPAMS API on 11 May 2026 against purchase request PR-20260511-5092 (Blank ePassport Booklet, qty 500 @ K 42.50 from Crane Currency PNG, requester Immigration Admin, role Agency Admin). The signed_hash for each event is the actual HMAC-SHA256 value persisted in the purchase_request_events table. ICSA's Auditor can re-compute these hashes from the documented input string and the server secret to prove that no event has been forged or tampered with after the fact.");
+ledgerEvidence([
+  { event: "submitted", at: "2026-05-11 19:26:45 UTC", signer: "Immigration Admin", role: "Agency Admin",
+    hash: "de2ff7ef0f18e1212980ed820079bf7f869ab7620d91dbf5382bb7ad6da60e8a" },
+  { event: "approved",  at: "2026-05-11 19:26:45 UTC", signer: "Immigration Admin", role: "Agency Admin",
+    hash: "afaaa07ffba697d56087029da25564066eaf0b0c62b536ba9d7bac596da1c4da" },
+]);
 
 // ─── Annex B — Comparison ───────────────────────────────────────────────────
 ensure(400);
@@ -522,20 +535,24 @@ function table({ cols, rows, emphasiseLast = false, emphasiseLastN = 0 }) {
 }
 
 function costTable(items, opts = {}) {
-  // items: [no, line, desc, amount]
+  // items: [no, line, unit-desc, unit-price, qty, line-total]
   const cols = [
-    { label: "#",        w: 0.05, align: "center" },
-    { label: "Line item",w: 0.28 },
-    { label: "Description", w: 0.50 },
-    { label: "Amount (PGK)", w: 0.17, align: "right" },
+    { label: "#",                w: 0.04, align: "center" },
+    { label: "Line item",        w: 0.26 },
+    { label: "Unit",             w: 0.34 },
+    { label: "Unit Price (PGK)", w: 0.12, align: "right" },
+    { label: "Qty",              w: 0.06, align: "right" },
+    { label: "Line Total (PGK)", w: 0.18, align: "right" },
   ];
-  const rows = items.map(([n, name, desc, amt]) => [n, name, desc, fmtMoney(amt)]);
-  const subtotal = items.reduce((s, x) => s + x[3], 0);
+  const rows = items.map(([n, name, unit, up, qty, total]) => [
+    n, name, unit, fmtMoney(up), String(qty), fmtMoney(total),
+  ]);
+  const subtotal = items.reduce((s, x) => s + x[5], 0);
   const gst = subtotal * 0.10;
   const grand = subtotal + gst;
-  rows.push(["", "Subtotal (excl. GST)", "", fmtMoney(subtotal)]);
-  rows.push(["", "GST (10%)",            "", fmtMoney(gst)]);
-  rows.push(["", opts.totalLabel || "Grand Total Year 1 (incl. GST)", "", fmtMoney(grand)]);
+  rows.push(["", "Subtotal (excl. GST)", "", "", "", fmtMoney(subtotal)]);
+  rows.push(["", "GST (10%)",            "", "", "", fmtMoney(gst)]);
+  rows.push(["", opts.totalLabel || "Grand Total Year 1 (incl. GST)", "", "", "", fmtMoney(grand)]);
   table({ cols, rows, emphasiseLastN: 3 });
 }
 
@@ -582,4 +599,26 @@ function ganttChart(tasks, weeks) {
 
 function fmtMoney(n) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function ledgerEvidence(events) {
+  const padX = 10, padY = 8, rowH = 60;
+  const totalH = rowH * events.length;
+  ensure(totalH + 12);
+  const x0 = M, y0 = doc.y + 4;
+  events.forEach((ev, i) => {
+    const y = y0 + i * rowH;
+    doc.save().rect(x0, y, CW, rowH - 4).fill(C.band).restore();
+    doc.save().rect(x0, y, 4, rowH - 4).fill(ev.event === "approved" ? C.red : C.blue).restore();
+    doc.font("Helvetica-Bold").fontSize(11).fillColor(C.blue)
+       .text(ev.event.toUpperCase(), x0 + padX, y + padY, { width: 110, lineBreak: false });
+    doc.font("Helvetica").fontSize(9).fillColor(C.mute)
+       .text(`signed_at  ${ev.at}`, x0 + 130, y + padY, { width: CW - 140, lineBreak: false });
+    doc.font("Helvetica").fontSize(9.5).fillColor(C.body)
+       .text(`signer:  ${ev.signer}  ·  role:  ${ev.role}`, x0 + padX, y + padY + 16, { width: CW - padX * 2, lineBreak: false });
+    doc.font("Courier-Bold").fontSize(8.5).fillColor(C.ink)
+       .text(`signed_hash:  ${ev.hash}`, x0 + padX, y + padY + 32, { width: CW - padX * 2, lineBreak: false });
+  });
+  doc.x = M; doc.y = y0 + totalH + 6;
+  setBody();
 }
