@@ -415,6 +415,41 @@ router.delete("/v1/locations/districts/:id", requireAuth, async (req, res) => {
 
 // ─── FACILITIES ──────────────────────────────────────────────────────────────
 
+router.get("/v1/locations/facilities", requireAuth, async (req, res) => {
+  try {
+    const user = req.user!;
+    const conditions = [];
+    if (user.scopeLevel !== "national") {
+      if (user.facilityId) {
+        conditions.push(eq(facilities.id, user.facilityId));
+      } else if (user.districtId) {
+        conditions.push(eq(facilities.districtId, user.districtId));
+      } else {
+        const allowedProvinceId = await resolveUserProvinceId(user);
+        if (allowedProvinceId) {
+          conditions.push(eq(districts.provinceId, allowedProvinceId));
+        }
+      }
+    }
+    const rows = await db
+      .select({
+        id: facilities.id,
+        facilityName: facilities.facilityName,
+        districtId: facilities.districtId,
+        districtName: districts.districtName,
+        provinceId: districts.provinceId,
+      })
+      .from(facilities)
+      .leftJoin(districts, eq(facilities.districtId, districts.id))
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(facilities.facilityName);
+    res.json({ success: true, message: "Facilities retrieved", data: rows });
+  } catch (err) {
+    req.log.error({ err }, "Get all facilities error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
 router.get("/v1/locations/districts/:id/facilities", requireAuth, async (req, res) => {
   try {
     const user = req.user!;
