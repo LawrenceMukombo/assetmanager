@@ -1,9 +1,22 @@
 import { Router } from "express";
-import { eq, and, desc, sql, isNotNull } from "drizzle-orm";
-import { db, provinces, districts, facilities, assets, assetTransfers, users, userScope } from "@workspace/db";
+import { eq, and, desc, sql, inArray, isNotNull } from "drizzle-orm";
+import { db, provinces, districts, facilities, assets, assetTransfers, users, userScope, agencies } from "@workspace/db";
 import { requireAuth } from "../lib/auth";
+import { ICA_PRESENCE_NAMES } from "../lib/icaPresence";
 
 const router = Router();
+
+// Returns the curated facility-name allowlist for an agency, or null when no
+// allowlist is defined. PNGICA is restricted to ICSA presence sites only;
+// other agencies have no curated list and therefore see no facilities in the
+// agency-scoped Stock & Inventory location pickers.
+async function getAgencyFacilityNameAllowlist(agencyId: string | null | undefined): Promise<string[] | null> {
+  if (!agencyId) return null;
+  const [row] = await db.select({ code: agencies.agencyCode }).from(agencies).where(eq(agencies.id, agencyId)).limit(1);
+  if (!row) return null;
+  if (row.code === "PNGICA") return ICA_PRESENCE_NAMES;
+  return null;
+}
 
 // ─── REGIONS ─────────────────────────────────────────────────────────────────
 
@@ -420,7 +433,18 @@ router.get("/v1/locations/facilities", requireAuth, async (req, res) => {
     const user = req.user!;
     const conditions = [];
     if (user.scopeLevel !== "national") {
-      if (user.facilityId) {
+      // Agency-scoped users with a curated presence allowlist (currently only
+      // PNGICA / ICSA) are restricted to that allowlist. Other agencies fall
+      // through to the existing geographic / facility scoping below so they
+      // continue to see whatever they did prior to this change.
+      const presenceNames =
+        user.scopeLevel === "agency" || user.agencyId
+          ? await getAgencyFacilityNameAllowlist(user.agencyId)
+          : null;
+      if (presenceNames !== null) {
+        // Agency has a curated presence allowlist (currently only PNGICA).
+        conditions.push(inArray(facilities.facilityName, presenceNames));
+      } else if (user.facilityId) {
         conditions.push(eq(facilities.id, user.facilityId));
       } else if (user.districtId) {
         conditions.push(eq(facilities.districtId, user.districtId));
@@ -477,8 +501,16 @@ router.get("/v1/locations/districts/:id/facilities", requireAuth, async (req, re
     }
 
     const conditions = [eq(facilities.districtId, districtId)];
-    if (user.scopeLevel !== "national" && user.facilityId) {
-      conditions.push(eq(facilities.id, user.facilityId));
+    if (user.scopeLevel !== "national") {
+      const presenceNames =
+        user.scopeLevel === "agency" || user.agencyId
+          ? await getAgencyFacilityNameAllowlist(user.agencyId)
+          : null;
+      if (presenceNames !== null) {
+        conditions.push(inArray(facilities.facilityName, presenceNames));
+      } else if (user.facilityId) {
+        conditions.push(eq(facilities.id, user.facilityId));
+      }
     }
 
     const rows = await db

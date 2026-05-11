@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, Printer, RefreshCw, FileDown, MapPin, X } from "lucide-react";
+import { FileText, Download, Printer, RefreshCw, FileDown, MapPin, X, TrendingDown, AlertTriangle, Wrench, Boxes, ShoppingCart, MapPinned, Activity } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Papa from "papaparse";
 import jsPDF from "jspdf";
@@ -177,6 +177,24 @@ export default function Reports() {
       toast({ variant: "destructive", title: "Export failed", description: msg });
     } finally {
       setLoadingSummary(false);
+    }
+  };
+
+  const fetchAndExportGeneric = async (endpoint: string, filename: string, label: string) => {
+    try {
+      const res = await apiFetch(`/api/v1/reports/${endpoint}${locationParams}`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.message ?? "Failed to fetch");
+      const items: Record<string, unknown>[] = body.data?.items ?? body.data ?? [];
+      if (!Array.isArray(items) || items.length === 0) {
+        toast({ title: `No ${label.toLowerCase()} data` });
+        return;
+      }
+      downloadCSV(items, filename);
+      toast({ title: `${label} exported`, description: `${items.length} rows` });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Export failed";
+      toast({ variant: "destructive", title: `${label} export failed`, description: msg });
     }
   };
 
@@ -411,6 +429,104 @@ export default function Reports() {
             </CardContent>
           </Card>
         )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="w-5 h-5 text-primary" /> Asset Condition Summary
+            </CardTitle>
+            <CardDescription>Counts and value broken down by condition and status.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full justify-start" onClick={() => fetchAndExportGeneric("condition-summary", "asset_condition_summary.csv", "Condition summary")}>
+              <Download className="w-4 h-4 mr-2" /> Export Condition Summary (CSV)
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingDown className="w-5 h-5 text-primary" /> Depreciation Schedule
+            </CardTitle>
+            <CardDescription>Per-asset book value and accumulated depreciation (straight-line).</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full justify-start" onClick={() => fetchAndExportGeneric("depreciation", "asset_depreciation.csv", "Depreciation report")}>
+              <Download className="w-4 h-4 mr-2" /> Export Depreciation (CSV)
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Boxes className="w-5 h-5 text-primary" /> Stock On Hand
+            </CardTitle>
+            <CardDescription>Current quantities and value by item × location.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full justify-start" onClick={() => fetchAndExportGeneric("stock-on-hand", "stock_on_hand.csv", "Stock on hand")}>
+              <Download className="w-4 h-4 mr-2" /> Export Stock On Hand (CSV)
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-primary" /> Low-Stock Alerts
+            </CardTitle>
+            <CardDescription>Items at or below their reorder threshold by location.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full justify-start" onClick={() => fetchAndExportGeneric("low-stock", "low_stock_alerts.csv", "Low-stock report")}>
+              <Download className="w-4 h-4 mr-2" /> Export Low-Stock (CSV)
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5 text-primary" /> Purchase Requests
+            </CardTitle>
+            <CardDescription>Status breakdown of all purchase requests in your scope.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full justify-start" onClick={() => fetchAndExportGeneric("purchase-requests-status", "purchase_requests_status.csv", "Purchase requests")}>
+              <Download className="w-4 h-4 mr-2" /> Export PR Status (CSV)
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wrench className="w-5 h-5 text-primary" /> Maintenance Due
+            </CardTitle>
+            <CardDescription>Assets under maintenance or with warranty expiring in the next 90 days.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full justify-start" onClick={() => fetchAndExportGeneric("maintenance-due", "maintenance_due.csv", "Maintenance due")}>
+              <Download className="w-4 h-4 mr-2" /> Export Maintenance Due (CSV)
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MapPinned className="w-5 h-5 text-primary" /> Assets by Location
+            </CardTitle>
+            <CardDescription>Asset counts and value grouped by facility, with GPS coordinates.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full justify-start" onClick={() => fetchAndExportGeneric("assets-by-location", "assets_by_location.csv", "Assets by location")}>
+              <Download className="w-4 h-4 mr-2" /> Export Locations (CSV)
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
       {reportData !== null && (

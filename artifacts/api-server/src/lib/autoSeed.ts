@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { eq, and, or, isNull, inArray, notInArray, sql } from "drizzle-orm";
 import {
   db,
   tenants,
@@ -18,6 +18,7 @@ import {
   stockBalances,
 } from "@workspace/db";
 import { logger } from "./logger";
+import { ICA_PRESENCE_SITES } from "./icaPresence";
 
 const HASH_ROUNDS = 10;
 const DEFAULT_PASSWORD = "Admin1234!";
@@ -46,8 +47,13 @@ export async function autoSeedIfEmpty(): Promise<void> {
   }
 
   // Idempotent — these check for existing rows themselves
+  await seedIcaPresenceFacilities();
   await seedAgencyAssets();
+  await linkIcaAssetsToFacilities();
+  await seedAdditionalIcaAssets();
+  await seedAdditionalIcaUsers();
   await seedAgencyStock();
+  await seedIcaPerLocationStockBalances();
 
   if (usersExist && agenciesExist) {
     logger.info("Auto-seed: idempotent top-up complete");
@@ -680,4 +686,361 @@ async function seedAgencies(): Promise<void> {
       .onConflictDoUpdate({ target: userScope.userId, set: { agencyId: agencyMap[u.agencyCode]!, provinceId: null } });
   }
   logger.info({ count: agencyUsers.length }, "Auto-seed: agency users");
+}
+
+// ── ICSA presence sites ────────────────────────────────────────────────────
+// Idempotent: inserts the curated ICSA presence facility list (with GPS) into
+// the right districts. Updates GPS / facility_type if the row already exists.
+async function seedIcaPresenceFacilities(): Promise<void> {
+  const allDistricts = await db.select({ id: districts.id, code: districts.districtCode }).from(districts);
+  const districtMap: Record<string, string> = {};
+  for (const d of allDistricts) if (d.code) districtMap[d.code] = d.id;
+
+  let upserted = 0;
+  for (const site of ICA_PRESENCE_SITES) {
+    const districtId = districtMap[site.districtCode];
+    if (!districtId) {
+      logger.warn({ site }, "Auto-seed: ICSA site district missing — skipping");
+      continue;
+    }
+    const [row] = await db
+      .insert(facilities)
+      .values({
+        districtId,
+        facilityName: site.facilityName,
+        facilityType: site.facilityType,
+        address: site.address,
+        gpsLatitude: site.lat,
+        gpsLongitude: site.lng,
+      })
+      .onConflictDoNothing()
+      .returning({ id: facilities.id });
+    if (row) {
+      upserted++;
+    } else {
+      // Already exists — backfill GPS + type + address if any are missing/empty
+      await db
+        .update(facilities)
+        .set({
+          facilityType: site.facilityType,
+          address: site.address,
+          gpsLatitude: site.lat,
+          gpsLongitude: site.lng,
+        })
+        .where(and(eq(facilities.districtId, districtId), eq(facilities.facilityName, site.facilityName)));
+    }
+  }
+  logger.info({ inserted: upserted, total: ICA_PRESENCE_SITES.length }, "Auto-seed: ICSA presence facilities");
+}
+
+// Maps existing PNGICA-* asset_tag → preferred ICSA presence facility name.
+// Backfills facilityId where it is currently null so map pins resolve.
+const ICA_ASSET_TAG_TO_SITE: Record<string, string> = {
+  "PNGICA-BLD-001": "ICSA Konedobu Headquarters",
+  "PNGICA-BLD-002": "ICSA Jacksons Airport Immigration",
+  "PNGICA-BLD-003": "ICSA Vanimo Border Post",
+  "PNGICA-BLD-004": "ICSA Wutung Border Crossing",
+  "PNGICA-BLD-005": "ICSA Lae Regional Office",
+  "PNGICA-VEH-001": "ICSA Konedobu Headquarters",
+  "PNGICA-VEH-002": "ICSA Vanimo Border Post",
+  "PNGICA-VEH-003": "ICSA Wutung Border Crossing",
+  "PNGICA-VEH-004": "ICSA Konedobu Headquarters",
+  "PNGICA-VEH-005": "ICSA Konedobu Headquarters",
+  "PNGICA-VEH-006": "ICSA Lae Regional Office",
+  "PNGICA-VEH-007": "ICSA Vanimo Border Post",
+  "PNGICA-OFF-001": "ICSA Konedobu Headquarters",
+  "PNGICA-OFF-002": "ICSA Konedobu Headquarters",
+  "PNGICA-OFF-003": "ICSA Konedobu Headquarters",
+  "PNGICA-OFF-004": "ICSA Konedobu Headquarters",
+  "PNGICA-OFF-005": "ICSA Konedobu Headquarters",
+  "PNGICA-ICT-001": "ICSA Konedobu Headquarters",
+  "PNGICA-ICT-002": "ICSA Konedobu Headquarters",
+  "PNGICA-ICT-003": "ICSA Konedobu Headquarters",
+  "PNGICA-ICT-004": "ICSA Konedobu Headquarters",
+  "PNGICA-ICT-005": "ICSA Jacksons Airport Immigration",
+  "PNGICA-ICT-006": "ICSA Jacksons Airport Immigration",
+  "PNGICA-ICT-007": "ICSA Jacksons Airport Immigration",
+  "PNGICA-ICT-008": "ICSA Vanimo Border Post",
+  "PNGICA-ICT-009": "ICSA Konedobu Headquarters",
+  "PNGICA-ICT-010": "ICSA Konedobu Headquarters",
+  "PNGICA-ICT-011": "ICSA Konedobu Headquarters",
+  "PNGICA-ICT-012": "ICSA Konedobu Headquarters",
+  "PNGICA-ICT-013": "ICSA Konedobu Headquarters",
+  "PNGICA-ICT-014": "ICSA Vanimo Border Post",
+  "PNGICA-COM-001": "ICSA Konedobu Headquarters",
+  "PNGICA-COM-002": "ICSA Vanimo Border Post",
+  "PNGICA-COM-003": "ICSA Wutung Border Crossing",
+};
+
+async function linkIcaAssetsToFacilities(): Promise<void> {
+  const [ica] = await db.select({ id: agencies.id }).from(agencies).where(eq(agencies.agencyCode, "PNGICA")).limit(1);
+  if (!ica) return;
+
+  const siteRows = await db
+    .select({ id: facilities.id, name: facilities.facilityName })
+    .from(facilities)
+    .where(inArray(facilities.facilityName, Object.values(ICA_ASSET_TAG_TO_SITE)));
+  const siteIdByName: Record<string, string> = {};
+  for (const r of siteRows) siteIdByName[r.name] = r.id;
+
+  let updated = 0;
+  for (const [assetTag, siteName] of Object.entries(ICA_ASSET_TAG_TO_SITE)) {
+    const facilityId = siteIdByName[siteName];
+    if (!facilityId) continue;
+    const result = await db
+      .update(assets)
+      .set({ facilityId })
+      .where(and(eq(assets.assetTag, assetTag), eq(assets.agencyId, ica.id), isNull(assets.facilityId)))
+      .returning({ id: assets.id });
+    if (result.length > 0) updated++;
+  }
+  if (updated > 0) logger.info({ updated }, "Auto-seed: linked ICSA assets → presence facilities");
+}
+
+// Adds new ICSA assets distributed across regional offices, sea ports and
+// border posts so map pins appear at multiple locations beyond HQ.
+async function seedAdditionalIcaAssets(): Promise<void> {
+  const [ica] = await db.select({ id: agencies.id }).from(agencies).where(eq(agencies.agencyCode, "PNGICA")).limit(1);
+  if (!ica) return;
+
+  const cats = await db.select({ id: assetCategories.id, categoryName: assetCategories.categoryName }).from(assetCategories);
+  const catMap: Record<string, string> = {};
+  for (const c of cats) catMap[c.categoryName] = c.id;
+
+  const siteRows = await db
+    .select({ id: facilities.id, name: facilities.facilityName })
+    .from(facilities)
+    .where(inArray(facilities.facilityName, ICA_PRESENCE_SITES.map((s) => s.facilityName)));
+  const siteIdByName: Record<string, string> = {};
+  for (const r of siteRows) siteIdByName[r.name] = r.id;
+
+  type ExtraAsset = {
+    assetTag: string; assetName: string; categoryName: string;
+    serialNumber?: string; brand?: string; model?: string;
+    purchaseDate: string; purchaseCost: string; supplier: string;
+    usefulLifeYears: number;
+    status: "active" | "missing" | "under_maintenance" | "disposed";
+    condition: "excellent" | "good" | "fair" | "poor";
+    salvageValue: string; notes: string;
+    siteName: string;
+  };
+  const extras: ExtraAsset[] = [
+    // Mt Hagen Regional Office
+    { assetTag: "PNGICA-BLD-006", assetName: "Mt Hagen Regional Office Building", categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-MTH-2017", purchaseDate: "2017-04-18", purchaseCost: "1400000", supplier: "Hebou Constructions Ltd", usefulLifeYears: 40, status: "active", condition: "good", salvageValue: "140000", notes: "Mt Hagen regional immigration office", siteName: "ICSA Mt Hagen Regional Office" },
+    { assetTag: "PNGICA-VEH-008", assetName: "Toyota Hilux Dual Cab",             categoryName: "Vehicles & Transport",       serialNumber: "MR0FZ29G801234570", brand: "Toyota", model: "Hilux SR5", purchaseDate: "2022-05-12", purchaseCost: "138000", supplier: "Ela Motors PNG",  usefulLifeYears: 8, status: "active", condition: "good", salvageValue: "13800", notes: "Mt Hagen field operations vehicle", siteName: "ICSA Mt Hagen Regional Office" },
+    { assetTag: "PNGICA-ICT-015", assetName: "ePassport Reader",                  categoryName: "ICT Equipment",              serialNumber: "3M-CR100-MTH-001", brand: "3M",     model: "CR100M",   purchaseDate: "2022-09-01", purchaseCost: "8500",   supplier: "Datec PNG Ltd",   usefulLifeYears: 7, status: "active", condition: "good", salvageValue: "850", notes: "Mt Hagen enrolment desk", siteName: "ICSA Mt Hagen Regional Office" },
+    // Kokopo Regional Office
+    { assetTag: "PNGICA-BLD-007", assetName: "Kokopo Regional Office",            categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-KOK-2019", purchaseDate: "2019-08-05", purchaseCost: "1300000", supplier: "Curtain Bros",          usefulLifeYears: 40, status: "active", condition: "good", salvageValue: "130000", notes: "Kokopo regional immigration office, ENB", siteName: "ICSA Kokopo Regional Office" },
+    { assetTag: "PNGICA-ICT-016", assetName: "Biometric Capture Station",         categoryName: "ICT Equipment",              serialNumber: "MORPHO-BIO-KOK-001", brand: "IDEMIA", model: "MorphoWave", purchaseDate: "2023-01-20", purchaseCost: "45000", supplier: "IDEMIA Australia", usefulLifeYears: 8, status: "active", condition: "excellent", salvageValue: "4500", notes: "Kokopo passport biometric station", siteName: "ICSA Kokopo Regional Office" },
+    { assetTag: "PNGICA-VEH-009", assetName: "Toyota Hilux Single Cab",           categoryName: "Vehicles & Transport",       serialNumber: "MR0CZ29G601234571", brand: "Toyota", model: "Hilux Workmate", purchaseDate: "2021-03-15", purchaseCost: "82000", supplier: "Ela Motors PNG", usefulLifeYears: 8, status: "active", condition: "good", salvageValue: "8200", notes: "Kokopo logistics vehicle", siteName: "ICSA Kokopo Regional Office" },
+    // Madang Regional Office
+    { assetTag: "PNGICA-BLD-008", assetName: "Madang Regional Office",            categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-MAD-2020", purchaseDate: "2020-02-10", purchaseCost: "1250000", supplier: "Hornibrook NGI",        usefulLifeYears: 40, status: "active", condition: "good", salvageValue: "125000", notes: "Madang regional immigration office", siteName: "ICSA Madang Regional Office" },
+    { assetTag: "PNGICA-ICT-017", assetName: "ePassport Reader",                  categoryName: "ICT Equipment",              serialNumber: "3M-CR100-MAD-001", brand: "3M",     model: "CR100M",   purchaseDate: "2021-12-05", purchaseCost: "8500",  supplier: "Datec PNG Ltd",   usefulLifeYears: 7, status: "active", condition: "fair", salvageValue: "850", notes: "Madang enrolment desk", siteName: "ICSA Madang Regional Office" },
+    // Kiunga Border Office
+    { assetTag: "PNGICA-BLD-009", assetName: "Kiunga Border Office",              categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-KIU-2018", purchaseDate: "2018-11-30", purchaseCost: "950000",  supplier: "Curtain Bros",          usefulLifeYears: 40, status: "active", condition: "fair", salvageValue: "95000",  notes: "Kiunga land border office (PNG–Indonesia)", siteName: "ICSA Kiunga Border Office" },
+    { assetTag: "PNGICA-COM-004", assetName: "Iridium Satellite Phone",           categoryName: "Communication Equipment",    serialNumber: "IRID-9555-003",   brand: "Iridium", model: "Extreme 9575", purchaseDate: "2022-04-10", purchaseCost: "3500", supplier: "Daltron PNG",     usefulLifeYears: 7, status: "active", condition: "good", salvageValue: "350", notes: "Kiunga emergency comms", siteName: "ICSA Kiunga Border Office" },
+    // Daru Sea Port
+    { assetTag: "PNGICA-BLD-010", assetName: "Daru Sea Port Office",              categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-DAR-2019", purchaseDate: "2019-05-22", purchaseCost: "850000",  supplier: "Hornibrook NGI",        usefulLifeYears: 40, status: "active", condition: "good", salvageValue: "85000",  notes: "Daru sea port office", siteName: "ICSA Daru Sea Port Office" },
+    { assetTag: "PNGICA-ICT-018", assetName: "ePassport Reader",                  categoryName: "ICT Equipment",              serialNumber: "3M-CR100-DAR-001", brand: "3M",     model: "CR100M",   purchaseDate: "2022-06-18", purchaseCost: "8500",  supplier: "Datec PNG Ltd",   usefulLifeYears: 7, status: "active", condition: "good", salvageValue: "850", notes: "Daru sea port immigration desk", siteName: "ICSA Daru Sea Port Office" },
+    // Lae Sea Port
+    { assetTag: "PNGICA-BLD-011", assetName: "Lae Sea Port Office",               categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-LAS-2018", purchaseDate: "2018-07-15", purchaseCost: "1100000", supplier: "Hebou Constructions Ltd",usefulLifeYears: 40, status: "active", condition: "good", salvageValue: "110000", notes: "Lae main wharf immigration office", siteName: "ICSA Lae Sea Port Office" },
+    { assetTag: "PNGICA-ICT-019", assetName: "Biometric Capture Station",         categoryName: "ICT Equipment",              serialNumber: "MORPHO-BIO-LAS-001", brand: "IDEMIA", model: "MorphoWave", purchaseDate: "2023-03-08", purchaseCost: "45000", supplier: "IDEMIA Australia", usefulLifeYears: 8, status: "active", condition: "excellent", salvageValue: "4500", notes: "Lae sea port crew documentation station", siteName: "ICSA Lae Sea Port Office" },
+    // Rabaul Sea Port
+    { assetTag: "PNGICA-BLD-012", assetName: "Rabaul Sea Port Office",            categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-RAB-2020", purchaseDate: "2020-10-12", purchaseCost: "950000",  supplier: "Curtain Bros",          usefulLifeYears: 40, status: "active", condition: "good", salvageValue: "95000",  notes: "Rabaul sea port immigration office", siteName: "ICSA Rabaul Sea Port Office" },
+    // Alotau Sea Port
+    { assetTag: "PNGICA-BLD-013", assetName: "Alotau Sea Port Office",            categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-ALO-2021", purchaseDate: "2021-02-25", purchaseCost: "880000",  supplier: "Hornibrook NGI",        usefulLifeYears: 40, status: "active", condition: "good", salvageValue: "88000",  notes: "Alotau sea port immigration office", siteName: "ICSA Alotau Sea Port Office" },
+    // Kavieng Sea Port
+    { assetTag: "PNGICA-BLD-014", assetName: "Kavieng Sea Port Office",           categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-KAV-2019", purchaseDate: "2019-12-01", purchaseCost: "830000",  supplier: "Hornibrook NGI",        usefulLifeYears: 40, status: "active", condition: "fair", salvageValue: "83000", notes: "Kavieng sea port immigration office", siteName: "ICSA Kavieng Sea Port Office" },
+    { assetTag: "PNGICA-COM-005", assetName: "Motorola APX 4500 Two-Way Radio Set (10 units)", categoryName: "Communication Equipment", serialNumber: "MOTO-APX-KAV-2023", brand: "Motorola", model: "APX 4500", purchaseDate: "2023-07-12", purchaseCost: "26000", supplier: "Datec PNG Ltd", usefulLifeYears: 8, status: "active", condition: "excellent", salvageValue: "2600", notes: "Kavieng port comms set (10 units)", siteName: "ICSA Kavieng Sea Port Office" },
+  ];
+
+  let inserted = 0;
+  for (const a of extras) {
+    const categoryId = catMap[a.categoryName];
+    const facilityId = siteIdByName[a.siteName];
+    if (!categoryId || !facilityId) continue;
+    const [row] = await db.insert(assets).values({
+      assetTag: a.assetTag,
+      assetName: a.assetName,
+      categoryId,
+      serialNumber: a.serialNumber ?? null,
+      brand: a.brand ?? null,
+      model: a.model ?? null,
+      purchaseDate: a.purchaseDate,
+      purchaseCost: a.purchaseCost,
+      supplier: a.supplier,
+      usefulLifeYears: a.usefulLifeYears,
+      status: a.status,
+      condition: a.condition,
+      agencyId: ica.id,
+      facilityId,
+      depreciationMethod: "straight_line",
+      salvageValue: a.salvageValue,
+      notes: a.notes,
+    }).onConflictDoNothing().returning({ id: assets.id });
+    if (row) inserted++;
+  }
+  if (inserted > 0) logger.info({ inserted, agency: "PNGICA" }, "Auto-seed: additional ICSA assets");
+}
+
+// Adds 10+ ICSA staff users (besides the existing immigration.admin) covering
+// executive, divisions, regional offices and border posts. All idempotent.
+async function seedAdditionalIcaUsers(): Promise<void> {
+  const [ica] = await db.select({ id: agencies.id }).from(agencies).where(eq(agencies.agencyCode, "PNGICA")).limit(1);
+  if (!ica) return;
+  const [agencyRole] = await db.select({ id: roles.id }).from(roles).where(eq(roles.roleName, "Agency Admin")).limit(1);
+  if (!agencyRole) return;
+
+  // The roles table currently only ships one agency-scoped role
+  // ("Agency Admin"); the others are National/Provincial/Super. We therefore
+  // assign Agency Admin to every ICSA user but vary jobTitle, department and
+  // home facility so the roster is meaningful.
+  const hash = await bcrypt.hash(DEFAULT_PASSWORD, HASH_ROUNDS);
+  type IcaUser = {
+    fullName: string; email: string; title: string;
+    department: string;
+    homeSite: string; // must match an ICA presence facilityName
+  };
+  const HQ = "ICSA Konedobu Headquarters";
+  const icaUsers: IcaUser[] = [
+    { fullName: "Stanis Hulahau",   email: "stanis.hulahau@ica.gov.pg",   title: "Director General",                              department: "Executive",                  homeSite: HQ },
+    { fullName: "Robert Kennedy",   email: "robert.kennedy@ica.gov.pg",   title: "Deputy DG — Operations",                        department: "Executive",                  homeSite: HQ },
+    { fullName: "Esther Bagari",    email: "esther.bagari@ica.gov.pg",    title: "Deputy DG — Corporate Services",                department: "Corporate Services",         homeSite: HQ },
+    { fullName: "Mathew Bilong",    email: "mathew.bilong@ica.gov.pg",    title: "Director, Border Operations",                   department: "Border Operations",          homeSite: HQ },
+    { fullName: "Joyce Marewu",     email: "joyce.marewu@ica.gov.pg",     title: "Director, Citizenship & Passports",             department: "Citizenship & Passports",    homeSite: HQ },
+    { fullName: "Peter Yawi",       email: "peter.yawi@ica.gov.pg",       title: "Director, Visa Operations",                     department: "Visa Operations",            homeSite: HQ },
+    { fullName: "Maria Tanda",      email: "maria.tanda@ica.gov.pg",      title: "Manager, Lae Regional Office",                  department: "Regional Operations",        homeSite: "ICSA Lae Regional Office" },
+    { fullName: "Samson Wapi",      email: "samson.wapi@ica.gov.pg",      title: "Manager, Mt Hagen Regional Office",             department: "Regional Operations",        homeSite: "ICSA Mt Hagen Regional Office" },
+    { fullName: "Grace Tomu",       email: "grace.tomu@ica.gov.pg",       title: "Manager, Kokopo Regional Office",               department: "Regional Operations",        homeSite: "ICSA Kokopo Regional Office" },
+    { fullName: "Joseph Kambian",   email: "joseph.kambian@ica.gov.pg",   title: "Officer-in-Charge, Vanimo Border Post",         department: "Border Operations",          homeSite: "ICSA Vanimo Border Post" },
+    { fullName: "Lucy Womai",       email: "lucy.womai@ica.gov.pg",       title: "Officer-in-Charge, Wutung Crossing",            department: "Border Operations",          homeSite: "ICSA Wutung Border Crossing" },
+    { fullName: "Aaron Kalo",       email: "aaron.kalo@ica.gov.pg",       title: "Chief, Jacksons Airport Immigration",           department: "Border Operations",          homeSite: "ICSA Jacksons Airport Immigration" },
+    { fullName: "Helen Pala",       email: "helen.pala@ica.gov.pg",       title: "Records & Stationery Custodian",                department: "Corporate Services",         homeSite: HQ },
+    { fullName: "Daniel Maima",     email: "daniel.maima@ica.gov.pg",     title: "ICT Manager",                                   department: "Information Technology",     homeSite: HQ },
+  ];
+
+  // Resolve home-site facilityIds in one round-trip.
+  const siteRows = await db
+    .select({ id: facilities.id, name: facilities.facilityName })
+    .from(facilities)
+    .where(inArray(facilities.facilityName, ICA_PRESENCE_SITES.map((s) => s.facilityName)));
+  const siteIdByName: Record<string, string> = {};
+  for (const r of siteRows) siteIdByName[r.name] = r.id;
+
+  for (const u of icaUsers) {
+    const homeFacilityId = siteIdByName[u.homeSite] ?? null;
+    const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, u.email)).limit(1);
+    let userId: string;
+    if (existing.length > 0) {
+      userId = existing[0].id;
+      // Backfill jobTitle / department in case earlier seed runs created the
+      // user without them (idempotent — safe to overwrite to canonical values).
+      await db
+        .update(users)
+        .set({ fullName: u.fullName, jobTitle: u.title, department: u.department })
+        .where(eq(users.id, userId));
+    } else {
+      const [row] = await db
+        .insert(users)
+        .values({
+          fullName: u.fullName,
+          email: u.email,
+          passwordHash: hash,
+          jobTitle: u.title,
+          department: u.department,
+        })
+        .returning();
+      userId = row.id;
+    }
+    await db.insert(userRoles).values({ userId, roleId: agencyRole.id }).onConflictDoNothing();
+    await db
+      .insert(userScope)
+      .values({ userId, agencyId: ica.id, facilityId: homeFacilityId })
+      .onConflictDoUpdate({
+        target: userScope.userId,
+        set: { agencyId: ica.id, provinceId: null, facilityId: homeFacilityId },
+      });
+  }
+  logger.info({ count: icaUsers.length, agency: "PNGICA" }, "Auto-seed: ICSA staff users");
+}
+
+// Distributes per-location stock balances for every PNGICA stock item across
+// the full ICSA presence facility set, in addition to the existing 4-bucket
+// distribution. Idempotent: only inserts a balance row where one does not
+// already exist for that (item, facility) pair, so existing balances and any
+// prior movements stay intact.
+async function seedIcaPerLocationStockBalances(): Promise<void> {
+  const [ica] = await db.select({ id: agencies.id }).from(agencies).where(eq(agencies.agencyCode, "PNGICA")).limit(1);
+  if (!ica) return;
+
+  const items = await db
+    .select({ id: stockItems.id, itemCode: stockItems.itemCode, reorderLevel: stockItems.reorderLevel })
+    .from(stockItems)
+    .where(and(eq(stockItems.agencyId, ica.id), isNull(stockItems.deletedAt)));
+
+  const siteRows = await db
+    .select({ id: facilities.id, name: facilities.facilityName })
+    .from(facilities)
+    .where(inArray(facilities.facilityName, ICA_PRESENCE_SITES.map((s) => s.facilityName)));
+
+  // Per-site share of the item's reorder level — chosen so most sites get a
+  // small working stock and a couple of border posts intentionally sit at or
+  // near the reorder line for low-stock demos.
+  const siteShare: Record<string, number> = {
+    "ICSA Konedobu Headquarters":        80,
+    "ICSA Jacksons Airport Immigration": 40,
+    "ICSA Lae Regional Office":          25,
+    "ICSA Mt Hagen Regional Office":     20,
+    "ICSA Kokopo Regional Office":       18,
+    "ICSA Madang Regional Office":       15,
+    "ICSA Vanimo Border Post":           12,
+    "ICSA Wutung Border Crossing":       8,
+    "ICSA Kiunga Border Office":         6,
+    "ICSA Daru Sea Port Office":         5,
+    "ICSA Lae Sea Port Office":          14,
+    "ICSA Rabaul Sea Port Office":       7,
+    "ICSA Alotau Sea Port Office":       6,
+    "ICSA Kavieng Sea Port Office":      5,
+  };
+
+  let inserts = 0;
+  for (const item of items) {
+    for (const site of siteRows) {
+      const sharePct = siteShare[site.name] ?? 5;
+      const qty = Math.max(1, Math.round((item.reorderLevel || 10) * (sharePct / 100)));
+      const reorderForSite = Math.max(1, Math.floor((item.reorderLevel || 10) * (sharePct / 200)));
+      const inserted = await db.insert(stockBalances).values({
+        stockItemId: item.id,
+        facilityId: site.id,
+        quantity: qty,
+        reorderLevel: reorderForSite,
+      }).onConflictDoNothing().returning({ id: stockBalances.id });
+      if (inserted.length > 0) inserts++;
+    }
+  }
+  if (inserts > 0) logger.info({ inserts }, "Auto-seed: ICSA per-location stock balances");
+
+  // Enforce ICSA-only stock locations: any PNGICA stock balance attached to a
+  // non-ICSA facility (or to no facility at all) is a leftover from earlier
+  // seed runs that targeted generic provincial HQs. Remove them so source/
+  // destination pickers in Stock & Inventory only ever offer ICSA presence
+  // sites for PNGICA items. Idempotent.
+  const presenceIds = siteRows.map((s) => s.id);
+  const itemIds = items.map((i) => i.id);
+  if (itemIds.length > 0) {
+    const removed = await db
+      .delete(stockBalances)
+      .where(
+        and(
+          inArray(stockBalances.stockItemId, itemIds),
+          presenceIds.length > 0
+            ? or(isNull(stockBalances.facilityId), notInArray(stockBalances.facilityId, presenceIds))!
+            : sql`true`,
+        ),
+      )
+      .returning({ id: stockBalances.id });
+    if (removed.length > 0) {
+      logger.info({ removed: removed.length }, "Auto-seed: removed PNGICA stock balances at non-ICSA facilities");
+    }
+  }
 }
