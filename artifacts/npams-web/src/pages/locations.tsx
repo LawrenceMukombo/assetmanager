@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetProvinces, getGetProvincesQueryKey,
@@ -120,6 +120,44 @@ export default function Locations() {
   const { data: facilitiesData, isLoading: fLoading } = useGetFacilitiesByDistrict(selectedDistrict, {
     query: { enabled: !!selectedDistrict, queryKey: getGetFacilitiesByDistrictQueryKey(selectedDistrict) }
   });
+
+  // Prefill the district code when the New District dialog opens. Looks up the
+  // latest existing district code in the selected province that matches
+  // `[PREFIX]-[NNN]` and increments the numeric suffix while preserving its
+  // zero-padding width. Falls back to `[PROVINCE_CODE]-001` when no numbered
+  // district exists yet. The user can override the prefilled value, and a 409
+  // from the API surfaces via the existing toast.
+  useEffect(() => {
+    if (!showAddDistrict || !selectedProvince) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await apiFetchJson<{ latestCode: string | null; provinceCode: string | null }>(
+          `/api/v1/locations/districts/latest-code?provinceId=${encodeURIComponent(selectedProvince)}`,
+        );
+        if (cancelled || !r.ok) return;
+        const latest = r.data?.latestCode ?? null;
+        const provinceCode = r.data?.provinceCode ?? null;
+        let nextCode = "";
+        if (latest) {
+          const m = latest.match(/^([A-Z0-9]+)-(\d+)$/);
+          if (m) {
+            const prefix = m[1];
+            const num = m[2];
+            const next = String(Number(num) + 1).padStart(num.length, "0");
+            nextCode = `${prefix}-${next}`;
+          }
+        } else if (provinceCode) {
+          nextCode = `${provinceCode}-001`;
+        }
+        if (!nextCode) return;
+        setAddDistrictForm(f => (f.districtCode ? f : { ...f, districtCode: nextCode }));
+      } catch {
+        // Leave the field as-is on failure; user can type a code manually.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [showAddDistrict, selectedProvince]);
 
   // ── Province helpers ──
   const openEditProvince = (p: Province) => {

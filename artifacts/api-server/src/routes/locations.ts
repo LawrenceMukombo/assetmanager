@@ -265,6 +265,60 @@ router.get("/v1/locations/provinces/:id/districts", requireAuth, async (req, res
   }
 });
 
+// Returns the latest district_code in the given province whose value matches
+// `[PREFIX]-[NNN]`, sorted by the numeric suffix. Used by the New District
+// dialog to prefill the next code in sequence. Also returns the parent
+// province's code so the client can fall back to `[PROVINCE]-001` when no
+// numbered district exists yet.
+router.get("/v1/locations/districts/latest-code", requireAuth, async (req, res) => {
+  if (!req.user) return;
+  try {
+    const provinceId = String((req.query as { provinceId?: string }).provinceId ?? "");
+    if (!provinceId) {
+      res.status(400).json({ success: false, message: "provinceId is required", data: null });
+      return;
+    }
+
+    const user = req.user;
+    if (user.scopeLevel !== "national") {
+      const allowedProvinceId = await resolveUserProvinceId(user);
+      if (allowedProvinceId === null || allowedProvinceId !== provinceId) {
+        res.status(403).json({ success: false, message: "Access denied: outside your geographic scope", data: null });
+        return;
+      }
+    }
+
+    const [prov] = await db
+      .select({ provinceCode: provinces.provinceCode })
+      .from(provinces)
+      .where(eq(provinces.id, provinceId))
+      .limit(1);
+    if (!prov) {
+      res.status(404).json({ success: false, message: "Province not found", data: null });
+      return;
+    }
+
+    const [row] = await db
+      .select({ districtCode: districts.districtCode })
+      .from(districts)
+      .where(and(
+        eq(districts.provinceId, provinceId),
+        sql`${districts.districtCode} ~ '^[A-Z0-9]+-[0-9]+$'`,
+      ))
+      .orderBy(sql`CAST(SPLIT_PART(${districts.districtCode}, '-', 2) AS INTEGER) DESC`)
+      .limit(1);
+
+    res.json({
+      success: true,
+      message: "Latest district code retrieved",
+      data: { latestCode: row?.districtCode ?? null, provinceCode: prov.provinceCode },
+    });
+  } catch (err) {
+    req.log.error({ err }, "Get latest district code error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
 router.get("/v1/locations/districts/:id", requireAuth, async (req, res) => {
   try {
     const districtId = req.params.id as string;
@@ -336,7 +390,11 @@ router.post("/v1/locations/districts", requireAuth, async (req, res) => {
       .returning();
 
     res.status(201).json({ success: true, message: "District created", data: row });
-  } catch (err) {
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "23505") {
+      res.status(409).json({ success: false, message: "District code already exists", data: null });
+      return;
+    }
     req.log.error({ err }, "Create district error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
@@ -383,7 +441,11 @@ router.patch("/v1/locations/districts/:id", requireAuth, async (req, res) => {
       return;
     }
     res.json({ success: true, message: "District updated", data: updated });
-  } catch (err) {
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "23505") {
+      res.status(409).json({ success: false, message: "District code already exists", data: null });
+      return;
+    }
     req.log.error({ err }, "Patch district error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
