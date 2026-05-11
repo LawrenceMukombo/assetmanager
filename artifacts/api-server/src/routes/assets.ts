@@ -406,8 +406,11 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
 
     const body = req.body;
 
-    const targetProvinceId = body.province_id !== undefined ? body.province_id : existing.provinceId;
-    if (req.user.scopeLevel !== "national" && targetProvinceId && targetProvinceId !== existing.provinceId) {
+    const isAgencyAsset = !!existing.agencyId;
+    const targetProvinceId = isAgencyAsset
+      ? null
+      : (body.province_id !== undefined ? (orNull(body.province_id) ?? existing.provinceId) : existing.provinceId);
+    if (req.user.scopeLevel !== "national" && !isAgencyAsset && targetProvinceId && targetProvinceId !== existing.provinceId) {
       res.status(403).json({ success: false, message: "Cannot reassign asset to a different province", data: null });
       return;
     }
@@ -432,8 +435,8 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
         status: body.status,
         condition: body.condition,
         provinceId: targetProvinceId,
-        districtId: orNull(body.district_id),
-        facilityId: orNull(body.facility_id),
+        districtId: isAgencyAsset ? null : orNull(body.district_id),
+        facilityId: isAgencyAsset ? null : orNull(body.facility_id),
         assignedToUser: orNull(body.assigned_to_user),
         updatedAt: new Date(),
       })

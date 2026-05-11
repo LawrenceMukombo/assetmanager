@@ -68,6 +68,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
       const { access_token, refresh_token, user } = responseData;
 
+      // Attach agency identity to the user so client-side UI (e.g. asset form) can display it
+      if (user && responseData.agency_branding) {
+        (user as LoginUser & { agency_name?: string; agency_code?: string }).agency_name =
+          responseData.agency_branding.agencyName;
+        (user as LoginUser & { agency_name?: string; agency_code?: string }).agency_code =
+          responseData.agency_branding.agencyCode;
+      }
+
       if (access_token) localStorage.setItem("npams_token", access_token);
       if (refresh_token) localStorage.setItem("npams_refresh", refresh_token);
       if (user) localStorage.setItem("npams_user", JSON.stringify(user));

@@ -52,7 +52,7 @@ const assetSchema = z.object({
   salvage_value: z.coerce.number().optional(),
   notes: z.string().optional(),
   photo_url: z.string().optional(),
-  province_id: z.string().min(1, "Province is required"),
+  province_id: z.string().optional(),
   district_id: z.string().optional(),
   facility_id: z.string().optional(),
   assigned_to_user: z.string().optional(),
@@ -66,7 +66,12 @@ export default function AssetForm() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
-  
+  const isAgencyUser = user?.scope_level === "agency";
+  const isNationalUser = user?.scope_level === "national";
+  const agencyName = (user as { scope?: { agency_name?: string } } | null | undefined)?.scope?.agency_name
+    || (user as { agency_name?: string } | null | undefined)?.agency_name
+    || "your agency";
+
   const [step, setStep] = useState(1);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -151,7 +156,7 @@ export default function AssetForm() {
       salvage_value: undefined,
       notes: "",
       photo_url: "",
-      province_id: user?.scope_level !== "national" ? user?.scope?.province_id || "" : "",
+      province_id: isAgencyUser ? "" : (!isNationalUser ? user?.scope?.province_id || "" : ""),
       district_id: "",
       facility_id: "",
       assigned_to_user: "",
@@ -261,8 +266,16 @@ export default function AssetForm() {
     const fieldsToValidate: (keyof AssetFormValues)[] =
       step === 1 ? ["asset_name", "asset_tag", "category_id", "condition", "status"] :
       step === 2 ? ["purchase_cost", "useful_life_years"] :
-      step === 3 ? ["province_id"] :
+      step === 3 ? (isAgencyUser ? [] : ["province_id"]) :
       [];
+
+    if (step === 3 && !isAgencyUser) {
+      const provinceId = form.getValues("province_id");
+      if (!provinceId) {
+        form.setError("province_id", { type: "manual", message: "Province is required" });
+        return;
+      }
+    }
 
     const isStepValid = await form.trigger(fieldsToValidate);
     if (isStepValid) setStep(s => s + 1);
@@ -572,89 +585,123 @@ export default function AssetForm() {
 
               {/* Step 3: Location */}
               <div className={step === 3 ? 'block' : 'hidden'}>
-                <h3 className="text-xl font-semibold mb-4">Location & Assignment</h3>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="province_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Province *</FormLabel>
-                        <Select 
-                          onValueChange={(val) => { field.onChange(val); form.setValue("district_id", ""); form.setValue("facility_id", ""); }} 
-                          value={field.value || undefined}
-                          disabled={user?.scope_level !== "national"}
-                        >
-                          <FormControl><SelectTrigger><SelectValue placeholder="Select province" /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            {provincesData?.data?.map(p => (
-                              <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="district_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>District</FormLabel>
-                        <Select 
-                          onValueChange={(val) => { field.onChange(val); form.setValue("facility_id", ""); }} 
-                          value={field.value || undefined}
-                          disabled={!selectedProvince}
-                        >
-                          <FormControl><SelectTrigger><SelectValue placeholder="Select district" /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            {districtsData?.data?.map(d => (
-                              <SelectItem key={d.id} value={d.id!}>{d.districtName}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="facility_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Facility</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || undefined} disabled={!selectedDistrict}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Select facility" /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            {facilitiesData?.data?.map(f => (
-                              <SelectItem key={f.id} value={f.id!}>{f.facilityName}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="assigned_to_user"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Assign Custodian</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || undefined}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            {usersData?.data?.map(u => (
-                              <SelectItem key={u.id} value={u.id!}>{u.fullName}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                <h3 className="text-xl font-semibold mb-4">
+                  {isAgencyUser ? "Custodian & Assignment" : "Location & Assignment"}
+                </h3>
+                {isAgencyUser ? (
+                  <div className="space-y-4">
+                    <div className="rounded-lg border bg-muted/40 p-4">
+                      <div className="text-sm text-muted-foreground">Owning Agency</div>
+                      <div className="text-base font-semibold">{agencyName}</div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Agency-owned assets are not tied to a province, district or facility.
+                      </p>
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="assigned_to_user"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Assign Custodian</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value || undefined}>
+                              <FormControl><SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                {usersData?.data?.map(u => (
+                                  <SelectItem key={u.id} value={u.id!}>{u.fullName}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="province_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Province *</FormLabel>
+                          <Select
+                            onValueChange={(val) => { field.onChange(val); form.setValue("district_id", ""); form.setValue("facility_id", ""); }}
+                            value={field.value || undefined}
+                            disabled={!isNationalUser}
+                          >
+                            <FormControl><SelectTrigger><SelectValue placeholder="Select province" /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              {provincesData?.data?.map(p => (
+                                <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="district_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>District</FormLabel>
+                          <Select
+                            onValueChange={(val) => { field.onChange(val); form.setValue("facility_id", ""); }}
+                            value={field.value || undefined}
+                            disabled={!selectedProvince}
+                          >
+                            <FormControl><SelectTrigger><SelectValue placeholder="Select district" /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              {districtsData?.data?.map(d => (
+                                <SelectItem key={d.id} value={d.id!}>{d.districtName}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="facility_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Facility</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || undefined} disabled={!selectedDistrict}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Select facility" /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              {facilitiesData?.data?.map(f => (
+                                <SelectItem key={f.id} value={f.id!}>{f.facilityName}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="assigned_to_user"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Assign Custodian</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || undefined}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              {usersData?.data?.map(u => (
+                                <SelectItem key={u.id} value={u.id!}>{u.fullName}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Step 4: Review */}
@@ -678,7 +725,10 @@ export default function AssetForm() {
                       {form.getValues("purchase_cost") && <div><span className="font-semibold">Cost (K):</span> {Number(form.getValues("purchase_cost")).toLocaleString()}</div>}
                       {form.getValues("warranty_expiry") && <div><span className="font-semibold">Warranty Expires:</span> {form.getValues("warranty_expiry")}</div>}
                       {(() => { const cat = categoriesData?.data?.find(c => c.id === form.getValues("category_id")); return cat ? <div><span className="font-semibold">Category:</span> {cat.categoryName}</div> : null; })()}
-                      {(() => { const prov = provincesData?.data?.find(p => p.id === form.getValues("province_id")); return prov ? <div><span className="font-semibold">Province:</span> {(prov as { provinceName?: string }).provinceName}</div> : null; })()}
+                      {isAgencyUser
+                        ? <div><span className="font-semibold">Agency:</span> {agencyName}</div>
+                        : (() => { const prov = provincesData?.data?.find(p => p.id === form.getValues("province_id")); return prov ? <div><span className="font-semibold">Province:</span> {(prov as { provinceName?: string }).provinceName}</div> : null; })()
+                      }
                     </div>
                   </div>
                   <p className="text-sm text-muted-foreground">Please review the details before saving. You can edit them later if needed.</p>

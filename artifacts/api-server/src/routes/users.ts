@@ -73,7 +73,9 @@ router.get("/v1/users", requireAuth, async (req, res) => {
           scopeLevel: roles.scopeLevel,
         },
         scope: {
+          id: userScope.id,
           provinceId: userScope.provinceId,
+          agencyId: userScope.agencyId,
           districtId: userScope.districtId,
           facilityId: userScope.facilityId,
         },
@@ -91,6 +93,9 @@ router.get("/v1/users", requireAuth, async (req, res) => {
       user.scopeLevel === "national"
         ? allUsers
         : allUsers.filter((u) => {
+            if (user.scopeLevel === "agency" || user.agencyId) {
+              return !!user.agencyId && u.scope?.agencyId === user.agencyId;
+            }
             if (user.facilityId) {
               return u.scope?.facilityId === user.facilityId;
             }
@@ -205,7 +210,9 @@ router.get("/v1/users/:id", requireAuth, async (req, res) => {
           scopeLevel: roles.scopeLevel,
         },
         scope: {
+          id: userScope.id,
           provinceId: userScope.provinceId,
+          agencyId: userScope.agencyId,
           districtId: userScope.districtId,
           facilityId: userScope.facilityId,
         },
@@ -226,7 +233,9 @@ router.get("/v1/users/:id", requireAuth, async (req, res) => {
       const viewer = req.user!;
       const targetScope = row.scope;
       let allowed = false;
-      if (viewer.facilityId) {
+      if (viewer.scopeLevel === "agency" || viewer.agencyId) {
+        allowed = !!viewer.agencyId && targetScope?.agencyId === viewer.agencyId;
+      } else if (viewer.facilityId) {
         allowed = targetScope?.facilityId === viewer.facilityId;
       } else if (viewer.districtId) {
         allowed = targetScope?.districtId === viewer.districtId;
