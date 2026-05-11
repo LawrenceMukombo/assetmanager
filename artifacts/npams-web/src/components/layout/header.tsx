@@ -44,10 +44,12 @@ export function Header() {
 
   const headerTitle = isNational
     ? "National Public Asset Management System"
+    : isAgency
+    ? branding.provinceName
+      ? `${branding.provinceName} — Asset Management System`
+      : "Agency Asset Management System"
     : branding.provinceName
     ? `${branding.provinceName} — Asset Management System`
-    : isAgency
-    ? "Agency Asset Management System"
     : "Provincial Asset Management";
 
   const nationalColors = ["#CE1126", "#000000", "#FCD116"];

@@ -1114,7 +1114,9 @@ interface ProvDashData {
 }
 
 function ProvincialDashboard() {
-  const { applyBranding } = useProvinceBranding();
+  const { applyBranding, branding } = useProvinceBranding();
+  const { user } = useAuth();
+  const isAgency = user?.scope_level === "agency";
   const [, setLocation] = useLocation();
 
   const [filters, setFilters] = useState<DashFilters>(EMPTY_FILTERS);
@@ -1187,7 +1189,25 @@ function ProvincialDashboard() {
   const distData    = (d?.assets_by_district   ?? []).map(dist => ({ name: dist.district_name, id: dist.district_id, assets: dist.total_assets, missing: dist.missing_assets, value: dist.total_value }));
   const trendData   = d?.acquisition_trend    ?? [];
 
-  if (isLoading) return <DashboardSkeleton />;
+  if (isLoading) {
+    if (isAgency) {
+      return (
+        <div className="space-y-6">
+          <div className="flex items-center gap-3">
+            <div>
+              <h2 className="text-3xl font-bold tracking-tight">
+                {branding.provinceName
+                  ? `${branding.provinceName} Dashboard`
+                  : "Agency Dashboard"}
+              </h2>
+            </div>
+          </div>
+          <DashboardSkeleton />
+        </div>
+      );
+    }
+    return <DashboardSkeleton />;
+  }
 
   const drawerBaseParams: Record<string, string> = {};
   if (filters.status)       drawerBaseParams.status        = filters.status;
@@ -1208,6 +1228,10 @@ function ProvincialDashboard() {
           <h2 className="text-3xl font-bold tracking-tight">
             {d?.agency?.agencyName
               ? `${d.agency.agencyName} Dashboard`
+              : isAgency
+              ? branding.provinceName
+                ? `${branding.provinceName} Dashboard`
+                : "Agency Dashboard"
               : d?.province?.provinceName
               ? `${d.province.provinceName} Dashboard`
               : "Provincial Dashboard"}
