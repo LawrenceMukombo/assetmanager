@@ -6,7 +6,6 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export interface AssetDistrictInfo {
-  id?: string;
-  districtName?: string;
-} | null
+export type HealthStatusData = {
+  status?: string;
+} | null;

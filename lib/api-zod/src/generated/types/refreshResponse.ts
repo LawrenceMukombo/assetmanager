@@ -8,6 +8,7 @@
 import type { RefreshResponseData } from "./refreshResponseData";
 
 export interface RefreshResponse {
-  success?: boolean;
+  success: boolean;
+  message: string;
   data?: RefreshResponseData;
 }

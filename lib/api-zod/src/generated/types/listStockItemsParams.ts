@@ -6,8 +6,10 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type RefreshResponseData = {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
+export type ListStockItemsParams = {
+  search?: string;
+  /**
+   * When "true", returns only items at or below their reorder level
+   */
+  low_stock?: string;
 };

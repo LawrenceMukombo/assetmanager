@@ -105,7 +105,7 @@ function Router() {
       <ProtectedRoute path="/maintenance" component={Maintenance} />
       <ProtectedRoute path="/stock" component={StockPage} />
       <ProtectedRoute path="/stock/:id" component={StockDetailPage} />
-      <ProtectedRoute path="/system-status" component={SystemStatusPage} requiredRoles={ADMIN_ROLES} />
+      <ProtectedRoute path="/system-status" component={SystemStatusPage} requiredRoles={["Super Admin", "Agency Admin"]} />
       <Route path="/gis">
         <AuthGuard>
           <Suspense fallback={<div className="flex items-center justify-center h-full p-12 text-muted-foreground">Loading map...</div>}>

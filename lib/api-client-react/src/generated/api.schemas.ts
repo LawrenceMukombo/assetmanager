@@ -5,18 +5,31 @@
  * National Public Asset Management System (NPAMS) API
  * OpenAPI spec version: 1.0.0
  */
+export type HealthStatusData = {
+  status?: string;
+} | null;
+
+/**
+ * Standard response envelope for health check
+ */
 export interface HealthStatus {
   success: boolean;
   message: string;
-  data?: { status: string } | null;
+  data?: HealthStatusData;
 }
 
+/**
+ * Standard API response envelope
+ */
 export interface SuccessResponse {
   success: boolean;
   message: string;
   data?: unknown | null;
 }
 
+/**
+ * Standard API error response envelope
+ */
 export interface ErrorResponse {
   success: boolean;
   message: string;
@@ -133,7 +146,6 @@ export interface AssetCategory {
   categoryName?: string;
   description?: string | null;
   createdAt?: string;
-  assetCount?: number;
 }
 
 export interface AssetLocationInfo {
@@ -141,28 +153,28 @@ export interface AssetLocationInfo {
   provinceName?: string;
   flagUrl?: string | null;
   themeAccentColor?: string | null;
-}
+} | null
 
 export interface AssetDistrictInfo {
   id?: string;
   districtName?: string;
-}
+} | null
 
 export interface AssetFacilityInfo {
   id?: string;
   facilityName?: string;
-}
+} | null
 
 export interface AssetCategoryInfo {
   id?: string;
   categoryName?: string;
-}
+} | null
 
 export interface AssetUserInfo {
   id?: string;
   fullName?: string;
   email?: string;
-}
+} | null
 
 export type AssetListItemStatus = typeof AssetListItemStatus[keyof typeof AssetListItemStatus];
 
@@ -348,7 +360,7 @@ export interface ProvinceInfo {
   provinceName?: string;
   flagUrl?: string | null;
   themeAccentColor?: string | null;
-}
+} | null
 
 export interface ProvincialDashboard {
   province?: ProvinceInfo | null;
@@ -541,13 +553,15 @@ status?: string;
 category_id?: string;
 };
 
+export type GetAssetsReport200Data = {
+  items?: AssetReportRow[];
+  total?: number;
+};
+
 export type GetAssetsReport200 = {
   success?: boolean;
   message?: string;
-  data?: {
-    items: AssetReportRow[];
-    total: number;
-  };
+  data?: GetAssetsReport200Data;
 };
 
 export type GetReportSummary200 = {
@@ -559,5 +573,53 @@ export type GetReportSummary200 = {
 export type GetNotifications200 = {
   success?: boolean;
   data?: Notification[];
+};
+
+export type ListStockItemsParams = {
+search?: string;
+/**
+ * When "true", returns only items at or below their reorder level
+ */
+low_stock?: string;
+};
+
+export type CreateStockItemBody = {
+  item_code: string;
+  item_name: string;
+  category?: string | null;
+  description?: string | null;
+  unit_of_measure?: string;
+  on_hand_quantity?: number;
+  reorder_level?: number;
+  unit_cost?: string | null;
+  supplier?: string | null;
+  notes?: string | null;
+  province_id?: string | null;
+  agency_id?: string | null;
+  facility_id?: string | null;
+};
+
+export type UpdateStockItemBody = { [key: string]: unknown };
+
+export type RecordStockMovementBodyMovementType = typeof RecordStockMovementBodyMovementType[keyof typeof RecordStockMovementBodyMovementType];
+
+
+export const RecordStockMovementBodyMovementType = {
+  receive: 'receive',
+  issue: 'issue',
+  transfer: 'transfer',
+  adjust: 'adjust',
+} as const;
+
+export type RecordStockMovementBody = {
+  movement_type: RecordStockMovementBodyMovementType;
+  /** @minimum 1 */
+  quantity: number;
+  from_facility_id?: string | null;
+  to_facility_id?: string | null;
+  issued_to_user?: string | null;
+  issued_to_name?: string | null;
+  reference?: string | null;
+  reason?: string | null;
 };
 

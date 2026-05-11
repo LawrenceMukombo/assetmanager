@@ -9,4 +9,4 @@
 export interface AssetCategoryInfo {
   id?: string;
   categoryName?: string;
-}
+} | null

@@ -1,9 +1,24 @@
 import { Router } from "express";
 import { eq, and, isNull, ilike, or, sql, desc } from "drizzle-orm";
 import { db, stockItems, stockMovements, facilities, users, provinces, agencies, activityLogs } from "@workspace/db";
+import type { Request, Response, NextFunction } from "express";
 import { requireAuth, requireAssetAdmin } from "../lib/auth";
 
 const router = Router();
+
+// Stock catalog management (create/edit items): admin-only — excludes Provincial Asset Officer
+const STOCK_ADMIN_ROLES = ["Super Admin", "National Asset Controller", "Provincial Admin", "Agency Admin"];
+function requireStockAdmin(req: Request, res: Response, next: NextFunction): void {
+  if (!req.user) {
+    res.status(401).json({ success: false, message: "Authentication required", data: null });
+    return;
+  }
+  if (!STOCK_ADMIN_ROLES.includes(req.user.roleName)) {
+    res.status(403).json({ success: false, message: "Admin role required to manage stock items", data: null });
+    return;
+  }
+  next();
+}
 
 function orNull(v: unknown): string | null {
   if (v === null || v === undefined || v === "") return null;
@@ -62,14 +77,50 @@ router.get("/v1/stock", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/v1/stock", requireAuth, requireAssetAdmin, async (req, res) => {
+router.post("/v1/stock", requireAuth, requireStockAdmin, async (req, res) => {
   if (!req.user) return;
   const body = req.body;
   if (!body.item_code || !body.item_name) {
     res.status(400).json({ success: false, message: "item_code and item_name are required", data: null });
     return;
   }
+  // Enforce strict scope: non-national users cannot place stock outside their scope.
   const isAgency = req.user.scopeLevel === "agency" || !!req.user.agencyId;
+  let agencyId: string | null;
+  let provinceId: string | null;
+  let facilityId: string | null = orNull(body.facility_id);
+  if (isAgency) {
+    agencyId = req.user.agencyId ?? null;
+    provinceId = null;
+    if (!agencyId) {
+      res.status(403).json({ success: false, message: "User has no agency scope", data: null });
+      return;
+    }
+    // Body cannot override agency
+    if (body.agency_id && body.agency_id !== agencyId) {
+      res.status(403).json({ success: false, message: "Cannot create stock outside your agency", data: null });
+      return;
+    }
+  } else if (req.user.scopeLevel === "national") {
+    agencyId = orNull(body.agency_id);
+    provinceId = orNull(body.province_id);
+  } else {
+    // Province / facility scoped users: force province from token
+    agencyId = null;
+    provinceId = req.user.provinceId ?? null;
+    if (!provinceId) {
+      res.status(403).json({ success: false, message: "User has no province scope", data: null });
+      return;
+    }
+    if (body.province_id && body.province_id !== provinceId) {
+      res.status(403).json({ success: false, message: "Cannot create stock outside your province", data: null });
+      return;
+    }
+    if (req.user.facilityId && facilityId && facilityId !== req.user.facilityId) {
+      res.status(403).json({ success: false, message: "Cannot create stock outside your facility", data: null });
+      return;
+    }
+  }
   try {
     const [row] = await db.insert(stockItems).values({
       itemCode: body.item_code,
@@ -82,9 +133,9 @@ router.post("/v1/stock", requireAuth, requireAssetAdmin, async (req, res) => {
       unitCost: orNull(body.unit_cost),
       supplier: orNull(body.supplier),
       notes: orNull(body.notes),
-      provinceId: isAgency ? null : (orNull(body.province_id) ?? req.user.provinceId ?? null),
-      agencyId: isAgency ? req.user.agencyId : orNull(body.agency_id),
-      facilityId: orNull(body.facility_id),
+      provinceId,
+      agencyId,
+      facilityId,
       createdBy: req.user.userId,
     }).returning();
     res.status(201).json({ success: true, message: "Stock item created", data: row });
@@ -156,7 +207,7 @@ router.get("/v1/stock/:id", requireAuth, async (req, res) => {
   }
 });
 
-router.patch("/v1/stock/:id", requireAuth, requireAssetAdmin, async (req, res) => {
+router.patch("/v1/stock/:id", requireAuth, requireStockAdmin, async (req, res) => {
   if (!req.user) return;
   const body = req.body;
   try {

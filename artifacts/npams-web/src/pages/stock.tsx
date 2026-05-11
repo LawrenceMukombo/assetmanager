@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
-import { ADMIN_ROLES, OFFICER_ROLES } from "@/App";
+import { ADMIN_ROLES } from "@/App";
 import { apiFetchJson } from "@/lib/api-fetch";
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
@@ -53,7 +53,6 @@ export default function StockPage() {
   const qc = useQueryClient();
 
   const isAdmin = user?.role ? ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]) : false;
-  const isOfficer = user?.role ? OFFICER_ROLES.includes(user.role as typeof OFFICER_ROLES[number]) : false;
 
   const [search, setSearch] = useState("");
   const [lowOnly, setLowOnly] = useState(false);
@@ -100,7 +99,7 @@ export default function StockPage() {
           </h1>
           <p className="text-sm text-muted-foreground">Consumables, stationery, uniforms and other inventoried supplies.</p>
         </div>
-        {isOfficer && (
+        {isAdmin && (
           <Button onClick={() => setShowCreate(true)}>
             <Plus className="w-4 h-4 mr-1" /> New Stock Item
           </Button>

@@ -9,5 +9,6 @@ import type { ProvinceSummaryRow } from "./provinceSummaryRow";
 
 export type GetReportSummary200 = {
   success?: boolean;
+  message?: string;
   data?: ProvinceSummaryRow[];
 };

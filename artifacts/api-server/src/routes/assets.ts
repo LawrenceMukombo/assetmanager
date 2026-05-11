@@ -633,12 +633,19 @@ router.patch("/v1/assets/:id/status", requireAuth, requireAssetAdmin, async (req
       missing: "Reported as Missing",
     };
 
+    const actionTypeMap: Record<string, string> = {
+      active: "STATUS_ACTIVATED",
+      under_maintenance: "STATUS_TO_MAINTENANCE",
+      disposed: "STATUS_DISPOSED",
+      missing: "STATUS_REPORTED_MISSING",
+    };
     await db.insert(activityLogs).values({
       userId: req.user.userId,
-      actionType: "STATUS_CHANGE",
+      actionType: actionTypeMap[status] ?? "STATUS_CHANGE",
       entityType: "asset",
       entityId: existing.id,
       description: `${actionLabels[status] ?? `Status changed to ${status}`} — ${existing.assetTag}${notes ? ". Notes: " + notes : ""}`,
+      metadata: { fromStatus: existing.status, toStatus: status, notes: notes ?? null },
     });
 
     res.json({ success: true, message: "Asset status updated", data: updated });

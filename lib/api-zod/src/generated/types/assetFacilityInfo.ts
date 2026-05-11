@@ -9,4 +9,4 @@
 export interface AssetFacilityInfo {
   id?: string;
   facilityName?: string;
-}
+} | null

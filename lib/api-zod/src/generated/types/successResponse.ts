@@ -6,7 +6,11 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Standard API response envelope
+ */
 export interface SuccessResponse {
   success: boolean;
   message: string;
+  data?: unknown | null;
 }

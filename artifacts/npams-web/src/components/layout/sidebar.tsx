@@ -209,14 +209,16 @@ export function Sidebar() {
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={location === "/system-status"}>
-                      <Link href="/system-status">
-                        <ServerCog />
-                        <span>System Status</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
+                  {(user?.role === "Super Admin" || user?.role === "Agency Admin") && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={location === "/system-status"}>
+                        <Link href="/system-status">
+                          <ServerCog />
+                          <span>System Status</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
                 </>
               )}
             </SidebarMenu>

@@ -8,13 +8,8 @@ const startedAt = Date.now();
 
 router.get("/v1/system/status", requireAuth, async (req, res) => {
   if (!req.user) return;
-  if (
-    req.user.roleName !== "Super Admin" &&
-    req.user.roleName !== "Agency Admin" &&
-    req.user.roleName !== "Provincial Admin" &&
-    req.user.roleName !== "National Asset Controller"
-  ) {
-    res.status(403).json({ success: false, message: "Admin role required", data: null });
+  if (req.user.roleName !== "Super Admin" && req.user.roleName !== "Agency Admin") {
+    res.status(403).json({ success: false, message: "Super Admin or Agency Admin role required", data: null });
     return;
   }
   let dbOk = false;

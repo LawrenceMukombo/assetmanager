@@ -2,8 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { apiFetchJson } from "@/lib/api-fetch";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ServerCog, Database, ShieldCheck, Activity, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ServerCog, Database, ShieldCheck, Activity, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 type StatusData = {
   api: { status: string; uptime_seconds: number };
@@ -30,7 +32,8 @@ function formatUptime(s: number): string {
 }
 
 export default function SystemStatusPage() {
-  const { data, isLoading, error } = useQuery<StatusData>({
+  const { toast } = useToast();
+  const { data, isLoading, error, refetch, isFetching, dataUpdatedAt } = useQuery<StatusData>({
     queryKey: ["system-status"],
     queryFn: async () => {
       const r = await apiFetchJson<StatusData>("/api/v1/system/status");
@@ -40,6 +43,18 @@ export default function SystemStatusPage() {
     refetchInterval: 30000,
   });
 
+  const runHealthCheck = async () => {
+    const result = await refetch();
+    if (result.data) {
+      const apiOk = result.data.api.status === "ok";
+      const dbOk = result.data.database.status === "ok";
+      toast({
+        title: apiOk && dbOk ? "Health check passed" : "Health check found issues",
+        description: `API: ${result.data.api.status} · DB: ${result.data.database.status} (${result.data.database.latency_ms ?? "n/a"} ms)`,
+      });
+    }
+  };
+
   if (isLoading) return <div className="p-6"><Skeleton className="h-64 w-full" /></div>;
   if (error || !data) return <div className="p-6 text-destructive">Failed to load system status.</div>;
 
@@ -48,11 +63,20 @@ export default function SystemStatusPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <ServerCog className="w-6 h-6" /> System Status
-        </h1>
-        <p className="text-sm text-muted-foreground">Operational health, backups and disaster recovery posture.</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold flex items-center gap-2">
+            <ServerCog className="w-6 h-6" /> System Status
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Operational health, backups and disaster recovery posture.
+            {dataUpdatedAt ? ` · Last checked ${new Date(dataUpdatedAt).toLocaleTimeString()}` : ""}
+          </p>
+        </div>
+        <Button onClick={runHealthCheck} disabled={isFetching} variant="outline">
+          <RefreshCw className={`w-4 h-4 mr-1 ${isFetching ? "animate-spin" : ""}`} />
+          Run Health Check
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -5,8 +5,9 @@
  * National Public Asset Management System (NPAMS) API
  * OpenAPI spec version: 1.0.0
  */
+import type { AssetReportRow } from "./assetReportRow";
 
-export interface AssetDistrictInfo {
-  id?: string;
-  districtName?: string;
-} | null
+export type GetAssetsReport200Data = {
+  items?: AssetReportRow[];
+  total?: number;
+};

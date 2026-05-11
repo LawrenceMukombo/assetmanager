@@ -5,7 +5,13 @@
  * National Public Asset Management System (NPAMS) API
  * OpenAPI spec version: 1.0.0
  */
+import type { HealthStatusData } from "./healthStatusData";
 
+/**
+ * Standard response envelope for health check
+ */
 export interface HealthStatus {
-  status: string;
+  success: boolean;
+  message: string;
+  data?: HealthStatusData;
 }

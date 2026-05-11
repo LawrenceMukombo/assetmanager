@@ -10,16 +10,17 @@ import * as zod from "zod";
 /**
  * @summary Health check
  */
-export const HealthCheckResponse = zod.object({
-  success: zod.boolean(),
-  message: zod.string(),
-  data: zod
-    .object({
-      status: zod.string(),
-    })
-    .nullable()
-    .optional(),
-});
+export const HealthCheckResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod
+      .object({
+        status: zod.string().optional(),
+      })
+      .nullish(),
+  })
+  .describe("Standard response envelope for health check");
 
 /**
  * @summary Login
@@ -79,10 +80,13 @@ export const RefreshTokenResponse = zod.object({
 /**
  * @summary Logout
  */
-export const LogoutResponse = zod.object({
-  success: zod.boolean(),
-  message: zod.string(),
-});
+export const LogoutResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
 
 /**
  * @summary Request password reset
@@ -91,10 +95,13 @@ export const ForgotPasswordBody = zod.object({
   email: zod.string().email(),
 });
 
-export const ForgotPasswordResponse = zod.object({
-  success: zod.boolean(),
-  message: zod.string(),
-});
+export const ForgotPasswordResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
 
 /**
  * @summary List users (scoped)
@@ -194,10 +201,13 @@ export const UpdateUserBody = zod.object({
   phone_number: zod.string().optional(),
 });
 
-export const UpdateUserResponse = zod.object({
-  success: zod.boolean(),
-  message: zod.string(),
-});
+export const UpdateUserResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
 
 /**
  * @summary Deactivate user
@@ -206,10 +216,13 @@ export const DeactivateUserParams = zod.object({
   id: zod.coerce.string(),
 });
 
-export const DeactivateUserResponse = zod.object({
-  success: zod.boolean(),
-  message: zod.string(),
-});
+export const DeactivateUserResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
 
 /**
  * @summary List all provinces
@@ -362,10 +375,13 @@ export const UpdateCategoryBody = zod.object({
   description: zod.string().optional(),
 });
 
-export const UpdateCategoryResponse = zod.object({
-  success: zod.boolean(),
-  message: zod.string(),
-});
+export const UpdateCategoryResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
 
 /**
  * @summary Delete category
@@ -374,10 +390,13 @@ export const DeleteCategoryParams = zod.object({
   id: zod.coerce.string(),
 });
 
-export const DeleteCategoryResponse = zod.object({
-  success: zod.boolean(),
-  message: zod.string(),
-});
+export const DeleteCategoryResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
 
 /**
  * @summary List assets (scoped, paginated)
@@ -601,10 +620,13 @@ export const UpdateAssetBody = zod.object({
   assigned_to_user: zod.string().optional(),
 });
 
-export const UpdateAssetResponse = zod.object({
-  success: zod.boolean(),
-  message: zod.string(),
-});
+export const UpdateAssetResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
 
 /**
  * @summary Delete asset (soft delete)
@@ -613,10 +635,13 @@ export const DeleteAssetParams = zod.object({
   id: zod.coerce.string(),
 });
 
-export const DeleteAssetResponse = zod.object({
-  success: zod.boolean(),
-  message: zod.string(),
-});
+export const DeleteAssetResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
 
 /**
  * @summary Get QR code data for asset
@@ -817,7 +842,138 @@ export const MarkNotificationReadParams = zod.object({
   id: zod.coerce.string(),
 });
 
-export const MarkNotificationReadResponse = zod.object({
-  success: zod.boolean(),
-  message: zod.string(),
+export const MarkNotificationReadResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
+
+/**
+ * @summary List stock & inventory items in caller's scope
+ */
+export const ListStockItemsQueryParams = zod.object({
+  search: zod.coerce.string().optional(),
+  low_stock: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      'When \"true\", returns only items at or below their reorder level',
+    ),
 });
+
+export const ListStockItemsResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
+
+/**
+ * @summary Create a stock item (admin only — excludes Provincial Asset Officer)
+ */
+export const CreateStockItemBody = zod.object({
+  item_code: zod.string(),
+  item_name: zod.string(),
+  category: zod.string().nullish(),
+  description: zod.string().nullish(),
+  unit_of_measure: zod.string().optional(),
+  on_hand_quantity: zod.number().optional(),
+  reorder_level: zod.number().optional(),
+  unit_cost: zod.string().nullish(),
+  supplier: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  province_id: zod.string().nullish(),
+  agency_id: zod.string().nullish(),
+  facility_id: zod.string().nullish(),
+});
+
+/**
+ * @summary Stock item detail with movement history
+ */
+export const GetStockItemParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetStockItemResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
+
+/**
+ * @summary Update a stock item (admin only)
+ */
+export const UpdateStockItemParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateStockItemBody = zod.object({}).passthrough();
+
+export const UpdateStockItemResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
+
+export const ListStockMovementsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListStockMovementsResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
+
+/**
+ * @summary Record a stock movement (officer or admin) — atomic with row-level lock
+ */
+export const RecordStockMovementParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const RecordStockMovementBody = zod.object({
+  movement_type: zod.enum(["receive", "issue", "transfer", "adjust"]),
+  quantity: zod.number().min(1),
+  from_facility_id: zod.string().nullish(),
+  to_facility_id: zod.string().nullish(),
+  issued_to_user: zod.string().nullish(),
+  issued_to_name: zod.string().nullish(),
+  reference: zod.string().nullish(),
+  reason: zod.string().nullish(),
+});
+
+/**
+ * @summary Chronological lifecycle events for an asset
+ */
+export const GetAssetLifecycleParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetAssetLifecycleResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
+
+/**
+ * @summary System health, backups & disaster recovery posture (Super Admin / Agency Admin only)
+ */
+export const GetSystemStatusResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
