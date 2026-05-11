@@ -35,7 +35,7 @@ export default function Login() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [showForgotDialog, setShowForgotDialog] = useState(false);
-  const [flagError, setFlagError] = useState(false);
+  const [logoError, setLogoError] = useState(false);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -61,10 +61,10 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-10 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 relative overflow-hidden">
       <div
-        className="absolute inset-0 pointer-events-none opacity-70"
+        className="absolute inset-0 pointer-events-none opacity-80"
         style={{
           background:
-            "radial-gradient(ellipse at 20% 20%, rgba(37,99,235,0.18) 0%, transparent 55%), radial-gradient(ellipse at 85% 80%, rgba(252,209,22,0.08) 0%, transparent 50%)",
+            "radial-gradient(ellipse at 20% 20%, rgba(15,76,129,0.35) 0%, transparent 55%), radial-gradient(ellipse at 85% 80%, rgba(252,209,22,0.10) 0%, transparent 50%)",
         }}
       />
       <div className="absolute inset-x-0 top-0 h-1 flex" aria-hidden>
@@ -73,29 +73,41 @@ export default function Login() {
         <div className="flex-1" style={{ background: "#CE1126" }} />
       </div>
 
-      <div className="relative w-full max-w-[400px]">
+      <div className="relative w-full max-w-[420px]">
         <div className="rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-card">
-          <div className="px-8 pt-8 pb-6 flex flex-col items-center text-center border-b">
-            <div className="relative w-16 h-16 rounded-xl flex items-center justify-center mb-4 overflow-hidden bg-muted ring-1 ring-border shadow-sm">
-              {flagError ? (
+          <div
+            className="px-8 pt-8 pb-6 flex flex-col items-center text-center border-b"
+            style={{
+              background:
+                "linear-gradient(180deg, rgba(15,76,129,0.12) 0%, transparent 100%)",
+            }}
+          >
+            <div className="relative w-24 h-24 rounded-2xl flex items-center justify-center mb-4 overflow-hidden bg-white ring-1 ring-border shadow-sm p-2">
+              {logoError ? (
                 <div
-                  className="w-full h-full flex items-center justify-center text-sm font-bold"
-                  style={{ background: "linear-gradient(135deg, #000 50%, #CE1126 50%)", color: "#FCD116" }}
+                  className="w-full h-full flex items-center justify-center text-sm font-bold rounded-lg"
+                  style={{ background: "#0F4C81", color: "#FCD116" }}
                 >
-                  PNG
+                  ICSA
                 </div>
               ) : (
                 <img
-                  src="/flags/png_national.svg"
-                  alt="Papua New Guinea Flag"
-                  className="w-full h-full object-cover"
-                  onError={() => setFlagError(true)}
+                  src="/agencies/pngica.png"
+                  alt="PNG Immigration & Citizenship Authority"
+                  className="w-full h-full object-contain"
+                  onError={() => setLogoError(true)}
                 />
               )}
             </div>
-            <h1 className="text-xl font-semibold tracking-tight">NPAMS</h1>
-            <p className="text-sm text-muted-foreground mt-1">National Public Asset Management System</p>
-            <p className="text-xs text-muted-foreground/70 mt-0.5">Independent State of Papua New Guinea</p>
+            <h1 className="text-xl font-semibold tracking-tight" style={{ color: "#0F4C81" }}>
+              PNG Immigration &amp; Citizenship Authority
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Asset Management System &middot; Powered by NPAMS
+            </p>
+            <p className="text-xs text-muted-foreground/70 mt-0.5">
+              Independent State of Papua New Guinea
+            </p>
           </div>
 
           <div className="px-8 py-7">
@@ -113,7 +125,7 @@ export default function Login() {
                     <FormItem>
                       <FormLabel>Email address</FormLabel>
                       <FormControl>
-                        <Input placeholder="name@gov.pg" autoComplete="username" {...field} />
+                        <Input placeholder="name@ica.gov.pg" autoComplete="username" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -164,12 +176,12 @@ export default function Login() {
               <span className="block w-3 h-3 rounded-full" style={{ background: "#FCD116" }} />
               <span className="block w-3 h-3 rounded-full" style={{ background: "#CE1126" }} />
             </div>
-            <p className="text-[11px] text-muted-foreground">Papua New Guinea</p>
+            <p className="text-[11px] text-muted-foreground">PNG Immigration &amp; Citizenship Authority</p>
           </div>
         </div>
 
         <p className="text-center text-[11px] text-white/50 mt-4">
-          © {new Date().getFullYear()} Government of Papua New Guinea
+          © {new Date().getFullYear()} PNG Immigration &amp; Citizenship Authority
         </p>
       </div>
 
@@ -182,7 +194,7 @@ export default function Login() {
                 <p>Self-service password reset is not available for NPAMS accounts.</p>
                 <p>To reset your password, please contact your system administrator or provincial IT support officer.</p>
                 <p className="font-medium text-foreground">
-                  ICT Support Desk: <span className="font-normal">ict@treasury.gov.pg</span>
+                  ICSA ICT Support Desk: <span className="font-normal">ict@ica.gov.pg</span>
                 </p>
               </div>
             </DialogDescription>
