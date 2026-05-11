@@ -1,0 +1,14 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "dbO-zC43bOQa33eWK_Tyi"
+uri = "file://proposals/ICSA-NPAMS-Proposal.pdf"
+type = "pdf"
+title = "ICSA NPAMS Proposal — Final (PDF, K 104,500 incl. GST)"
+
+[[outputs]]
+id = "y-BDH_n-3h515u3gsIoVS"
+uri = "file://proposals/ICSA-NPAMS-Proposal.md"
+type = "text"
+title = "ICSA NPAMS Proposal (Markdown source)"
