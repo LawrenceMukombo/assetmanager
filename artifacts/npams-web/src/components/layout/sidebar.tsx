@@ -33,6 +33,7 @@ import {
   Wrench,
   Boxes,
   ServerCog,
+  ShoppingCart,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
@@ -169,6 +170,15 @@ export function Sidebar() {
                   <Link href="/stock">
                     <Boxes />
                     <span>Stock & Inventory</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location.startsWith("/purchase-requests")}>
+                  <Link href="/purchase-requests">
+                    <ShoppingCart />
+                    <span>Purchase Requests</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

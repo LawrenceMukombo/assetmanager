@@ -23,8 +23,10 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, ArrowDown, ArrowUp, ArrowLeftRight, Plus, Boxes, Pencil } from "lucide-react";
+import { ArrowLeft, ArrowDown, ArrowUp, ArrowLeftRight, Plus, Boxes, Pencil, ShoppingCart, PackageCheck } from "lucide-react";
 import { format } from "date-fns";
+import { ReorderDialog } from "@/components/reorder-dialog";
+import { Link as WLink } from "wouter";
 
 type Movement = {
   id: string;
@@ -105,6 +107,7 @@ export default function StockDetailPage() {
   const [thresholdBalance, setThresholdBalance] = useState<Balance | null>(null);
   const [thresholdValue, setThresholdValue] = useState("0");
 
+  const [showReorder, setShowReorder] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState({
     item_name: "",
@@ -122,6 +125,26 @@ export default function StockDetailPage() {
       const r = await apiFetchJson<StockDetail>(`/api/v1/stock/${id}`);
       return r.data!;
     },
+  });
+
+  type PR = {
+    id: string;
+    requestNumber: string;
+    status: "draft" | "submitted" | "approved" | "rejected" | "received" | "closed";
+    quantity: number;
+    receivedQuantity: number;
+    supplier: string | null;
+    createdAt: string;
+    requester: { id: string; fullName: string } | null;
+    stockItem: { id: string; itemCode: string; itemName: string; unitOfMeasure: string };
+  };
+  const { data: requests } = useQuery<PR[]>({
+    queryKey: ["purchase-requests", "for-item", id],
+    queryFn: async () => {
+      const r = await apiFetchJson<PR[]>(`/api/v1/purchase-requests?stock_item_id=${encodeURIComponent(id!)}`);
+      return r.data ?? [];
+    },
+    enabled: !!id,
   });
 
   const { data: facilities } = useQuery<Facility[]>({
@@ -260,6 +283,11 @@ export default function StockDetailPage() {
           {isAdmin && (
             <Button variant="outline" onClick={openEdit}>
               <Pencil className="w-4 h-4 mr-1" /> Edit item
+            </Button>
+          )}
+          {low && (
+            <Button onClick={() => setShowReorder(true)}>
+              <ShoppingCart className="w-4 h-4 mr-1" /> Reorder
             </Button>
           )}
           {isOfficer && (
@@ -403,6 +431,76 @@ export default function StockDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Purchase requests</CardTitle>
+          <WLink href="/purchase-requests"><Button variant="ghost" size="sm">Open queue</Button></WLink>
+        </CardHeader>
+        <CardContent className="p-0">
+          {(requests?.length ?? 0) === 0 ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">
+              No purchase requests for this item yet.
+              {low && (
+                <div className="mt-3">
+                  <Button size="sm" onClick={() => setShowReorder(true)}>
+                    <ShoppingCart className="w-4 h-4 mr-1" /> Raise reorder request
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Request #</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead>Supplier</TableHead>
+                  <TableHead>Requested by</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {requests!.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="font-mono text-xs">{r.requestNumber}</TableCell>
+                    <TableCell className="text-sm">{format(new Date(r.createdAt), "dd MMM yyyy")}</TableCell>
+                    <TableCell className="text-right font-mono">
+                      {r.quantity}
+                      {r.receivedQuantity > 0 && r.receivedQuantity < r.quantity && (
+                        <span className="text-xs text-muted-foreground"> ({r.receivedQuantity} rec.)</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm">{r.supplier ?? "—"}</TableCell>
+                    <TableCell className="text-sm">{r.requester?.fullName ?? "—"}</TableCell>
+                    <TableCell>
+                      <Badge className={
+                        r.status === "submitted" ? "bg-amber-100 text-amber-800 border-amber-200"
+                        : r.status === "approved" ? "bg-blue-100 text-blue-800 border-blue-200"
+                        : r.status === "received" ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                        : r.status === "closed" ? "bg-green-100 text-green-800 border-green-200"
+                        : r.status === "rejected" ? "bg-red-100 text-red-800 border-red-200"
+                        : "bg-gray-100 text-gray-800 border-gray-200"
+                      }>{r.status}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <ReorderDialog
+        item={data ? {
+          id: data.id, itemCode: data.itemCode, itemName: data.itemName, unitOfMeasure: data.unitOfMeasure,
+          onHandQuantity: data.onHandQuantity, reorderLevel: data.reorderLevel,
+          supplier: data.supplier, unitCost: data.unitCost,
+        } : null}
+        open={showReorder}
+        onOpenChange={setShowReorder}
+      />
 
       <Dialog open={showMovement} onOpenChange={setShowMovement}>
         <DialogContent>

@@ -12,6 +12,15 @@ export const stockMovementTypeEnum = pgEnum("stock_movement_type", [
   "adjust",
 ]);
 
+export const purchaseRequestStatusEnum = pgEnum("purchase_request_status", [
+  "draft",
+  "submitted",
+  "approved",
+  "rejected",
+  "received",
+  "closed",
+]);
+
 export const stockItems = pgTable(
   "stock_items",
   {
@@ -83,8 +92,44 @@ export const stockMovements = pgTable(
   ],
 );
 
+export const purchaseRequests = pgTable(
+  "purchase_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requestNumber: varchar("request_number", { length: 50 }).notNull().unique(),
+    stockItemId: uuid("stock_item_id").notNull().references(() => stockItems.id),
+    supplier: varchar("supplier", { length: 255 }),
+    quantity: integer("quantity").notNull(),
+    receivedQuantity: integer("received_quantity").notNull().default(0),
+    unitCost: varchar("unit_cost", { length: 32 }),
+    notes: text("notes"),
+    status: purchaseRequestStatusEnum("status").notNull().default("submitted"),
+    facilityId: uuid("facility_id").references(() => facilities.id),
+    agencyId: uuid("agency_id").references(() => agencies.id),
+    provinceId: uuid("province_id").references(() => provinces.id),
+    requestedBy: uuid("requested_by").notNull().references(() => users.id),
+    approvedBy: uuid("approved_by").references(() => users.id),
+    approvedAt: timestamp("approved_at"),
+    rejectedReason: text("rejected_reason"),
+    receivedAt: timestamp("received_at"),
+    closedAt: timestamp("closed_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_purchase_requests_status").on(t.status),
+    index("idx_purchase_requests_stock_item").on(t.stockItemId),
+    index("idx_purchase_requests_agency").on(t.agencyId),
+    index("idx_purchase_requests_province").on(t.provinceId),
+    index("idx_purchase_requests_facility").on(t.facilityId),
+    index("idx_purchase_requests_requested_by").on(t.requestedBy),
+  ],
+);
+
 export type StockItem = typeof stockItems.$inferSelect;
 export type InsertStockItem = typeof stockItems.$inferInsert;
 export type StockBalance = typeof stockBalances.$inferSelect;
 export type StockMovement = typeof stockMovements.$inferSelect;
 export type InsertStockMovement = typeof stockMovements.$inferInsert;
+export type PurchaseRequest = typeof purchaseRequests.$inferSelect;
+export type InsertPurchaseRequest = typeof purchaseRequests.$inferInsert;

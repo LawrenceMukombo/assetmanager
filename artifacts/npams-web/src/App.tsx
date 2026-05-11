@@ -26,6 +26,7 @@ import AuditVerify from "@/pages/audit-verify";
 import Maintenance from "@/pages/maintenance";
 import StockPage from "@/pages/stock";
 import StockDetailPage from "@/pages/stock-detail";
+import PurchaseRequestsPage from "@/pages/purchase-requests";
 import SystemStatusPage from "@/pages/system-status";
 const GIS = lazy(() => import("@/pages/gis"));
 
@@ -105,6 +106,7 @@ function Router() {
       <ProtectedRoute path="/maintenance" component={Maintenance} />
       <ProtectedRoute path="/stock" component={StockPage} />
       <ProtectedRoute path="/stock/:id" component={StockDetailPage} />
+      <ProtectedRoute path="/purchase-requests" component={PurchaseRequestsPage} />
       <ProtectedRoute path="/system-status" component={SystemStatusPage} requiredRoles={["Super Admin", "Agency Admin"]} />
       <Route path="/gis">
         <AuthGuard>

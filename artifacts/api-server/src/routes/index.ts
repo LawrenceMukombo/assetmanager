@@ -14,6 +14,7 @@ import auditRouter from "./audit";
 import maintenanceRouter from "./maintenance";
 import agencyRouter from "./agency";
 import stockRouter from "./stock";
+import purchaseRequestsRouter from "./purchase-requests";
 import systemRouter from "./system";
 
 const router: IRouter = Router();
@@ -33,6 +34,7 @@ router.use(auditRouter);
 router.use(maintenanceRouter);
 router.use(agencyRouter);
 router.use(stockRouter);
+router.use(purchaseRequestsRouter);
 router.use(systemRouter);
 
 export default router;

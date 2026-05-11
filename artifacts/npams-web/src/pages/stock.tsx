@@ -20,7 +20,8 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Boxes, Plus, AlertTriangle, ArrowRight } from "lucide-react";
+import { Boxes, Plus, AlertTriangle, ArrowRight, ShoppingCart } from "lucide-react";
+import { ReorderDialog, type ReorderItem } from "@/components/reorder-dialog";
 
 type StockBalanceSummary = {
   facilityId: string | null;
@@ -71,6 +72,7 @@ export default function StockPage() {
   const [lowOnly, setLowOnly] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [reorderItem, setReorderItem] = useState<ReorderItem | null>(null);
 
   const { data: items, isLoading } = useQuery<StockItem[]>({
     queryKey: ["stock", { search, lowOnly }],
@@ -172,7 +174,7 @@ export default function StockPage() {
                   <TableHead className="text-right">Total on hand</TableHead>
                   <TableHead>UoM</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="w-12"></TableHead>
+                  <TableHead className="w-32 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -208,10 +210,21 @@ export default function StockPage() {
                           <Badge variant="outline">OK</Badge>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <Link href={`/stock/${it.id}`}>
-                          <Button variant="ghost" size="sm"><ArrowRight className="w-4 h-4" /></Button>
-                        </Link>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-end gap-1">
+                          {low && (
+                            <Button variant="outline" size="sm" onClick={() => setReorderItem({
+                              id: it.id, itemCode: it.itemCode, itemName: it.itemName, unitOfMeasure: it.unitOfMeasure,
+                              onHandQuantity: it.onHandQuantity, reorderLevel: it.reorderLevel,
+                              supplier: it.supplier, unitCost: it.unitCost,
+                            })}>
+                              <ShoppingCart className="w-4 h-4 mr-1" /> Reorder
+                            </Button>
+                          )}
+                          <Link href={`/stock/${it.id}`}>
+                            <Button variant="ghost" size="sm"><ArrowRight className="w-4 h-4" /></Button>
+                          </Link>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -221,6 +234,8 @@ export default function StockPage() {
           )}
         </CardContent>
       </Card>
+
+      <ReorderDialog item={reorderItem} open={!!reorderItem} onOpenChange={(o) => !o && setReorderItem(null)} />
 
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-lg">
