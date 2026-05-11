@@ -48,7 +48,25 @@ router.get("/v1/stock", requireAuth, async (req, res) => {
       conditions.push(or(ilike(stockItems.itemName, `%${search}%`), ilike(stockItems.itemCode, `%${search}%`))!);
     }
     if (low_stock === "true") {
-      conditions.push(sql`${stockItems.onHandQuantity} <= ${stockItems.reorderLevel}`);
+      // An item is "low" if any per-location balance row sits at or below its
+      // configured reorder threshold (and that threshold is > 0). Falls back to
+      // the item-level threshold for items that have no per-location threshold
+      // configured anywhere.
+      conditions.push(sql`(
+        EXISTS (
+          SELECT 1 FROM ${stockBalances} sb
+          WHERE sb.stock_item_id = ${stockItems.id}
+            AND (
+              (sb.reorder_level > 0 AND sb.quantity <= sb.reorder_level)
+              OR (sb.reorder_level = 0 AND ${stockItems.reorderLevel} > 0 AND sb.quantity <= ${stockItems.reorderLevel})
+            )
+        )
+        OR (
+          ${stockItems.reorderLevel} > 0
+          AND ${stockItems.onHandQuantity} <= ${stockItems.reorderLevel}
+          AND NOT EXISTS (SELECT 1 FROM ${stockBalances} sb2 WHERE sb2.stock_item_id = ${stockItems.id})
+        )
+      )`);
     }
     const rows = await db
       .select({
@@ -74,7 +92,48 @@ router.get("/v1/stock", requireAuth, async (req, res) => {
       .leftJoin(facilities, eq(stockItems.facilityId, facilities.id))
       .where(and(...conditions))
       .orderBy(stockItems.itemName);
-    res.json({ success: true, message: "Stock items retrieved", data: rows });
+
+    const itemIds = rows.map((r) => r.id);
+    const balRows = itemIds.length === 0 ? [] : await db
+      .select({
+        stockItemId: stockBalances.stockItemId,
+        facilityId: stockBalances.facilityId,
+        facilityName: facilities.facilityName,
+        quantity: stockBalances.quantity,
+        reorderLevel: stockBalances.reorderLevel,
+      })
+      .from(stockBalances)
+      .leftJoin(facilities, eq(stockBalances.facilityId, facilities.id))
+      .where(sql`${stockBalances.stockItemId} IN (${sql.join(itemIds.map((id) => sql`${id}`), sql`, `)})`);
+
+    const balByItem = new Map<string, typeof balRows>();
+    for (const b of balRows) {
+      const list = balByItem.get(b.stockItemId) ?? [];
+      list.push(b);
+      balByItem.set(b.stockItemId, list);
+    }
+
+    const enriched = rows.map((r) => {
+      const balances = (balByItem.get(r.id) ?? []).slice().sort((a, b) =>
+        (a.facilityName ?? "Unassigned / Agency reserve").localeCompare(b.facilityName ?? "Unassigned / Agency reserve"),
+      );
+      const totalQuantity = balances.length > 0
+        ? balances.reduce((s, b) => s + b.quantity, 0)
+        : (r.onHandQuantity ?? 0);
+      let lowLocationCount = balances.filter((b) => {
+        if (b.reorderLevel > 0) return b.quantity <= b.reorderLevel;
+        if (r.reorderLevel > 0) return b.quantity <= r.reorderLevel;
+        return false;
+      }).length;
+      // Legacy/edge items with no balance rows: fall back to item-level
+      // threshold so the badge agrees with the low_stock=true backend filter.
+      if (balances.length === 0 && r.reorderLevel > 0 && (r.onHandQuantity ?? 0) <= r.reorderLevel) {
+        lowLocationCount = 1;
+      }
+      return { ...r, balances, totalQuantity, lowLocationCount };
+    });
+
+    res.json({ success: true, message: "Stock items retrieved", data: enriched });
   } catch (err) {
     req.log.error({ err }, "Get stock items error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
@@ -194,9 +253,11 @@ router.get("/v1/stock/:id", requireAuth, async (req, res) => {
     }
     const balances = await db
       .select({
+        id: stockBalances.id,
         facilityId: stockBalances.facilityId,
         facilityName: facilities.facilityName,
         quantity: stockBalances.quantity,
+        reorderLevel: stockBalances.reorderLevel,
       })
       .from(stockBalances)
       .leftJoin(facilities, eq(stockBalances.facilityId, facilities.id))
@@ -254,6 +315,68 @@ router.patch("/v1/stock/:id", requireAuth, requireStockAdmin, async (req, res) =
   }
 });
 
+router.patch("/v1/stock/:id/balances", requireAuth, requireStockAdmin, async (req, res) => {
+  if (!req.user) return;
+  const body = req.body as { facility_id?: string | null; reorder_level?: number };
+  const reorder = Number(body.reorder_level);
+  if (!Number.isInteger(reorder) || reorder < 0) {
+    res.status(400).json({ success: false, message: "reorder_level must be a non-negative integer", data: null });
+    return;
+  }
+  const facilityId = body.facility_id ?? null;
+  try {
+    const conditions = [eq(stockItems.id, req.params.id), isNull(stockItems.deletedAt), ...scopeFilter(req.user)];
+    const [item] = await db.select({ id: stockItems.id }).from(stockItems).where(and(...conditions)).limit(1);
+    if (!item) {
+      res.status(404).json({ success: false, message: "Stock item not found", data: null });
+      return;
+    }
+    if (facilityId !== null) {
+      const [fac] = await db
+        .select({ id: facilities.id, districtId: facilities.districtId, provinceId: districts.provinceId })
+        .from(facilities)
+        .leftJoin(districts, eq(facilities.districtId, districts.id))
+        .where(eq(facilities.id, facilityId))
+        .limit(1);
+      if (!fac) {
+        res.status(400).json({ success: false, message: "Facility not found", data: null });
+        return;
+      }
+      const isAgencyScoped = req.user.scopeLevel === "agency" || !!req.user.agencyId;
+      if (!isAgencyScoped && !isWithinAssetScope(req.user, {
+        provinceId: fac.provinceId ?? null,
+        districtId: fac.districtId,
+        facilityId: fac.id,
+      })) {
+        res.status(403).json({ success: false, message: "Cannot configure thresholds for a facility outside your scope", data: null });
+        return;
+      }
+    }
+    const where = facilityId === null
+      ? and(eq(stockBalances.stockItemId, item.id), isNull(stockBalances.facilityId))
+      : and(eq(stockBalances.stockItemId, item.id), eq(stockBalances.facilityId, facilityId));
+    const existing = await db.select({ id: stockBalances.id }).from(stockBalances).where(where).limit(1);
+    if (existing.length > 0) {
+      const [updated] = await db.update(stockBalances)
+        .set({ reorderLevel: reorder, updatedAt: new Date() })
+        .where(eq(stockBalances.id, existing[0].id))
+        .returning();
+      res.json({ success: true, message: "Reorder threshold updated", data: updated });
+      return;
+    }
+    const [created] = await db.insert(stockBalances).values({
+      stockItemId: item.id,
+      facilityId,
+      quantity: 0,
+      reorderLevel: reorder,
+    }).returning();
+    res.json({ success: true, message: "Reorder threshold set", data: created });
+  } catch (err) {
+    req.log.error({ err }, "Update balance reorder error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
 router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (req, res) => {
   if (!req.user) return;
   const body = req.body;
@@ -297,7 +420,11 @@ router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (re
     const v = await validateFacilityScope(toFacilityId, "destination");
     if (!v.ok) { res.status(v.status).json({ success: false, message: v.message, data: null }); return; }
   }
-  const fromFacilityRaw = orNull(body.from_facility_id);
+  // Distinguish undefined (caller did not specify, fall back to item's primary
+  // facility) from explicit null (caller chose the agency reserve / unassigned
+  // bucket). Both are valid; only undefined triggers the fallback later.
+  const fromExplicit = Object.prototype.hasOwnProperty.call(body, "from_facility_id");
+  const fromFacilityRaw = fromExplicit ? orNull(body.from_facility_id) : undefined;
   if (fromFacilityRaw) {
     const v = await validateFacilityScope(fromFacilityRaw, "source");
     if (!v.ok) { res.status(v.status).json({ success: false, message: v.message, data: null }); return; }
@@ -321,7 +448,9 @@ router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (re
         .limit(1);
       if (!item) return { status: 404 as const, message: "Stock item not found" };
 
-      const fromFacilityId = orNull(body.from_facility_id) ?? item.facilityId ?? null;
+      const fromFacilityId: string | null = fromExplicit
+        ? (fromFacilityRaw ?? null)
+        : (item.facilityId ?? null);
 
       const lockBalance = async (facilityId: string | null) => {
         const where = facilityId === null

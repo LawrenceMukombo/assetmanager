@@ -49,6 +49,7 @@ export const stockBalances = pgTable(
     stockItemId: uuid("stock_item_id").notNull().references(() => stockItems.id, { onDelete: "cascade" }),
     facilityId: uuid("facility_id").references(() => facilities.id),
     quantity: integer("quantity").notNull().default(0),
+    reorderLevel: integer("reorder_level").notNull().default(0),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [

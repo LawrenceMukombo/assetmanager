@@ -900,6 +900,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
 
+  /v1/stock/{id}/balances:
+    patch:
+      operationId: setStockBalanceReorder
+      tags: [stock]
+      summary: Set the per-location reorder threshold (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reorder_level]
+              properties:
+                facility_id: { type: string, nullable: true, description: "Null = agency reserve / unassigned" }
+                reorder_level: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: Threshold updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
   /v1/stock/{id}/movements:
     get:
       operationId: listStockMovements

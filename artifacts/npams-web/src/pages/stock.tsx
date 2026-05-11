@@ -22,6 +22,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Boxes, Plus, AlertTriangle, ArrowRight } from "lucide-react";
 
+type StockBalanceSummary = {
+  facilityId: string | null;
+  facilityName: string | null;
+  quantity: number;
+  reorderLevel: number;
+};
+
 type StockItem = {
   id: string;
   itemCode: string;
@@ -36,6 +43,9 @@ type StockItem = {
   agency?: { id: string; agencyName: string; agencyCode: string } | null;
   province?: { id: string; provinceName: string } | null;
   facility?: { id: string; facilityName: string } | null;
+  balances?: StockBalanceSummary[];
+  totalQuantity?: number;
+  lowLocationCount?: number;
 };
 
 const EMPTY_FORM = {
@@ -91,7 +101,7 @@ export default function StockPage() {
     onError: (e) => toast({ variant: "destructive", title: "Create failed", description: (e as Error).message }),
   });
 
-  const lowCount = (items ?? []).filter((i) => i.onHandQuantity <= i.reorderLevel).length;
+  const lowCount = (items ?? []).filter((i) => (i.lowLocationCount ?? 0) > 0).length;
 
   return (
     <div className="p-6 space-y-6">
@@ -125,7 +135,7 @@ export default function StockPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2"><CardDescription>Total quantity on hand</CardDescription></CardHeader>
-          <CardContent><div className="text-2xl font-semibold">{(items ?? []).reduce((s, i) => s + i.onHandQuantity, 0).toLocaleString()}</div></CardContent>
+          <CardContent><div className="text-2xl font-semibold">{(items ?? []).reduce((s, i) => s + (i.totalQuantity ?? i.onHandQuantity), 0).toLocaleString()}</div></CardContent>
         </Card>
       </div>
 
@@ -158,9 +168,8 @@ export default function StockPage() {
                   <TableHead>Code</TableHead>
                   <TableHead>Item</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead className="text-right">On hand</TableHead>
-                  <TableHead className="text-right">Reorder</TableHead>
+                  <TableHead>Locations</TableHead>
+                  <TableHead className="text-right">Total on hand</TableHead>
                   <TableHead>UoM</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-12"></TableHead>
@@ -168,21 +177,33 @@ export default function StockPage() {
               </TableHeader>
               <TableBody>
                 {items?.map((it) => {
-                  const low = it.onHandQuantity <= it.reorderLevel;
+                  const balances = it.balances ?? [];
+                  const total = it.totalQuantity ?? it.onHandQuantity;
+                  const lowLocs = it.lowLocationCount ?? 0;
+                  const low = lowLocs > 0;
                   return (
                     <TableRow key={it.id} className="cursor-pointer hover:bg-muted/40" onClick={() => (window.location.href = `/stock/${it.id}`)}>
                       <TableCell className="font-mono text-xs">{it.itemCode}</TableCell>
                       <TableCell className="font-medium">{it.itemName}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">{it.category ?? "—"}</TableCell>
                       <TableCell className="text-sm">
-                        {[it.agency?.agencyName, it.province?.provinceName, it.facility?.facilityName].filter(Boolean).join(" · ") || <span className="text-muted-foreground">—</span>}
+                        {balances.length === 0 ? (
+                          <span className="text-muted-foreground">No balance rows</span>
+                        ) : (
+                          <div className="space-y-0.5">
+                            <div className="text-xs font-medium">{balances.length} location{balances.length === 1 ? "" : "s"}</div>
+                            <div className="text-xs text-muted-foreground truncate max-w-[260px]">
+                              {balances.slice(0, 3).map((b) => `${b.facilityName ?? "Reserve"} (${b.quantity})`).join(", ")}
+                              {balances.length > 3 ? ` +${balances.length - 3}` : ""}
+                            </div>
+                          </div>
+                        )}
                       </TableCell>
-                      <TableCell className="text-right font-mono">{it.onHandQuantity.toLocaleString()}</TableCell>
-                      <TableCell className="text-right font-mono text-muted-foreground">{it.reorderLevel.toLocaleString()}</TableCell>
+                      <TableCell className="text-right font-mono">{total.toLocaleString()}</TableCell>
                       <TableCell className="text-sm">{it.unitOfMeasure}</TableCell>
                       <TableCell>
                         {low ? (
-                          <Badge className="bg-amber-100 text-amber-800 border-amber-200">Low</Badge>
+                          <Badge className="bg-amber-100 text-amber-800 border-amber-200">Low at {lowLocs}</Badge>
                         ) : (
                           <Badge variant="outline">OK</Badge>
                         )}

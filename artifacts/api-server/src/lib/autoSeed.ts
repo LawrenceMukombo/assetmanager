@@ -147,6 +147,15 @@ async function seedAgencyStock(): Promise<void> {
   const [ica] = await db.select({ id: agencies.id }).from(agencies).where(eq(agencies.agencyCode, "PNGICA")).limit(1);
   if (!ica) return;
 
+  // Resolve a couple of real facility IDs to demonstrate per-location stock.
+  // Falls back to null (agency reserve) if a facility isn't present yet.
+  const [hq] = await db.select({ id: facilities.id }).from(facilities).where(eq(facilities.facilityName, "Waigani Government Precinct")).limit(1);
+  const [lae] = await db.select({ id: facilities.id }).from(facilities).where(eq(facilities.facilityName, "Lae Provincial Headquarters")).limit(1);
+  const [mth] = await db.select({ id: facilities.id }).from(facilities).where(eq(facilities.facilityName, "Mt Hagen Provincial Headquarters")).limit(1);
+  const hqId = hq?.id ?? null;
+  const laeId = lae?.id ?? null;
+  const mthId = mth?.id ?? null;
+
   type Seed = {
     itemCode: string; itemName: string; category: string;
     unitOfMeasure: string; onHandQuantity: number; reorderLevel: number;
@@ -183,11 +192,30 @@ async function seedAgencyStock(): Promise<void> {
       agencyId: ica.id,
     }).onConflictDoNothing().returning({ id: stockItems.id });
     if (row) {
-      await db.insert(stockBalances).values({
-        stockItemId: row.id,
-        facilityId: null,
-        quantity: it.onHandQuantity,
-      }).onConflictDoNothing();
+      // Distribute the seeded total across HQ vault (agency reserve), Waigani
+      // HQ, Lae regional, and Mt Hagen so the per-location view is meaningful
+      // out of the box. Roughly: 50% reserve, 30% HQ, 12% Lae, 8% Mt Hagen.
+      const total = it.onHandQuantity;
+      const reserveQty = Math.floor(total * 0.5);
+      const hqQty = Math.floor(total * 0.3);
+      const laeQty = Math.floor(total * 0.12);
+      const mthQty = total - reserveQty - hqQty - laeQty;
+
+      const distributed: Array<{ facilityId: string | null; quantity: number; reorderLevel: number }> = [
+        { facilityId: null, quantity: reserveQty, reorderLevel: Math.floor(it.reorderLevel * 0.5) },
+      ];
+      if (hqId && hqQty > 0)   distributed.push({ facilityId: hqId,  quantity: hqQty,  reorderLevel: Math.floor(it.reorderLevel * 0.3) });
+      if (laeId && laeQty > 0) distributed.push({ facilityId: laeId, quantity: laeQty, reorderLevel: Math.floor(it.reorderLevel * 0.15) });
+      if (mthId && mthQty > 0) distributed.push({ facilityId: mthId, quantity: mthQty, reorderLevel: Math.floor(it.reorderLevel * 0.10) });
+
+      for (const b of distributed) {
+        await db.insert(stockBalances).values({
+          stockItemId: row.id,
+          facilityId: b.facilityId,
+          quantity: b.quantity,
+          reorderLevel: b.reorderLevel,
+        }).onConflictDoNothing();
+      }
     }
     inserted++;
   }

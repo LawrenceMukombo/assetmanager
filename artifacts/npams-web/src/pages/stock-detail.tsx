@@ -37,6 +37,14 @@ type Movement = {
   actor: { id: string; fullName: string } | null;
 };
 
+type Balance = {
+  id: string;
+  facilityId: string | null;
+  facilityName: string | null;
+  quantity: number;
+  reorderLevel: number;
+};
+
 type StockDetail = {
   id: string;
   itemCode: string;
@@ -50,7 +58,7 @@ type StockDetail = {
   supplier: string | null;
   notes: string | null;
   facility?: { id: string; facilityName: string } | null;
-  balances?: Array<{ facilityId: string | null; facilityName: string | null; quantity: number }>;
+  balances?: Balance[];
   movements: Movement[];
 };
 
@@ -83,13 +91,19 @@ export default function StockDetailPage() {
 
   const [showMovement, setShowMovement] = useState(false);
   const [movementType, setMovementType] = useState<"receive" | "issue" | "transfer" | "adjust">("receive");
+  const RESERVE_KEY = "__reserve__";
   const [movementForm, setMovementForm] = useState({
     quantity: "",
     issued_to_name: "",
     reference: "",
     reason: "",
+    from_facility_id: "",
     to_facility_id: "",
   });
+
+  const [showThreshold, setShowThreshold] = useState(false);
+  const [thresholdBalance, setThresholdBalance] = useState<Balance | null>(null);
+  const [thresholdValue, setThresholdValue] = useState("0");
 
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -128,10 +142,20 @@ export default function StockDetailPage() {
         reference: movementForm.reference || undefined,
         reason: movementForm.reason || undefined,
       };
+      // Resolve source location: explicit selection if any, else fall back to
+      // the item's primary facility for backwards-compat. RESERVE_KEY means
+      // the agency-reserve / unassigned bucket (null facilityId).
+      if (movementForm.from_facility_id === RESERVE_KEY) {
+        payload.from_facility_id = null;
+      } else if (movementForm.from_facility_id) {
+        payload.from_facility_id = movementForm.from_facility_id;
+      } else if (data?.facility?.id && movementType !== "receive") {
+        payload.from_facility_id = data.facility.id;
+      }
       if (movementType === "transfer") {
         if (!movementForm.to_facility_id) throw new Error("Destination facility is required for transfers");
+        if (!movementForm.from_facility_id) throw new Error("Source location is required for transfers");
         payload.to_facility_id = movementForm.to_facility_id;
-        if (data?.facility?.id) payload.from_facility_id = data.facility.id;
       }
       const r = await apiFetchJson(`/api/v1/stock/${id}/movements`, {
         method: "POST",
@@ -143,11 +167,34 @@ export default function StockDetailPage() {
     onSuccess: () => {
       toast({ title: "Movement recorded" });
       setShowMovement(false);
-      setMovementForm({ quantity: "", issued_to_name: "", reference: "", reason: "", to_facility_id: "" });
+      setMovementForm({ quantity: "", issued_to_name: "", reference: "", reason: "", from_facility_id: "", to_facility_id: "" });
       qc.invalidateQueries({ queryKey: ["stock", id] });
       qc.invalidateQueries({ queryKey: ["stock"] });
     },
     onError: (e) => toast({ variant: "destructive", title: "Failed", description: (e as Error).message }),
+  });
+
+  const thresholdMutation = useMutation({
+    mutationFn: async () => {
+      if (!thresholdBalance) throw new Error("No location selected");
+      const r = await apiFetchJson(`/api/v1/stock/${id}/balances`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          facility_id: thresholdBalance.facilityId,
+          reorder_level: Number(thresholdValue),
+        }),
+      });
+      if (!r.ok) throw new Error(r.message);
+      return r.data;
+    },
+    onSuccess: () => {
+      toast({ title: "Reorder threshold updated" });
+      setShowThreshold(false);
+      setThresholdBalance(null);
+      qc.invalidateQueries({ queryKey: ["stock", id] });
+      qc.invalidateQueries({ queryKey: ["stock"] });
+    },
+    onError: (e) => toast({ variant: "destructive", title: "Update failed", description: (e as Error).message }),
   });
 
   const editMutation = useMutation({
@@ -267,22 +314,56 @@ export default function StockDetailPage() {
 
       {data.balances && data.balances.length > 0 && (
         <Card>
-          <CardHeader><CardTitle className="text-sm">Balances by location</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-sm">Balances by location</CardTitle>
+          </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Location</TableHead>
                   <TableHead className="text-right">Quantity</TableHead>
+                  <TableHead className="text-right">Reorder at</TableHead>
+                  <TableHead>Status</TableHead>
+                  {isAdmin && <TableHead className="w-12"></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.balances.map((b, i) => (
-                  <TableRow key={b.facilityId ?? `unassigned-${i}`}>
-                    <TableCell>{b.facilityName ?? "Unassigned / Agency reserve"}</TableCell>
-                    <TableCell className="text-right font-mono">{b.quantity.toLocaleString()} {data.unitOfMeasure}</TableCell>
-                  </TableRow>
-                ))}
+                {data.balances.map((b, i) => {
+                  const effective = b.reorderLevel > 0 ? b.reorderLevel : data.reorderLevel;
+                  const isLow = effective > 0 && b.quantity <= effective;
+                  return (
+                    <TableRow key={b.facilityId ?? `unassigned-${i}`}>
+                      <TableCell>{b.facilityName ?? "Unassigned / Agency reserve"}</TableCell>
+                      <TableCell className="text-right font-mono">{b.quantity.toLocaleString()} {data.unitOfMeasure}</TableCell>
+                      <TableCell className="text-right font-mono text-muted-foreground">
+                        {b.reorderLevel > 0 ? b.reorderLevel.toLocaleString() : <span className="italic">item default ({data.reorderLevel})</span>}
+                      </TableCell>
+                      <TableCell>
+                        {isLow ? (
+                          <Badge className="bg-amber-100 text-amber-800 border-amber-200">Low</Badge>
+                        ) : (
+                          <Badge variant="outline">OK</Badge>
+                        )}
+                      </TableCell>
+                      {isAdmin && (
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setThresholdBalance(b);
+                              setThresholdValue(String(b.reorderLevel));
+                              setShowThreshold(true);
+                            }}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>
@@ -346,22 +427,56 @@ export default function StockDetailPage() {
               <Label>Quantity *</Label>
               <Input type="number" min="1" value={movementForm.quantity} onChange={(e) => setMovementForm({ ...movementForm, quantity: e.target.value })} />
             </div>
+            <div>
+              <Label>
+                {movementType === "receive" ? "Receiving location" : movementType === "transfer" ? "Source location *" : "Source location"}
+              </Label>
+              <Select
+                value={movementForm.from_facility_id}
+                onValueChange={(v) => setMovementForm({ ...movementForm, from_facility_id: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={
+                    movementType === "receive"
+                      ? "Select where stock is received"
+                      : "Select source location"
+                  } />
+                </SelectTrigger>
+                <SelectContent>
+                  {(data.balances ?? []).map((b, i) => (
+                    <SelectItem
+                      key={b.facilityId ?? `reserve-${i}`}
+                      value={b.facilityId ?? RESERVE_KEY}
+                    >
+                      {(b.facilityName ?? "Unassigned / Agency reserve")} — {b.quantity.toLocaleString()} {data.unitOfMeasure}
+                    </SelectItem>
+                  ))}
+                  {(data.balances ?? []).every((b) => b.facilityId !== null) && movementType === "receive" && (
+                    <SelectItem value={RESERVE_KEY}>Unassigned / Agency reserve — 0 {data.unitOfMeasure}</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              {movementType !== "receive" && !movementForm.from_facility_id && data.facility?.facilityName && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Defaulting to item's primary location: {data.facility.facilityName}
+                </p>
+              )}
+            </div>
             {movementType === "transfer" && (
               <div>
                 <Label>Destination facility *</Label>
                 <Select value={movementForm.to_facility_id} onValueChange={(v) => setMovementForm({ ...movementForm, to_facility_id: v })}>
                   <SelectTrigger><SelectValue placeholder={facilities ? "Select destination" : "Loading…"} /></SelectTrigger>
                   <SelectContent>
-                    {(facilities ?? []).filter((f) => f.id !== data.facility?.id).map((f) => (
-                      <SelectItem key={f.id} value={f.id}>
-                        {f.facilityName}{f.districtName ? ` · ${f.districtName}` : ""}
-                      </SelectItem>
-                    ))}
+                    {(facilities ?? [])
+                      .filter((f) => f.id !== movementForm.from_facility_id)
+                      .map((f) => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.facilityName}{f.districtName ? ` · ${f.districtName}` : ""}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
-                {data.facility?.facilityName && (
-                  <p className="text-xs text-muted-foreground mt-1">Source: {data.facility.facilityName}</p>
-                )}
               </div>
             )}
             {movementType === "issue" && (
@@ -386,11 +501,45 @@ export default function StockDetailPage() {
               disabled={
                 !movementForm.quantity ||
                 Number(movementForm.quantity) <= 0 ||
-                (movementType === "transfer" && !movementForm.to_facility_id) ||
+                (movementType === "transfer" && (!movementForm.to_facility_id || !movementForm.from_facility_id)) ||
                 movementMutation.isPending
               }
             >
               Record
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showThreshold} onOpenChange={setShowThreshold}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reorder threshold</DialogTitle>
+            <DialogDescription>
+              {thresholdBalance?.facilityName ?? "Unassigned / Agency reserve"} — {data.itemName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Reorder when quantity at this location is at or below</Label>
+              <Input
+                type="number"
+                min="0"
+                value={thresholdValue}
+                onChange={(e) => setThresholdValue(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Set to 0 to fall back to the item-wide threshold ({data.reorderLevel}).
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowThreshold(false)}>Cancel</Button>
+            <Button
+              onClick={() => thresholdMutation.mutate()}
+              disabled={thresholdValue === "" || Number(thresholdValue) < 0 || thresholdMutation.isPending}
+            >
+              Save threshold
             </Button>
           </DialogFooter>
         </DialogContent>
