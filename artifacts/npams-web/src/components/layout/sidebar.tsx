@@ -62,9 +62,10 @@ export function Sidebar() {
     ? "Agency"
     : "Provincial";
 
+  const userAgencyName = (user?.scope as { agency_name?: string } | undefined)?.agency_name ?? null;
   const orgName = isNational
     ? "NPAMS"
-    : branding.provinceName ?? (isAgency ? "Agency" : "NPAMS");
+    : branding.provinceName ?? (isAgency ? userAgencyName ?? "Agency" : "NPAMS");
 
   return (
     <SidebarComponent>

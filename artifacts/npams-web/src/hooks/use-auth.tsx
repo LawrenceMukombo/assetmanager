@@ -35,7 +35,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (token && userStr) {
       try {
-        const user = JSON.parse(userStr) as LoginUser;
+        const user = JSON.parse(userStr) as LoginUser & {
+          agency_name?: string;
+          agency_code?: string;
+          agency_logo_url?: string | null;
+          agency_theme_color?: string | null;
+          agency_flag_colors?: string[];
+        };
+        // Re-apply agency branding on refresh so header/sidebar/dashboard
+        // don't fall back to "Provincial" labels for agency users.
+        const scope = (user?.scope ?? {}) as { agency_name?: string };
+        const agencyName = user?.agency_name ?? scope.agency_name ?? null;
+        if (user?.scope_level === "agency" && agencyName) {
+          applyBranding({
+            provinceName: agencyName,
+            flagUrl: user?.agency_logo_url ?? null,
+            themeAccentColor: user?.agency_theme_color ?? null,
+            flagColors: user?.agency_flag_colors ?? [],
+          });
+        }
         setState({ isAuthenticated: true, user, isLoading: false });
       } catch {
         localStorage.removeItem("npams_token");
@@ -68,12 +86,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
       const { access_token, refresh_token, user } = responseData;
 
-      // Attach agency identity to the user so client-side UI (e.g. asset form) can display it
+      // Attach agency identity + branding to the user so client-side UI (e.g.
+      // asset form, header, sidebar, dashboard) can display it after refresh.
       if (user && responseData.agency_branding) {
-        (user as LoginUser & { agency_name?: string; agency_code?: string }).agency_name =
-          responseData.agency_branding.agencyName;
-        (user as LoginUser & { agency_name?: string; agency_code?: string }).agency_code =
-          responseData.agency_branding.agencyCode;
+        const u = user as LoginUser & {
+          agency_name?: string;
+          agency_code?: string;
+          agency_logo_url?: string | null;
+          agency_theme_color?: string | null;
+          agency_flag_colors?: string[];
+        };
+        u.agency_name = responseData.agency_branding.agencyName;
+        u.agency_code = responseData.agency_branding.agencyCode;
+        u.agency_logo_url = responseData.agency_branding.flagUrl;
+        u.agency_theme_color = responseData.agency_branding.themeAccentColor;
+        u.agency_flag_colors = responseData.agency_branding.flagColors;
       }
 
       if (access_token) localStorage.setItem("npams_token", access_token);

@@ -21,6 +21,8 @@ export function Header() {
   const [notifOpen, setNotifOpen] = useState(false);
   const isNational = user?.scope_level === "national";
   const isAgency = user?.scope_level === "agency";
+  const userAgencyName = (user?.scope as { agency_name?: string } | undefined)?.agency_name ?? null;
+  const agencyDisplayName = branding.provinceName ?? userAgencyName;
 
   const { data: notifications } = useGetNotifications({
     query: {
@@ -45,8 +47,8 @@ export function Header() {
   const headerTitle = isNational
     ? "National Public Asset Management System"
     : isAgency
-    ? branding.provinceName
-      ? `${branding.provinceName} — Asset Management System`
+    ? agencyDisplayName
+      ? `${agencyDisplayName} — Asset Management System`
       : "Agency Asset Management System"
     : branding.provinceName
     ? `${branding.provinceName} — Asset Management System`

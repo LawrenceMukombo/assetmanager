@@ -1191,13 +1191,15 @@ function ProvincialDashboard() {
 
   if (isLoading) {
     if (isAgency) {
+      const userAgencyName = (user?.scope as { agency_name?: string } | undefined)?.agency_name ?? null;
+      const agencyDisplayName = branding.provinceName ?? userAgencyName;
       return (
         <div className="space-y-6">
           <div className="flex items-center gap-3">
             <div>
               <h2 className="text-3xl font-bold tracking-tight">
-                {branding.provinceName
-                  ? `${branding.provinceName} Dashboard`
+                {agencyDisplayName
+                  ? `${agencyDisplayName} Dashboard`
                   : "Agency Dashboard"}
               </h2>
             </div>
@@ -1231,7 +1233,9 @@ function ProvincialDashboard() {
               : isAgency
               ? branding.provinceName
                 ? `${branding.provinceName} Dashboard`
-                : "Agency Dashboard"
+                : (user?.scope as { agency_name?: string } | undefined)?.agency_name
+                  ? `${(user!.scope as { agency_name?: string }).agency_name} Dashboard`
+                  : "Agency Dashboard"
               : d?.province?.provinceName
               ? `${d.province.provinceName} Dashboard`
               : "Provincial Dashboard"}
