@@ -30,8 +30,13 @@ interface Props {
 }
 
 function suggestedQty(it: ReorderItem): number {
-  const target = Math.max(it.reorderLevel * 2, it.reorderLevel + 1, 1);
-  return Math.max(target - it.onHandQuantity, 1);
+  const reorder = Number(it.reorderLevel);
+  const onHand = Number(it.onHandQuantity);
+  const safeReorder = Number.isFinite(reorder) ? reorder : 0;
+  const safeOnHand = Number.isFinite(onHand) ? onHand : 0;
+  const target = Math.max(safeReorder * 2, safeReorder + 1, 1);
+  const delta = target - safeOnHand;
+  return Math.max(Number.isFinite(delta) ? Math.floor(delta) : 1, 1);
 }
 
 export function ReorderDialog({ item, open, onOpenChange }: Props) {

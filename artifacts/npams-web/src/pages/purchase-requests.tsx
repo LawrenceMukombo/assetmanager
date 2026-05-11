@@ -507,7 +507,14 @@ function NewPurchaseRequestDialog({
               if (it) {
                 setSupplier(it.supplier ?? "");
                 setUnitCost(it.unitCost ?? "");
-                if (!quantity) setQuantity(String(Math.max(it.reorderLevel * 2 - it.onHandQuantity, 1)));
+                if (!quantity) {
+                  const reorder = Number(it.reorderLevel);
+                  const onHand = Number(it.onHandQuantity);
+                  const target = Number.isFinite(reorder) ? reorder * 2 : 0;
+                  const delta = target - (Number.isFinite(onHand) ? onHand : 0);
+                  const suggested = Number.isFinite(delta) && delta > 0 ? Math.floor(delta) : 1;
+                  setQuantity(String(Math.max(suggested, 1)));
+                }
               }
             }}>
               <SelectTrigger>

@@ -42,6 +42,21 @@ function orNull(v: unknown): string | null {
   return String(v);
 }
 
+function describeValue(v: unknown): string {
+  if (v === null) return "null";
+  if (v === undefined) return "missing";
+  const t = typeof v;
+  if (t === "number") return Number.isNaN(v as number) ? "NaN (number)" : `${v} (number)`;
+  if (t === "string") {
+    const s = v as string;
+    if (s.length === 0) return "empty string";
+    return s.length > 32 ? `string("${s.slice(0, 32)}…")` : `string("${s}")`;
+  }
+  if (t === "boolean") return `${v} (boolean)`;
+  if (Array.isArray(v)) return `array(length=${v.length})`;
+  return t;
+}
+
 function scopeFilter(user: NonNullable<Express.Request["user"]>) {
   if (user.scopeLevel === "national") return [];
   if (user.scopeLevel === "agency" || user.agencyId) {
@@ -295,15 +310,53 @@ router.get("/v1/purchase-requests/:id", requireAuth, async (req, res) => {
 router.post("/v1/purchase-requests", requireAuth, async (req, res) => {
   if (!req.user) return;
   const body = req.body ?? {};
-  const stockItemId = orNull(body.stock_item_id);
-  const quantity = Number(body.quantity);
-  if (!stockItemId || !Number.isInteger(quantity) || quantity <= 0) {
-    res.status(400).json({ success: false, message: "stock_item_id and positive integer quantity are required", data: null });
-    return;
+  const errors: Array<{ field: string; message: string }> = [];
+
+  const rawStockItemId = (body as { stock_item_id?: unknown }).stock_item_id;
+  const stockItemId = orNull(rawStockItemId);
+  if (!stockItemId) {
+    errors.push({
+      field: "stock_item_id",
+      message: `stock_item_id is required (received ${describeValue(rawStockItemId)})`,
+    });
   }
+
+  const rawQuantity = (body as { quantity?: unknown }).quantity;
+  const quantity = Number(rawQuantity);
+  if (rawQuantity === undefined || rawQuantity === null || rawQuantity === "") {
+    errors.push({ field: "quantity", message: "quantity is required" });
+  } else if (!Number.isInteger(quantity) || quantity <= 0) {
+    errors.push({
+      field: "quantity",
+      message: `quantity must be a positive integer (received ${describeValue(rawQuantity)})`,
+    });
+  }
+
   const submitSig = requireSignedName(body);
+  let signedName = "";
   if (!submitSig.ok) {
-    res.status(400).json({ success: false, message: submitSig.message, data: null });
+    errors.push({ field: "signed_name", message: submitSig.message });
+  } else {
+    signedName = submitSig.name;
+  }
+
+  if (errors.length > 0) {
+    req.log.warn(
+      {
+        userId: req.user.userId,
+        scopeLevel: req.user.scopeLevel,
+        endpoint: "POST /v1/purchase-requests",
+        fields: errors.map((e) => e.field),
+        reason: errors.map((e) => `${e.field}: ${e.message}`).join("; "),
+      },
+      "Purchase request validation failed",
+    );
+    res.status(400).json({
+      success: false,
+      message: errors.map((e) => e.message).join("; "),
+      errors,
+      data: null,
+    });
     return;
   }
 
@@ -325,11 +378,41 @@ router.post("/v1/purchase-requests", requireAuth, async (req, res) => {
       .where(eq(stockItems.id, stockItemId))
       .limit(1);
     if (!item) {
-      res.status(404).json({ success: false, message: "Stock item not found", data: null });
+      req.log.warn(
+        {
+          userId: req.user.userId,
+          scopeLevel: req.user.scopeLevel,
+          endpoint: "POST /v1/purchase-requests",
+          fields: ["stock_item_id"],
+          reason: `stock_item_id ${stockItemId} not found`,
+        },
+        "Purchase request rejected: stock item not found",
+      );
+      res.status(404).json({
+        success: false,
+        message: "Stock item not found",
+        errors: [{ field: "stock_item_id", message: "Stock item not found" }],
+        data: null,
+      });
       return;
     }
     if (!isWithinStockScope(req.user, item)) {
-      res.status(403).json({ success: false, message: "Cannot raise a request for an item outside your scope", data: null });
+      req.log.warn(
+        {
+          userId: req.user.userId,
+          scopeLevel: req.user.scopeLevel,
+          endpoint: "POST /v1/purchase-requests",
+          fields: ["stock_item_id"],
+          reason: "stock item outside requester scope",
+        },
+        "Purchase request rejected: out of scope",
+      );
+      res.status(403).json({
+        success: false,
+        message: `${item.itemName} (${item.itemCode}) is outside your scope — you can only request items in your assigned agency, facility, district, or province.`,
+        errors: [{ field: "stock_item_id", message: "Item is outside your scope" }],
+        data: null,
+      });
       return;
     }
 
@@ -392,11 +475,11 @@ router.post("/v1/purchase-requests", requireAuth, async (req, res) => {
       eventType: "submitted",
       actorUserId: req.user.userId,
       actorRole: req.user.roleName,
-      signedName: submitSig.name,
+      signedName: signedName,
       signedAt: submitTs,
       signedHash: computeSignedHash({
         userId: req.user.userId, action: "submitted", requestId: created.id,
-        timestamp: submitTs.toISOString(), signedName: submitSig.name,
+        timestamp: submitTs.toISOString(), signedName: signedName,
       }),
       payload: { quantity, supplier, unit_cost: unitCost, required_by_date: requiredByDate, notes },
     });
