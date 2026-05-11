@@ -31,9 +31,9 @@ const CW = W - 2 * M;
 
 const doc = new PDFDocument({ ...PAGE, autoFirstPage: false, info: {
   Title: "NPAMS Asset Management Proposal — ICSA",
-  Author: "NPAMS Programme Office",
+  Author: "LanFrame for the NPAMS Programme Office",
   Subject: "ICSA Asset Management System — sponsor proposal",
-  Keywords: "NPAMS, ICSA, PNG, asset management, proposal",
+  Keywords: "NPAMS, ICSA, PNG, asset management, proposal, LanFrame",
 } });
 doc.pipe(fs.createWriteStream(OUT));
 
@@ -89,7 +89,7 @@ doc.on("pageAdded", () => {
   const fy = H - 28;
   doc.save().moveTo(M, fy).lineTo(W - M, fy).lineWidth(0.4).strokeColor(C.rule).stroke().restore();
   doc.font("Helvetica").fontSize(8).fillColor(C.mute);
-  doc.text("NPAMS Programme Office · ICSA Asset Management Proposal · NPAMS-ICSA-2026-001",
+  doc.text("LanFrame · NPAMS Programme Office · ICSA Asset Management Proposal · NPAMS-ICSA-2026-002",
            M, fy + 8, { width: CW, align: "left", lineBreak: false, height: 12 });
   doc.text("Commercial in Confidence",
            M, fy + 8, { width: CW, align: "center", lineBreak: false, height: 12 });
@@ -128,14 +128,15 @@ const cy = 360;
 doc.save().roundedRect(M, cy, CW, 200, 6).lineWidth(0.8).strokeColor(C.rule).fillAndStroke(C.band, C.rule).restore();
 doc.font("Helvetica-Bold").fontSize(11).fillColor(C.blue).text("AT A GLANCE", M + 16, cy + 14);
 const kv = [
-  ["Reference",     "NPAMS-ICSA-2026-001"],
+  ["Reference",     "NPAMS-ICSA-2026-002"],
   ["Issued",        "11 May 2026"],
   ["Validity",      "60 days from issue"],
   ["Year 1 total",  "PGK 104,500.00 incl. GST"],
-  ["Vs reference",  "PGK 38,053.13 saving (~ 26.7%) vs Zyntrix v1.2"],
+  ["Recurring",     "PGK 56,100.00 / yr from Year 2 (incl. GST)"],
   ["Time to live",  "8 weeks from contract signature"],
   ["Users",         "15 concurrent web users included"],
   ["Hosting",       "PNG-resident SaaS, autoscaling, 99.5% SLA"],
+  ["Delivery",      "Built and supported by LanFrame for NPAMS"],
 ];
 let yy = cy + 36;
 for (const [k, v] of kv) {
@@ -148,7 +149,7 @@ for (const [k, v] of kv) {
 doc.font("Helvetica-Bold").fontSize(10).fillColor(C.blue).text(
   "Prepared by", M, cy + 220, { width: CW, align: "center" });
 doc.font("Helvetica").fontSize(11).fillColor(C.ink).text(
-  "NPAMS Programme Office · Independent State of Papua New Guinea",
+  "LanFrame, on behalf of the NPAMS Programme Office · Independent State of Papua New Guinea",
   M, cy + 234, { width: CW, align: "center" });
 doc.font("Helvetica-Oblique").fontSize(9).fillColor(C.red).text(
   "COMMERCIAL IN CONFIDENCE", M, H - 70, { width: CW, align: "center" });
@@ -156,24 +157,26 @@ doc.font("Helvetica-Oblique").fontSize(9).fillColor(C.red).text(
 // ─── §1 Executive Summary ───────────────────────────────────────────────────
 doc.addPage();
 h1("1. Executive Summary");
-p("The PNG Immigration & Citizenship Authority (ICSA) requires a single, auditable system of record for the high-value assets it operates on behalf of the State — blank ePassport stocks, visa stickers, biometric workstations, secure printers, inspection kits and the supporting estate at headquarters and provincial border posts. The National Public Asset Management System (NPAMS) has been built specifically for the PNG public sector and is already live, multi-tenant, and integrated with the Government's geographic data set.");
-p("This proposal sets out the activities, timeline and commercials required to onboard ICSA onto NPAMS as an Authority tenant alongside other PNG agencies already provisioned (PNGDF, RPNGC, IRC, Treasury, Customs, Ombudsman). It delivers the same outcomes as the previously-tabled Zyntrix proposal — a modern, role-based, GIS-enabled asset register with purchase, audit and maintenance workflows — at materially lower total cost.");
+p("The PNG Immigration & Citizenship Authority (ICSA) requires a single, auditable system of record for the high-value assets it operates on behalf of the State — blank ePassport stocks, visa stickers, biometric workstations, secure printers, inspection kits and the supporting estate at headquarters and provincial border posts. The National Public Asset Management System (NPAMS) has been built specifically for the PNG public sector by LanFrame and is already live, multi-tenant, and integrated with the Government's geographic data set.");
+p("This proposal sets out the activities, timeline and commercials required to onboard ICSA onto NPAMS as an Authority tenant alongside other PNG agencies already provisioned (PNGDF, RPNGC, IRC, Treasury, Customs, Ombudsman). It supersedes proposal NPAMS-ICSA-2026-001 and adds a complete, line-by-line description of every feature already delivered as well as the planned roadmap items, so ICSA can make a fully informed sponsorship decision.");
 
 // Headline table
 const headline = [
   ["Total programme cost (Year 1, incl. GST)", "PGK 104,500.00"],
-  ["Comparable Zyntrix proposal (incl. GST)",  "PGK 142,553.13"],
-  ["Savings to ICSA in Year 1",                "PGK 38,053.13 (~ 26.7%)"],
+  ["Recurring cost from Year 2 (incl. GST)",   "PGK 56,100.00 / yr"],
   ["Time to go-live",                          "8 weeks from signature"],
   ["Concurrent web users included",            "15"],
+  ["Implemented features (live today)",        "30 capabilities in production"],
+  ["Roadmap features (this proposal)",         "21 capabilities, costed under §6"],
+  ["Delivery partner",                         "LanFrame for the NPAMS Programme Office"],
 ];
-keyValueTable(headline, { highlight: 2 });
+keyValueTable(headline, { highlight: 0 });
 
 p("NPAMS is delivered as a hosted, autoscaling PNG-resident SaaS platform with a defined Service Level Agreement, encrypted data at rest, RBAC scoped down to facility level, and tamper-evident HMAC-SHA256 digital signatures on every purchase, approval and goods-receipt event.");
 
 // ─── §2 About NPAMS ─────────────────────────────────────────────────────────
-h1("2. About NPAMS");
-p("NPAMS is the State-sponsored asset management platform for PNG. It is currently operating in production for the following Authorities, each in its own logical tenant with its own branding, scope and roles:");
+h1("2. About NPAMS and LanFrame");
+p("NPAMS is the State-sponsored asset management platform for PNG, designed and operated by LanFrame on behalf of the NPAMS Programme Office. It is currently in production for the following Authorities, each in its own logical tenant with its own branding, scope and roles:");
 bullet([
   "PNG Defence Force (PNGDF)",
   "Royal Papua New Guinea Constabulary (RPNGC)",
@@ -183,11 +186,11 @@ bullet([
   "Office of the Ombudsman",
   "PNG Immigration & Citizenship Authority (this proposal)",
 ]);
-p("Because NPAMS is multi-tenant from the database upward, ICSA does not pay for a new build — only for its onboarding, configuration, migration, training, hosting and ongoing support. There is no platform IP licence fee charged to ICSA above and beyond the per-user subscription described in §6.");
+p("Because NPAMS is multi-tenant from the database upward, ICSA does not pay for a new build — only for its onboarding, configuration, migration, training, hosting and ongoing support. There is no platform IP licence fee charged to ICSA above and beyond the per-user subscription described in §6. LanFrame remains accountable for the platform's roadmap, security posture and SLA throughout the engagement.");
 
 // ─── §3 Asset Categories ────────────────────────────────────────────────────
 h1("3. Asset Categories in Scope");
-p("NPAMS organises every ICSA asset into one of three top-level groups, aligned to the Zyntrix taxonomy. Each group is configurable and ICSA Asset Officers can add sub-classes without vendor intervention.");
+p("NPAMS organises every ICSA asset into one of three top-level groups. Each asset category carries a short code (BLD, VEH, ICT, OFF, MED, MCH, COM) which becomes the [TYPE] segment of the auto-suggested asset tag — for example PNGICA-VEH-014 for the next vehicle or PNGICA-ICT-027 for the next biometric workstation. Categories are configurable and ICSA Asset Officers can add sub-classes without vendor intervention.");
 table({
   cols: [
     { label: "Group",        w: 0.20 },
@@ -208,70 +211,123 @@ table({
 });
 p("Every asset record carries: unique asset code, category, location (province -> district -> facility), custodian, acquisition cost, depreciation, condition, service history, photographs, and a public verification QR code.");
 
-// ─── §4 Solution Scope ──────────────────────────────────────────────────────
-h1("4. Solution Scope");
-p("The following modules are already implemented in NPAMS and will be enabled for ICSA on day one. Live screenshots are included in Annex A.");
+// ─── §4 Implemented Features ────────────────────────────────────────────────
+h1("4. Implemented Features — Live in Production");
+p("The 30 capabilities below are running on the NPAMS production build dated 11 May 2026 and will be enabled for ICSA on day one. Each capability lists the business outcome and the underlying NPAMS module that delivers it. Live screenshots are included in Annex A.");
 
-h2("4.1 Multi-Agency Tenancy & RBAC");
-bullet([
-  "Logical isolation per Authority (ICSA tenant pre-provisioned).",
-  "Implemented role catalogue: Super Admin, National Asset Controller, National Auditor, Provincial Admin, Provincial Asset Officer, Provincial Viewer, and Agency Admin (per-Authority).",
-  "Scope is enforced at every API call: national, agency, province, district or single facility. ICSA users see only ICSA data.",
-]);
+const implementedFeatures = [
+  ["4.1 Multi-tenant architecture",
+   "Logical isolation per Authority. The ICSA tenant is pre-provisioned alongside PNGDF, RPNGC, PNGCS, IRC, Treasury and Ombudsman; ICSA users only ever see ICSA data even though all tenants share the same code base and operations team."],
+  ["4.2 Role catalogue and RBAC",
+   "Seven seeded roles (Super Admin, National Asset Controller, National Auditor, Provincial Admin, Provincial Asset Officer, Provincial Viewer, Agency Admin) drive every permission check. Roles are grouped into officer-level and admin-level capability bundles used by the SPA route guards."],
+  ["4.3 Scope enforcement at the data layer",
+   "A single middleware computes the SQL fragment that limits a query to the caller's slice of data — national, agency, province, district or facility. Every list, report and dashboard endpoint applies it; there is no way for an ICSA officer to enumerate Customs assets even by guessing IDs."],
+  ["4.4 Authentication and password hygiene",
+   "Bcrypt-hashed passwords; JWT access tokens (8 h); rotating refresh tokens stored as SHA-256 hashes; change-password and edit-my-profile endpoints exposed in the SPA; lockout-friendly forgot-password stub ready for SMTP wiring."],
+  ["4.5 Tenant branding",
+   "ICSA logo, primary and secondary colours, display name and login wallpaper are stored per agency and applied across the sign-in screen, header, navigation accents and PDF reports without code changes."],
+  ["4.6 Asset register",
+   "Full CRUD with serial number, brand, model, supplier, purchase date, purchase cost, warranty expiry, useful life, depreciation method, salvage value, photograph, custodian, condition and status. Every asset is unique by an auto-suggested asset tag of the form [AGENCY]-[TYPE]-[NNN]."],
+  ["4.7 Asset tag auto-suggestion",
+   "When an officer picks a category, the form fetches the next code in sequence and prefills the field — for example the next ICSA vehicle becomes PNGICA-VEH-014. The user can override the suggestion; once they edit the field manually, subsequent category changes will not clobber their value."],
+  ["4.8 Asset categories with explicit short codes",
+   "Each asset category carries a 2–5 letter category_code (BLD, VEH, ICT, MED, MCH, OFF, COM). Codes are unique across categories (enforced by a database constraint), shown next to the category name everywhere it appears, and drive the [TYPE] portion of the asset tag."],
+  ["4.9 Asset transfers and lifecycle",
+   "Every change of facility or custodian is recorded in asset_transfers with from / to province, district, facility and user. The lifecycle endpoint aggregates transfers and maintenance into a single timeline for the asset."],
+  ["4.10 Asset previous / next navigation",
+   "On any asset detail page the officer can step through the filtered match set with arrow-key shortcuts or on-screen Prev/Next buttons. The same pattern now also works on stock, audit session and purchase request detail pages."],
+  ["4.11 Global asset search",
+   "A debounced search box in the header queries assets by tag, name and serial number, shows a top-N preview with recent searches persisted to localStorage, and forwards the query into the asset detail stepper so the user can walk through every match."],
+  ["4.12 Public QR verification page",
+   "A printable QR code on every asset links to a /public/asset/:id page open to the world (no login). Auditors and field officers verify name, agency and condition on a phone in seconds."],
+  ["4.13 Asset photos and documents in object storage",
+   "Browser uploads via short-lived signed URLs to cloud object storage. Public objects (logos) and private objects (asset photographs, signed documents) are served through scope-aware proxy routes."],
+  ["4.14 Stock and inventory",
+   "On-hand quantity, unit of measure, reorder level, supplier and unit cost per stock item; auto-suggested item codes of the form PNGICA-STK-014; per-facility stock balances; movement ledger (receipt / issue / transfer / adjustment) with full audit trail."],
+  ["4.15 Track stock by storage location",
+   "Stock is tracked per facility, not just per item. ICSA's HQ vault, regional offices, sea ports and border posts each have their own balances, reorder thresholds and movement history."],
+  ["4.16 One-click reorder purchase request",
+   "From any low-stock balance an officer can raise a purchase request in one click. The request inherits the facility, supplier and prior unit cost; the requester only types the quantity and an optional note."],
+  ["4.17 Purchase request workflow",
+   "Officer raises a request -> routed to scoped approvers -> approve / reject -> goods receipt against the request, with automatic close when the full quantity is received. Pipeline is visible by status and filterable by agency, province, district and facility."],
+  ["4.18 HMAC-SHA256 digital signatures on every PR event",
+   "Every state transition (submitted, approved, rejected, received) writes an immutable row to purchase_request_events with signed_name, signed_at and signed_hash = HMAC-SHA256(server_secret, \"v1|user|action|request|timestamp|name\"). The signed_name is typed by the user at the moment of action, providing tamper-evident, non-repudiable proof that holds up under auditor review."],
+  ["4.19 Purchase request event timeline UI",
+   "The PR detail page renders the full signed event timeline with signer name, role, timestamp and the first 12 hex characters of the signed hash, so reviewers can see at a glance who authorised what and when."],
+  ["4.20 Audit sessions",
+   "Scheduled or ad-hoc verification campaigns scoped to a province, district, facility or agency. The session detail page shows assignments, progress percentage and status."],
+  ["4.21 Field-friendly audit verification",
+   "Officers verify each asset (present / missing / damaged) and capture evidence photographs and GPS coordinates from a tablet or phone against the public QR code. Variance is computed automatically on session close."],
+  ["4.22 Maintenance and service history",
+   "Preventive and corrective maintenance scheduling per asset; cost capture, downtime tracking, vendor records, completion dates and status."],
+  ["4.23 GIS map (PNG-specific)",
+   "Interactive Leaflet map of all 22 PNG provinces and their districts using GADM boundaries, with Street, Satellite and Topographic basemaps. Province / district selection dims unrelated areas; pins show ICSA assets and stock locations across the national footprint and all border posts."],
+  ["4.24 Provincial and national dashboards",
+   "Total / Active / Missing / Maintenance / Disposed counts, portfolio value, status and condition pie charts, recently added assets, alert centre. Provincial dashboard is scoped to the caller; national dashboard rolls up across every agency for Super Admin and National roles."],
+  ["4.25 Reports module",
+   "Tabular asset register, portfolio summary, condition summary, depreciation, stock-on-hand, low-stock, purchase-requests by status, maintenance due, and assets-by-location. Every report is scope-filtered and exportable to CSV in one click."],
+  ["4.26 Notifications inbox",
+   "Per-user inbox with mark-read and mark-all-read endpoints, fed by low-stock thresholds, pending approvals, audit completion and other workflow events."],
+  ["4.27 Activity log (append-only)",
+   "Every CRUD and workflow event writes to activity_logs with user, action type, entity type, entity ID and JSON metadata. Used for evidence in the Auditor-General's review."],
+  ["4.28 Locations management",
+   "Province -> district -> facility hierarchy with auto-suggested district codes, ICSA-specific facility allow-list (HQ Konedobu, Waigani / Jacksons Airport, regional offices Lae / Mt Hagen / Kokopo / Madang / Kavieng, sea ports Lae / Rabaul / Daru / Alotau, border posts Wutung / Vanimo / Kiunga). Other agencies retain their full national list — there is no regression."],
+  ["4.29 User and role administration",
+   "Create, deactivate and reactivate users; assign roles and scopes; reset passwords. ICSA receives 14 seeded staff users covering the agency admin, provincial admins, asset officers, auditors and field officers; the demo password is rotated on first login."],
+  ["4.30 Theme and dark-mode polish",
+   "All status pills, dashboard charts and KPI tiles use semantic theme tokens so dark mode is fully readable. Every page has been migrated to the shared PageHeader component for breadcrumbs, icons and consistent action layout."],
+];
+implementedFeatures.forEach(([t, d]) => { h2(t); p(d); });
 
-h2("4.2 Asset Register");
-bullet([
-  "Full lifecycle: acquisition -> in-service -> maintenance -> disposal.",
-  "Bulk import via spreadsheet template; per-asset photographs and documents.",
-  "Public QR verification page (no login) for field officers and auditors.",
-]);
+// ─── §4A Roadmap features ───────────────────────────────────────────────────
+h1("4A. Roadmap Features — Costed in This Proposal");
+p("The 21 capabilities below are formally on the NPAMS backlog, planned and ready to schedule under the implementation programme described in §7. Total effort fits within the 8 hrs/month enhancement envelope built into the Year-1 commercials, so ICSA receives them at no additional cost.");
 
-h2("4.3 Stock & Inventory (secure consumables)");
-bullet([
-  "On-hand quantity, reorder level, supplier and unit cost per stock item.",
-  "Stock movements (receive / issue / transfer / adjust) with full audit trail.",
-  "Per-facility balances; automated low-stock alerts.",
-]);
-
-h2("4.4 Purchase Request Workflow with Digital Signatures");
-bullet([
-  "Officer raises a request -> routed to scoped approvers -> approve / reject -> goods receipt against the request.",
-  "Every state transition is signed. The signer types their full name; the server stores signed_name, signed_at and a tamper-evident signed_hash = HMAC-SHA256(server_secret, \"v1|user|action|request|timestamp|name\").",
-  "Notifications dispatched to requester and approvers at every step.",
-]);
-
-h2("4.5 Audit Sessions");
-bullet([
-  "Scheduled or ad-hoc audit cycles by location.",
-  "Officers verify each asset (present / missing / damaged) and capture evidence photographs against the public QR code.",
-  "Variance report generated on session close.",
-]);
-
-h2("4.6 Maintenance & Service History");
-bullet([
-  "Preventive and corrective maintenance scheduling per asset.",
-  "Cost capture, downtime tracking, vendor records.",
-]);
-
-h2("4.7 GIS Map (PNG-specific)");
-bullet([
-  "Interactive Leaflet map of all 22 provinces and districts (GADM boundaries).",
-  "Province / district selection dims unrelated areas; OSM, satellite and topographic basemaps.",
-  "Used to visualise asset and stock distribution across ICSA's national footprint and border posts.",
-]);
-
-h2("4.8 Reports & Dashboard");
-bullet([
-  "KPI dashboard per role; custody, condition, depreciation and movement reports.",
-  "CSV / PDF export.",
-]);
-
-h2("4.9 Notifications & Activity Log");
-bullet([
-  "In-app notification centre delivering events to requesters and approvers.",
-  "Append-only activity_logs table capturing user, action type, entity, description and timestamp for every CRUD and workflow event.",
-  "Workflow events on signed actions additionally carry the actor's HMAC-SHA256 signature, providing tamper-evident proof independent of the database row.",
-]);
+const roadmapFeatures = [
+  ["4A.1 Real backup history and live system metrics",
+   "The System Status page will surface the actual backup catalogue (last successful run, size, retention class, restore-tested flag), DB latency, queue depth and disk-free percentages so the ICSA Authority and the Auditor-General can confirm the operational posture without phoning the help-desk."],
+  ["4A.2 Low-stock alerts on the dashboard",
+   "Low-stock balances surface as a card on the home dashboard with a one-click jump to the affected facility and the pre-filled reorder action; an early-warning indicator for high-value secure stock such as ePassport booklets and visa stickers."],
+  ["4A.3 Bulk-edit reorder thresholds",
+   "Update reorder levels for many facilities at once — for example raising the visa-sticker threshold across all sea-port facilities ahead of a holiday peak."],
+  ["4A.4 Tighten API parameter typing",
+   "Internal hardening sweep that removes a small set of pre-existing TypeScript any-leaks in the route handlers, removing a known noise source from future change reviews. No user-visible change."],
+  ["4A.5 Email and push alerts on PR status changes",
+   "Outbound notifications (email by default; push optional) when a request is submitted, approved, rejected or received. Recipients are derived from the same scope rules used in the application; no separate distribution list to maintain."],
+  ["4A.6 Supplier performance and price history",
+   "Per-stock-item supplier ledger: average lead time, on-time-in-full percentage and unit-cost trend. Feeds directly into procurement decision-making for ePassport supply, holographic foils and inspection consumables."],
+  ["4A.7 Automated tests for the reorder approval workflow",
+   "End-to-end Playwright tests that reproduce the full one-click reorder -> approve -> receive -> close cycle on every release build, so the signed-event chain cannot regress unnoticed."],
+  ["4A.8 Verify the integrity of every signed approval",
+   "An ICSA Auditor screen that re-computes the HMAC-SHA256 hash for every purchase_request_events row from the canonical input string and the server secret, and reports any mismatch — turning the existing append-only ledger into a one-button integrity proof."],
+  ["4A.9 Purchase-request alerts in the bell-icon tray",
+   "Pending-approval and goods-receipt events appear in the in-app notification tray for the relevant approver / requester, in addition to the existing inbox."],
+  ["4A.10 Sponsor proposal collateral refresh",
+   "LanFrame maintains the sponsor proposal collateral set, including the offline / on-prem option page and glossary referenced in §9. This document is the comprehensive edition of that set."],
+  ["4A.11 Show category code in reports and dashboard breakdowns",
+   "Reports and dashboard category groupings render the short code (BLD, VEH, ICT...) next to the long category name, completing the work started in §4.8."],
+  ["4A.12 Test that two categories cannot share a code",
+   "Add an automated test for the database uniqueness constraint shipped in §4.8, so admins cannot create a duplicate code and quietly destabilise the asset-tag suggester."],
+  ["4A.13 Windows desktop installer",
+   "An MSI / EXE installer for Windows so an ICSA workstation administrator can roll out NPAMS on the corporate desktop fleet via Group Policy. Ships the same web bundle inside a WebView2 shell with auto-update."],
+  ["4A.14 Android mobile app",
+   "A signed APK / Play Store build for field officers conducting audits and goods receipts. Uses the existing public QR endpoint, the camera and GPS, and works offline against a local cache."],
+  ["4A.15 One-page on-prem deployment runbook for ICSA",
+   "A printable runbook for an ICSA on-prem server: pre-requisites, install steps, backup configuration, certificate rotation and verification checks. Supports the offline option for sites without reliable connectivity."],
+  ["4A.16 Maintenance and audit events inline on asset history",
+   "The asset detail page already shows transfers; this work folds in maintenance jobs and audit results so the lifecycle is a single, ordered timeline."],
+  ["4A.17 Export an asset's full history to PDF",
+   "One-click PDF export of the asset detail page (specifications, transfers, maintenance, audit results, photos) for evidence packs and divestment paperwork."],
+  ["4A.18 Top-bar search across stock, audits and PRs",
+   "Extends the global asset search (§4.11) to also cover stock items, audit sessions and purchase requests."],
+  ["4A.19 Full search results page for large match sets",
+   "When the top-bar preview is not enough, a dedicated results page lists every match with filter chips and pagination."],
+  ["4A.20 Audit-assignment stepper for officers",
+   "Officers stepping through their pending audit assignments in the field can move between assignments with a single key, mirroring the asset and PR steppers."],
+  ["4A.21 Dark-mode pass for audit, maintenance and public pages",
+   "Completes the theme-token migration started in §4.30 by sweeping the remaining surfaces (audit, maintenance and the public verification page) so contrast and badge colours are correct in dark mode."],
+];
+roadmapFeatures.forEach(([t, d]) => { h2(t); p(d); });
 
 // ─── §5 Governance, Security & Compliance ───────────────────────────────────
 h1("5. Governance, Security & Compliance");
@@ -288,10 +344,10 @@ table({
     ["PII",             "Limited to officer profile data needed for workflow attribution; no citizen biometric data is processed."],
     ["Disaster Recovery","RPO 24h, RTO 8h. Documented runbook handed over at Go-Live."],
     ["Service Level",   "99.5% monthly uptime; P1 1h, P2 4h, P3 next business day."],
-    ["Vulnerability management", "Monthly dependency CVE scan (npm audit + Snyk); SAST run on every release; critical CVEs patched within 7 days, high within 30 days; quarterly external penetration test summary delivered to ICSA."],
+    ["Vulnerability management", "Monthly dependency CVE scan; SAST run on every release; critical CVEs patched within 7 days, high within 30 days; quarterly external penetration test summary delivered to ICSA."],
   ],
 });
-p("NPAMS aligns with the PNG Government Digital Strategy and is designed to be auditable by the Auditor-General's office on demand.");
+p("NPAMS aligns with the PNG Government Digital Strategy and is designed to be auditable by the Auditor-General's office on demand. LanFrame holds responsibility for every control listed above.");
 
 // ─── §6 Commercials ─────────────────────────────────────────────────────────
 h1("6. Commercials");
@@ -330,7 +386,7 @@ table({
 
 // ─── §7 Timeline ────────────────────────────────────────────────────────────
 h1("7. Implementation Timeline");
-p("Eight (8) weeks from contract signature to formal Go-Live, with two further weeks of post-go-live hyper-care.");
+p("Eight (8) weeks from contract signature to formal Go-Live, with two further weeks of post-go-live hyper-care, all delivered by the LanFrame team.");
 
 ganttChart([
   { name: "Mobilisation",        start: 1, end: 1 },
@@ -348,9 +404,9 @@ ganttChart([
 h1("8. Roles & Responsibilities");
 table({
   cols: [
-    { label: "Activity", w: 0.55 },
-    { label: "NPAMS",    w: 0.225, align: "center" },
-    { label: "ICSA",     w: 0.225, align: "center" },
+    { label: "Activity",          w: 0.55 },
+    { label: "LanFrame / NPAMS",  w: 0.225, align: "center" },
+    { label: "ICSA",              w: 0.225, align: "center" },
   ],
   rows: [
     ["Tenant provisioning",                          "R", "I"],
@@ -369,9 +425,9 @@ p("R = Responsible · C = Consulted · I = Informed");
 h1("9. Assumptions & Exclusions");
 bullet([
   "Pricing assumes 15 concurrent web users in Year 1; additional users billable at PGK 600 / user / year.",
-  "Mobile applications (Android / iOS) are not in scope; the responsive web app works on tablets and modern phones.",
+  "Mobile applications (Android / iOS) are listed in §4A.14 as roadmap; the responsive web app works on tablets and modern phones today.",
   "Hardware (scanners, label printers, biometric kiosks) is provided by ICSA.",
-  "Connectivity to provincial border posts is provided by ICSA.",
+  "Connectivity to provincial border posts is provided by ICSA. The roadmap §4A.13 / §4A.15 include offline / on-prem options for sites without reliable connectivity.",
   "Custom development beyond the 8 hrs/month support envelope is quoted separately at PGK 300 / hr.",
 ]);
 
@@ -382,7 +438,7 @@ const terms = [
   "Payment. 30% on contract signature, 40% on UAT sign-off, 30% on Go-Live. Recurring fees billed annually in advance.",
   "Validity. This proposal is valid for sixty (60) days from the date on the cover.",
   "Variations. Any change in scope is captured in a written Change Request and priced at PGK 300 / hr.",
-  "Intellectual Property. Platform IP remains with the NPAMS Programme. ICSA data remains the property of ICSA at all times and is exportable on demand in open formats.",
+  "Intellectual Property. Platform IP remains with the NPAMS Programme, developed and maintained by LanFrame. ICSA data remains the property of ICSA at all times and is exportable on demand in open formats.",
   "Termination. Either party may terminate for convenience on 90 days' notice. On termination, all ICSA data is delivered as Postgres dump and CSV export within 14 days at no charge.",
   "Confidentiality. Both parties treat the contents of this engagement as confidential.",
   "Governing Law. Laws of the Independent State of Papua New Guinea.",
@@ -424,38 +480,28 @@ ledgerEvidence([
   { event: "approved",  at: "2026-05-11 19:26:45 UTC", signer: "Immigration Admin", role: "Agency Admin",
     hash: "afaaa07ffba697d56087029da25564066eaf0b0c62b536ba9d7bac596da1c4da" },
 ]);
-// ─── Annex B — Comparison ───────────────────────────────────────────────────
-ensure(400);
-h1("Annex B — Comparison vs Reference Proposal");
+// ─── Annex B — Feature Inventory ────────────────────────────────────────────
+doc.addPage();
+h1("Annex B — Feature Inventory (Implemented and Roadmap)");
+p("Single-page reference list of every capability described in §4 and §4A.");
 table({
   cols: [
-    { label: "Item",          w: 0.40 },
-    { label: "Zyntrix v1.2",  w: 0.20, align: "right" },
-    { label: "NPAMS",         w: 0.20, align: "right" },
-    { label: "Diff (PGK)",    w: 0.20, align: "right" },
+    { label: "§",          w: 0.10 },
+    { label: "Capability", w: 0.72 },
+    { label: "Status",     w: 0.18, align: "center" },
   ],
   rows: [
-    ["Platform licence (Year 1, 5 vs 15 users)", "42,000.00", "9,000.00",  "(33,000.00)"],
-    ["Implementation & customisation",           "included",  "28,000.00", "—"],
-    ["Data migration & seeding",                 "included",  "8,500.00",  "—"],
-    ["Annual hosting",                           "included",  "12,000.00", "—"],
-    ["Training",                                 "included",  "7,500.00",  "—"],
-    ["Annual support & maintenance",             "84,000.00", "30,000.00", "(54,000.00)"],
-    ["Per-user licence (additional)",            "718.75",    "600.00",    "(118.75)"],
-    ["Subtotal (excl. GST)",                     "129,593.75","95,000.00", "(34,593.75)"],
-    ["GST (10%)",                                "12,959.38", "9,500.00",  "(3,459.38)"],
-    ["Grand Total Year 1 (incl. GST)",           "142,553.13","104,500.00","(38,053.13)"],
-    ["Saving to ICSA",                           "—",         "—",         "~ 26.7%"],
+    ...implementedFeatures.map(([t]) => [t.split(" ")[0], t.replace(/^\S+\s/, ""), "Live"]),
+    ...roadmapFeatures.map(([t]) => [t.split(" ")[0], t.replace(/^\S+\s/, ""), "Roadmap"]),
   ],
-  emphasiseLastN: 3,
 });
-p("The NPAMS proposal is itemised line-by-line so ICSA's Finance team can trace every Kina; nothing is bundled into an opaque \"support\" line.");
+p("All roadmap items are scheduled inside the support contract's <= 8 hrs/month enhancement envelope and delivered by LanFrame at no additional cost to ICSA.");
 
 // ─── End ────────────────────────────────────────────────────────────────────
 ensure(40);
 doc.moveDown(1);
 doc.font("Helvetica-Oblique").fontSize(9).fillColor(C.mute).text(
-  "End of proposal — Commercial in Confidence — NPAMS Programme Office, 2026.",
+  "End of proposal — Commercial in Confidence — LanFrame for the NPAMS Programme Office, 2026.",
   { align: "center" }
 );
 
