@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ServerCog, Database, ShieldCheck, Activity, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { PageHeader } from "@/components/layout/page-header";
 
 type StatusData = {
   api: { status: string; uptime_seconds: number };
@@ -66,22 +67,19 @@ export default function SystemStatusPage() {
   const dbOk = data.database.status === "ok";
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <ServerCog className="w-6 h-6" /> System Status
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Operational health, backups and disaster recovery posture.
-            {dataUpdatedAt ? ` · Last checked ${new Date(dataUpdatedAt).toLocaleTimeString()}` : ""}
-          </p>
-        </div>
-        <Button onClick={runHealthCheck} disabled={isFetching} variant="outline">
-          <RefreshCw className={`w-4 h-4 mr-1 ${isFetching ? "animate-spin" : ""}`} />
-          Run Health Check
-        </Button>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        icon={<ServerCog className="w-5 h-5" />}
+        title="System Status"
+        subtitle={<>Operational health, backups and disaster recovery posture.{dataUpdatedAt ? ` · Last checked ${new Date(dataUpdatedAt).toLocaleTimeString()}` : ""}</>}
+        breadcrumbs={[{ label: "System Status" }]}
+        actions={
+          <Button onClick={runHealthCheck} disabled={isFetching} variant="outline">
+            <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} />
+            Run health check
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>

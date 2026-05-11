@@ -21,7 +21,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Edit, Trash } from "lucide-react";
+import { Plus, Edit, Trash, Tags } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_ROLES } from "@/App";
@@ -132,13 +133,13 @@ export default function Categories() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Categories</h2>
-          <p className="text-muted-foreground">Manage asset classifications.</p>
-        </div>
-        <Button onClick={openCreate}><Plus className="w-4 h-4 mr-2" /> Add Category</Button>
-      </div>
+      <PageHeader
+        icon={<Tags className="w-5 h-5" />}
+        title="Categories"
+        subtitle="Manage asset classifications."
+        breadcrumbs={[{ label: "Assets", href: "/assets" }, { label: "Categories" }]}
+        actions={<Button onClick={openCreate}><Plus className="w-4 h-4" /> Add category</Button>}
+      />
 
       <div className="bg-card border rounded-lg overflow-hidden">
         <Table>

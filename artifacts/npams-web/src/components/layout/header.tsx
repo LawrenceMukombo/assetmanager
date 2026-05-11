@@ -75,9 +75,9 @@ export function Header() {
       : null;
 
   return (
-    <header className="border-b flex flex-col bg-card shrink-0" style={{ height: accentBarStyle ? "67px" : "64px" }}>
+    <header className="border-b flex flex-col bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/70 shrink-0 sticky top-0 z-30" style={{ height: accentBarStyle ? "67px" : "64px" }}>
       {accentBarStyle && <div style={accentBarStyle} className="w-full shrink-0" />}
-      <div className="flex items-center justify-between px-4 flex-1">
+      <div className="flex items-center justify-between px-4 md:px-6 flex-1">
       <div className="flex items-center gap-4">
         <SidebarTrigger />
         <div className="flex items-center gap-3">
@@ -98,7 +98,7 @@ export function Header() {
               }
             />
           ) : null}
-          <h1 className="font-semibold text-lg hidden sm:block">{headerTitle}</h1>
+          <h1 className="font-semibold text-base lg:text-lg tracking-tight hidden sm:block truncate max-w-[28rem] lg:max-w-[40rem]">{headerTitle}</h1>
         </div>
       </div>
 
@@ -168,11 +168,16 @@ export function Header() {
           </PopoverContent>
         </Popover>
 
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary">
+        <div className="flex items-center gap-2.5 pl-2 border-l h-8">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-xs font-semibold text-primary-foreground shadow-sm ring-1 ring-primary/20">
             {user?.full_name?.charAt(0)?.toUpperCase() ?? "U"}
           </div>
-          <span className="text-sm font-medium hidden md:block">{user?.full_name}</span>
+          <div className="hidden md:flex flex-col leading-tight">
+            <span className="text-sm font-medium truncate max-w-[10rem]">{user?.full_name}</span>
+            {user?.role && (
+              <span className="text-[11px] text-muted-foreground truncate max-w-[10rem]">{user.role}</span>
+            )}
+          </div>
         </div>
       </div>
       </div>

@@ -22,6 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Boxes, Plus, AlertTriangle, ArrowRight, ShoppingCart } from "lucide-react";
 import { ReorderDialog, type ReorderItem } from "@/components/reorder-dialog";
+import { PageHeader } from "@/components/layout/page-header";
 
 type StockBalanceSummary = {
   facilityId: string | null;
@@ -150,20 +151,18 @@ export default function StockPage() {
   }, [showCreate]);
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <Boxes className="w-6 h-6" /> Stock & Inventory
-          </h1>
-          <p className="text-sm text-muted-foreground">Consumables, stationery, uniforms and other inventoried supplies.</p>
-        </div>
-        {isAdmin && (
+    <div className="space-y-6">
+      <PageHeader
+        icon={<Boxes className="w-5 h-5" />}
+        title="Stock & Inventory"
+        subtitle="Consumables, stationery, uniforms and other inventoried supplies."
+        breadcrumbs={[{ label: "Stock & Inventory" }]}
+        actions={isAdmin && (
           <Button onClick={() => setShowCreate(true)}>
-            <Plus className="w-4 h-4 mr-1" /> New Stock Item
+            <Plus className="w-4 h-4" /> New stock item
           </Button>
         )}
-      </div>
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>

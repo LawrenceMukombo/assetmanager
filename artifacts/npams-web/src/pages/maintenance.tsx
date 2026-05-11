@@ -26,6 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Wrench, Plus, CheckCircle2, AlertTriangle, Clock, X, Pencil } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 
 interface MaintenanceRecord {
   id: string; title: string; description?: string; status: string; priority: string;
@@ -140,17 +141,17 @@ export default function Maintenance() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Maintenance</h2>
-          <p className="text-muted-foreground">Schedule and track asset maintenance tasks.</p>
-        </div>
-        {isAdmin && (
+      <PageHeader
+        icon={<Wrench className="w-5 h-5" />}
+        title="Maintenance"
+        subtitle="Schedule and track asset maintenance tasks."
+        breadcrumbs={[{ label: "Maintenance" }]}
+        actions={isAdmin && (
           <Button onClick={() => { setForm({ ...EMPTY_FORM }); setShowCreate(true); }}>
-            <Plus className="w-4 h-4 mr-2" /> Schedule Maintenance
+            <Plus className="w-4 h-4" /> Schedule maintenance
           </Button>
         )}
-      </div>
+      />
 
       {(overdue.length > 0 || dueSoon.length > 0) && (
         <div className="grid gap-4 sm:grid-cols-2">

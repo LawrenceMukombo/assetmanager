@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 import { useEffect, useState } from "react";
+import { Settings as SettingsIcon } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 
 const profileSchema = z.object({
   full_name: z.string().min(1, "Name is required"),
@@ -148,10 +150,12 @@ export default function Settings() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
-        <p className="text-muted-foreground">Manage your account and system preferences.</p>
-      </div>
+      <PageHeader
+        icon={<SettingsIcon className="w-5 h-5" />}
+        title="Settings"
+        subtitle="Manage your account and system preferences."
+        breadcrumbs={[{ label: "Settings" }]}
+      />
 
       <div className="grid md:grid-cols-2 gap-6">
         <div className="space-y-6">

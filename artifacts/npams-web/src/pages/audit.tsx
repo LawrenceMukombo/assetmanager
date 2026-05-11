@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ClipboardList, Plus, ChevronRight, CalendarClock, CheckCircle2, ClipboardCheck } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 
 interface AuditSession {
   id: string; name: string; description?: string; status: string;
@@ -108,17 +109,17 @@ export default function Audit() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Audit Sessions</h2>
-          <p className="text-muted-foreground">Create and manage physical asset verification campaigns.</p>
-        </div>
-        {isAdmin && (
+      <PageHeader
+        icon={<ClipboardList className="w-5 h-5" />}
+        title="Audit Sessions"
+        subtitle="Create and manage physical asset verification campaigns."
+        breadcrumbs={[{ label: "Audit Sessions" }]}
+        actions={isAdmin && (
           <Button onClick={() => setShowCreate(true)}>
-            <Plus className="w-4 h-4 mr-2" /> New Session
+            <Plus className="w-4 h-4" /> New session
           </Button>
         )}
-      </div>
+      />
 
       {isOfficer && pendingAssignments.length > 0 && (
         <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">

@@ -21,6 +21,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { ShieldCheck, Loader2 } from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -58,51 +59,30 @@ export default function Login() {
   };
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center px-4"
-      style={{
-        background: "linear-gradient(150deg, #000000 0%, #1a1a00 35%, #3d2e00 65%, #000000 100%)",
-      }}
-    >
+    <div className="min-h-screen flex items-center justify-center px-4 py-10 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 relative overflow-hidden">
       <div
-        className="absolute inset-0 pointer-events-none"
+        className="absolute inset-0 pointer-events-none opacity-70"
         style={{
           background:
-            "radial-gradient(ellipse at 30% 60%, rgba(252,209,22,0.12) 0%, transparent 60%), radial-gradient(ellipse at 75% 20%, rgba(206,17,38,0.15) 0%, transparent 55%)",
+            "radial-gradient(ellipse at 20% 20%, rgba(37,99,235,0.18) 0%, transparent 55%), radial-gradient(ellipse at 85% 80%, rgba(252,209,22,0.08) 0%, transparent 50%)",
         }}
       />
+      <div className="absolute inset-x-0 top-0 h-1 flex" aria-hidden>
+        <div className="flex-1" style={{ background: "#000000" }} />
+        <div className="flex-1" style={{ background: "#FCD116" }} />
+        <div className="flex-1" style={{ background: "#CE1126" }} />
+      </div>
 
-      <div className="relative w-full max-w-sm">
-        <div className="mb-4 flex justify-center gap-2">
-          <div className="h-1 w-20 rounded-full" style={{ background: "#000000", border: "1px solid #FCD116" }} />
-          <div className="h-1 w-8 rounded-full" style={{ background: "#FCD116" }} />
-          <div className="h-1 w-20 rounded-full" style={{ background: "#CE1126" }} />
-        </div>
-
-        <div className="rounded-2xl overflow-hidden shadow-2xl" style={{ border: "2px solid #FCD116" }}>
-          <div
-            className="px-8 py-7 flex flex-col items-center text-center relative overflow-hidden"
-            style={{
-              background: "linear-gradient(160deg, #000000 0%, #1a0d00 50%, #000000 100%)",
-            }}
-          >
-            <div
-              className="absolute inset-0 opacity-10"
-              style={{
-                background: "repeating-linear-gradient(45deg, #FCD116 0px, #FCD116 1px, transparent 1px, transparent 12px)",
-              }}
-            />
-
-            <div
-              className="relative w-24 h-24 rounded-full flex items-center justify-center mb-4 overflow-hidden"
-              style={{ border: "3px solid #FCD116", boxShadow: "0 0 24px rgba(252,209,22,0.4)" }}
-            >
+      <div className="relative w-full max-w-[400px]">
+        <div className="rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-card">
+          <div className="px-8 pt-8 pb-6 flex flex-col items-center text-center border-b">
+            <div className="relative w-16 h-16 rounded-xl flex items-center justify-center mb-4 overflow-hidden bg-muted ring-1 ring-border shadow-sm">
               {flagError ? (
                 <div
-                  className="w-full h-full flex items-center justify-center"
-                  style={{ background: "linear-gradient(135deg, #000 50%, #CE1126 50%)" }}
+                  className="w-full h-full flex items-center justify-center text-sm font-bold"
+                  style={{ background: "linear-gradient(135deg, #000 50%, #CE1126 50%)", color: "#FCD116" }}
                 >
-                  <span style={{ color: "#FCD116", fontSize: "2rem", fontWeight: "bold" }}>PNG</span>
+                  PNG
                 </div>
               ) : (
                 <img
@@ -113,34 +93,15 @@ export default function Login() {
                 />
               )}
             </div>
-
-            <div
-              className="text-2xl font-extrabold tracking-widest mb-1"
-              style={{ color: "#FCD116", textShadow: "0 0 16px rgba(252,209,22,0.5)" }}
-            >
-              NPAMS
-            </div>
-            <p className="text-white/85 text-sm font-medium">National Public Asset Management System</p>
-            <p className="text-xs mt-0.5" style={{ color: "#FCD116", opacity: 0.7 }}>
-              Independent State of Papua New Guinea
-            </p>
-
-            <div className="flex gap-2 mt-4">
-              <div className="h-1 w-12 rounded-full" style={{ background: "#000000", border: "1px solid #fff" }} />
-              <div className="h-1 w-6 rounded-full" style={{ background: "#FCD116" }} />
-              <div className="h-1 w-12 rounded-full" style={{ background: "#CE1126" }} />
-            </div>
+            <h1 className="text-xl font-semibold tracking-tight">NPAMS</h1>
+            <p className="text-sm text-muted-foreground mt-1">National Public Asset Management System</p>
+            <p className="text-xs text-muted-foreground/70 mt-0.5">Independent State of Papua New Guinea</p>
           </div>
 
-          <div
-            className="px-8 py-7"
-            style={{ background: "linear-gradient(180deg, #ffffff 0%, #fffdf0 100%)" }}
-          >
-            <div
-              className="text-center text-xs font-semibold tracking-widest mb-5 pb-3 border-b"
-              style={{ color: "#7a6000", borderColor: "#FCD116" }}
-            >
-              AUTHORISED ACCESS ONLY
+          <div className="px-8 py-7">
+            <div className="flex items-center justify-center gap-1.5 mb-6 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              Authorised access only
             </div>
 
             <Form {...form}>
@@ -150,16 +111,9 @@ export default function Login() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs font-semibold" style={{ color: "#1a1a00" }}>
-                        Email Address
-                      </FormLabel>
+                      <FormLabel>Email address</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="name@gov.pg"
-                          {...field}
-                          className="border-2 focus:ring-0"
-                          style={{ borderColor: "#d4b800" }}
-                        />
+                        <Input placeholder="name@gov.pg" autoComplete="username" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -171,37 +125,24 @@ export default function Login() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs font-semibold" style={{ color: "#1a1a00" }}>
-                        Password
-                      </FormLabel>
+                      <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input
-                          type="password"
-                          placeholder="••••••••"
-                          {...field}
-                          className="border-2 focus:ring-0"
-                          style={{ borderColor: "#d4b800" }}
-                        />
+                        <Input type="password" placeholder="••••••••" autoComplete="current-password" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
 
-                <Button
-                  type="submit"
-                  className="w-full font-bold text-sm py-2.5 tracking-wide"
-                  style={{
-                    background: isLoading
-                      ? "#333"
-                      : "linear-gradient(135deg, #000000 0%, #1a1a00 50%, #000000 100%)",
-                    color: "#FCD116",
-                    border: "2px solid #FCD116",
-                    boxShadow: isLoading ? "none" : "0 0 14px rgba(252,209,22,0.3)",
-                  }}
-                  disabled={isLoading}
-                >
-                  {isLoading ? "Signing in..." : "Sign In"}
+                <Button type="submit" className="w-full mt-2" disabled={isLoading}>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Signing in...
+                    </>
+                  ) : (
+                    "Sign in"
+                  )}
                 </Button>
               </form>
             </Form>
@@ -210,35 +151,32 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setShowForgotDialog(true)}
-                className="text-xs hover:underline focus:outline-none"
-                style={{ color: "#7a6000" }}
+                className="text-xs text-muted-foreground hover:text-foreground hover:underline focus:outline-none transition-colors"
               >
                 Forgot your password?
               </button>
             </div>
+          </div>
 
-            <div className="mt-5 pt-4 flex items-center justify-center gap-2" style={{ borderTop: "1px solid #FCD116" }}>
-              <div className="flex gap-1.5">
-                <div className="w-4 h-4 rounded-full border border-white" style={{ backgroundColor: "#000000" }} />
-                <div className="w-4 h-4 rounded-full" style={{ backgroundColor: "#FCD116" }} />
-                <div className="w-4 h-4 rounded-full" style={{ backgroundColor: "#CE1126" }} />
-              </div>
-              <p className="text-xs" style={{ color: "#7a6000" }}>Papua New Guinea</p>
+          <div className="px-8 py-3 border-t bg-muted/30 flex items-center justify-between">
+            <div className="flex gap-1" aria-hidden>
+              <span className="block w-3 h-3 rounded-full" style={{ background: "#000000" }} />
+              <span className="block w-3 h-3 rounded-full" style={{ background: "#FCD116" }} />
+              <span className="block w-3 h-3 rounded-full" style={{ background: "#CE1126" }} />
             </div>
+            <p className="text-[11px] text-muted-foreground">Papua New Guinea</p>
           </div>
         </div>
 
-        <div className="mt-3 flex justify-center gap-2 opacity-60">
-          <div className="h-1 w-20 rounded-full" style={{ background: "#FCD116" }} />
-          <div className="h-1 w-8 rounded-full" style={{ background: "#CE1126" }} />
-          <div className="h-1 w-20 rounded-full" style={{ background: "#000000", border: "1px solid #FCD116" }} />
-        </div>
+        <p className="text-center text-[11px] text-white/50 mt-4">
+          © {new Date().getFullYear()} Government of Papua New Guinea
+        </p>
       </div>
 
       <Dialog open={showForgotDialog} onOpenChange={setShowForgotDialog}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Password Reset</DialogTitle>
+            <DialogTitle>Password reset</DialogTitle>
             <DialogDescription asChild>
               <div className="space-y-3 text-sm text-muted-foreground">
                 <p>Self-service password reset is not available for NPAMS accounts.</p>

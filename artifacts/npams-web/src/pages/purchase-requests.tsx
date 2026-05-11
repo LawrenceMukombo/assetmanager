@@ -27,9 +27,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ClipboardList, Check, X, PackageCheck, Plus, ShieldCheck, ChevronRight, Inbox, FileSpreadsheet, ListChecks,
+  ClipboardList, Check, X, PackageCheck, Plus, ShieldCheck, ChevronRight, Inbox, FileSpreadsheet, ListChecks, ShoppingCart,
 } from "lucide-react";
 import { format } from "date-fns";
+import { PageHeader } from "@/components/layout/page-header";
 
 type PurchaseRequest = {
   id: string;
@@ -238,18 +239,18 @@ export default function PurchaseRequestsPage() {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <ClipboardList className="w-6 h-6 text-blue-600" /> Purchase Requests
-          </h1>
-          <p className="text-sm text-muted-foreground">Reorder requests for low-stock items, routed to admins for approval.</p>
-        </div>
-        <Button onClick={() => setNewOpen(true)} className="bg-blue-600 hover:bg-blue-700">
-          <Plus className="w-4 h-4 mr-1" /> New purchase request
-        </Button>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        icon={<ShoppingCart className="w-5 h-5" />}
+        title="Purchase Requests"
+        subtitle="Reorder requests for low-stock items, routed to admins for approval."
+        breadcrumbs={[{ label: "Purchase Requests" }]}
+        actions={
+          <Button onClick={() => setNewOpen(true)}>
+            <Plus className="w-4 h-4" /> New purchase request
+          </Button>
+        }
+      />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
         <ColorfulTabsList>

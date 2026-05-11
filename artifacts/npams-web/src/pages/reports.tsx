@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, Printer, RefreshCw, FileDown, MapPin, X, TrendingDown, AlertTriangle, Wrench, Boxes, ShoppingCart, MapPinned, Activity } from "lucide-react";
+import { FileText, Download, Printer, RefreshCw, FileDown, MapPin, X, TrendingDown, AlertTriangle, Wrench, Boxes, ShoppingCart, MapPinned, Activity, FileBarChart } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 import { useToast } from "@/hooks/use-toast";
 import Papa from "papaparse";
 import jsPDF from "jspdf";
@@ -303,10 +304,12 @@ export default function Reports() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Reports & Exports</h2>
-        <p className="text-muted-foreground">Generate, preview, and download asset reports.</p>
-      </div>
+      <PageHeader
+        icon={<FileBarChart className="w-5 h-5" />}
+        title="Reports & Exports"
+        subtitle="Generate, preview, and download asset reports."
+        breadcrumbs={[{ label: "Reports" }]}
+      />
 
       {/* Location Scope Filter — national users only */}
       {isNational && (

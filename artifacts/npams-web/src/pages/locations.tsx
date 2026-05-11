@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Pencil, Plus, Trash2, X, MapPin, Users, Ruler, Building2, Phone, Mail, Navigation } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetchJson } from "@/lib/api-fetch";
 import { FlagColorPicker } from "@/components/flag-color-picker";
@@ -366,13 +367,12 @@ export default function Locations() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Locations</h2>
-        <p className="text-muted-foreground">
-          Manage provinces, districts, and facilities across Papua New Guinea.
-          {isSuperAdmin ? " As Super Admin you can create, edit, and delete records." : ""}
-        </p>
-      </div>
+      <PageHeader
+        icon={<MapPin className="w-5 h-5" />}
+        title="Locations"
+        subtitle={<>Manage provinces, districts, and facilities across Papua New Guinea.{isSuperAdmin ? " As Super Admin you can create, edit, and delete records." : ""}</>}
+        breadcrumbs={[{ label: "Locations" }]}
+      />
 
       <Tabs defaultValue="provinces" className="w-full">
         <TabsList>

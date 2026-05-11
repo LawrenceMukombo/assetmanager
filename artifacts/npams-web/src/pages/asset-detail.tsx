@@ -18,7 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Edit, Printer, Download, Activity, ArrowRight, TrendingDown, ImageIcon, FileText, Wrench, CheckCircle, AlertTriangle, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, Edit, Printer, Download, Activity, ArrowRight, TrendingDown, ImageIcon, FileText, Wrench, CheckCircle, AlertTriangle, Trash2, Box, ChevronLeft, ChevronRight } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 import { statusBadgeClass } from "@/lib/status";
 import QRCode from "react-qr-code";
 import { useEffect, useRef, useState } from "react";
@@ -346,34 +347,46 @@ export default function AssetDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/assets">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-3xl font-bold tracking-tight">{asset.assetName}</h2>
-            <Badge variant="outline" className="text-sm font-mono">{asset.assetTag}</Badge>
-            <Badge className={`capitalize ${statusBadgeClass(asset.status)}`}>{asset.status?.replace("_", " ")}</Badge>
-          </div>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {isAdmin && (
-            <Button variant="outline" onClick={() => setShowTransferDialog(true)}>
-              <ArrowRight className="w-4 h-4 mr-2" />
-              Transfer
+      <PageHeader
+        icon={<Box className="w-5 h-5" />}
+        title={asset.assetName}
+        subtitle={
+          <span className="inline-flex items-center gap-2 font-mono text-xs">
+            {asset.assetTag}
+          </span>
+        }
+        breadcrumbs={[
+          { label: "Assets", href: "/assets" },
+          { label: asset.assetTag ?? "Detail" },
+        ]}
+        badge={
+          <Badge className={`capitalize ${statusBadgeClass(asset.status)}`}>
+            {asset.status?.replace("_", " ")}
+          </Badge>
+        }
+        actions={
+          <>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/assets">
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </Link>
             </Button>
-          )}
-          <Button variant="outline" asChild>
-            <Link href={`/assets/${asset.id}/edit`}>
-              <Edit className="w-4 h-4 mr-2" />
-              Edit
-            </Link>
-          </Button>
-        </div>
-      </div>
+            {isAdmin && (
+              <Button variant="outline" onClick={() => setShowTransferDialog(true)}>
+                <ArrowRight className="w-4 h-4" />
+                Transfer
+              </Button>
+            )}
+            <Button variant="outline" asChild>
+              <Link href={`/assets/${asset.id}/edit`}>
+                <Edit className="w-4 h-4" />
+                Edit
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
       {(isNeighborsLoading || (neighbors && neighbors.total > 0)) && (
         <Card>

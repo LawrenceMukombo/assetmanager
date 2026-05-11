@@ -25,6 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Plus, ChevronRight, CheckCircle2, ClipboardList, Play, CheckSquare } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 
 interface Assignment {
   id: string; status: string; dueDate?: string; createdAt: string;
@@ -157,7 +158,7 @@ export default function AuditDetail() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-3xl font-bold tracking-tight">{session.name}</h2>
+            <h2 className="text-2xl sm:text-[1.75rem] font-semibold tracking-tight leading-tight">{session.name}</h2>
             <Badge className={`${STATUS_COLORS[session.status] ?? ""} text-sm`}>{cap(session.status)}</Badge>
           </div>
           {session.description && <p className="text-muted-foreground mt-1">{session.description}</p>}

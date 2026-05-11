@@ -2,6 +2,7 @@ import { useGetNotifications, useMarkNotificationRead, getGetNotificationsQueryK
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDistanceToNow } from "date-fns";
 import { Bell, CheckCircle2, ExternalLink } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -35,12 +36,12 @@ export default function Notifications() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Notifications</h2>
-          <p className="text-muted-foreground">System alerts and updates.</p>
-        </div>
-      </div>
+      <PageHeader
+        icon={<Bell className="w-5 h-5" />}
+        title="Notifications"
+        subtitle="System alerts and updates."
+        breadcrumbs={[{ label: "Notifications" }]}
+      />
 
       <div className="space-y-4">
         {isLoading ? (

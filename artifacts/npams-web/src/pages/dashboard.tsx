@@ -23,6 +23,7 @@ import {
   PieChart, Pie, Cell, Legend, LineChart, Line, AreaChart, Area, LabelList,
 } from "recharts";
 import { useLocation } from "wouter";
+import { PageHeader } from "@/components/layout/page-header";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -717,16 +718,18 @@ function NationalDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-full overflow-hidden border-2 flex-shrink-0" style={{ borderColor: "#CE1126" }}>
-          <img src="/flags/png_national.svg" alt="Papua New Guinea" className="w-full h-full object-cover" />
-        </div>
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">National Overview</h2>
-          <p className="text-muted-foreground text-sm">Click any chart element or KPI card to cross-filter. Click again to deselect.</p>
-        </div>
-      </div>
+      <PageHeader
+        icon={
+          <img
+            src="/flags/png_national.svg"
+            alt="Papua New Guinea"
+            className="w-10 h-10 object-cover rounded-md"
+          />
+        }
+        title="National Overview"
+        subtitle="Click any chart element or KPI card to cross-filter. Click again to deselect."
+        breadcrumbs={[{ label: "Dashboard" }]}
+      />
 
       {/* Location Filter Bar */}
       <LocationFilterBar
@@ -1219,34 +1222,34 @@ function ProvincialDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        {d?.agency?.logoUrl ? (
-          <img src={d.agency.logoUrl} alt={`${d.agency.agencyName ?? ""} logo`} className="h-12 w-12 object-contain rounded-sm bg-white p-0.5 border" />
-        ) : d?.province?.flagUrl ? (
-          <img src={d.province.flagUrl} alt={`${d.province.provinceName ?? ""} flag`} className="h-8 w-12 object-cover rounded-sm border" />
-        ) : null}
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">
-            {d?.agency?.agencyName
-              ? `${d.agency.agencyName} Dashboard`
-              : isAgency
-              ? branding.provinceName
-                ? `${branding.provinceName} Dashboard`
-                : (user?.scope as { agency_name?: string } | undefined)?.agency_name
-                  ? `${(user!.scope as { agency_name?: string }).agency_name} Dashboard`
-                  : "Agency Dashboard"
-              : d?.province?.provinceName
-              ? `${d.province.provinceName} Dashboard`
-              : "Provincial Dashboard"}
-          </h2>
-          <p className="text-muted-foreground text-sm">
-            {d?.agency
-              ? <>{d.agency.agencyType ? `${d.agency.agencyType.toUpperCase()} · ` : ""}{d.agency.agencyCode ?? ""} · Click any chart or card to cross-filter</>
-              : <>{d?.province?.region ? `${d.province.region} Region` : ""}{d?.province?.capitalCity ? ` · ${d.province.capitalCity}` : ""} · Click any chart or card to cross-filter</>}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        icon={
+          d?.agency?.logoUrl ? (
+            <img src={d.agency.logoUrl} alt={`${d.agency.agencyName ?? ""} logo`} className="h-10 w-10 object-contain bg-white rounded-md p-0.5 border" />
+          ) : d?.province?.flagUrl ? (
+            <img src={d.province.flagUrl} alt={`${d.province.provinceName ?? ""} flag`} className="h-7 w-10 object-cover rounded-sm border" />
+          ) : undefined
+        }
+        title={
+          d?.agency?.agencyName
+            ? `${d.agency.agencyName} Dashboard`
+            : isAgency
+            ? branding.provinceName
+              ? `${branding.provinceName} Dashboard`
+              : (user?.scope as { agency_name?: string } | undefined)?.agency_name
+                ? `${(user!.scope as { agency_name?: string }).agency_name} Dashboard`
+                : "Agency Dashboard"
+            : d?.province?.provinceName
+            ? `${d.province.provinceName} Dashboard`
+            : "Provincial Dashboard"
+        }
+        subtitle={
+          d?.agency
+            ? <>{d.agency.agencyType ? `${d.agency.agencyType.toUpperCase()} · ` : ""}{d.agency.agencyCode ?? ""} · Click any chart or card to cross-filter</>
+            : <>{d?.province?.region ? `${d.province.region} Region` : ""}{d?.province?.capitalCity ? ` · ${d.province.capitalCity}` : ""} · Click any chart or card to cross-filter</>
+        }
+        breadcrumbs={[{ label: "Dashboard" }]}
+      />
 
       {/* Location Filter Bar — districts/facilities only apply for province scope */}
       {!d?.agency && (

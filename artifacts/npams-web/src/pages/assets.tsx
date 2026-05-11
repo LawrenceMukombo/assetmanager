@@ -67,6 +67,8 @@ import {
 import { statusBadgeClass } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { DistrictPicker } from "@/components/district-picker";
+import { PageHeader } from "@/components/layout/page-header";
+import { Box } from "lucide-react";
 
 const ALL = "__all__";
 
@@ -392,20 +394,18 @@ export default function Assets() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Asset Register</h2>
-          <p className="text-muted-foreground">
-            Manage and track all public assets.
-          </p>
-        </div>
-        {canCreateAsset && (
+      <PageHeader
+        title="Asset Register"
+        subtitle="Manage and track all public assets."
+        icon={<Box className="w-5 h-5" />}
+        breadcrumbs={[{ label: "Assets" }]}
+        actions={canCreateAsset && (
           <Button onClick={() => setLocation("/assets/new")}>
-            <Plus className="w-4 h-4 mr-2" />
+            <Plus className="w-4 h-4" />
             Add Asset
           </Button>
         )}
-      </div>
+      />
 
       <div className="bg-card rounded-lg border">
         <div className="flex items-center justify-between px-4 py-3 border-b">

@@ -28,7 +28,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, ShieldCheck } from "lucide-react";
+import { Plus, Pencil, ShieldCheck, Users as UsersIcon } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 import { Label } from "@/components/ui/label";
 
 interface RoleItem {
@@ -282,15 +283,17 @@ export default function Users() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">User Management</h2>
-          <p className="text-muted-foreground">Manage system access, roles, and permissions.</p>
-        </div>
-        <Button onClick={() => { setIsAddOpen(true); setSelectedProvinceId(""); setSelectedRoleScope(""); }}>
-          <Plus className="w-4 h-4 mr-2" /> Add User
-        </Button>
-      </div>
+      <PageHeader
+        icon={<UsersIcon className="w-5 h-5" />}
+        title="User Management"
+        subtitle="Manage system access, roles, and permissions."
+        breadcrumbs={[{ label: "Users" }]}
+        actions={
+          <Button onClick={() => { setIsAddOpen(true); setSelectedProvinceId(""); setSelectedRoleScope(""); }}>
+            <Plus className="w-4 h-4" /> Add user
+          </Button>
+        }
+      />
 
       <Tabs defaultValue="users">
         <TabsList>
