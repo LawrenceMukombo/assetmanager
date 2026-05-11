@@ -153,47 +153,47 @@ export interface AssetLocationInfo {
   provinceName?: string;
   flagUrl?: string | null;
   themeAccentColor?: string | null;
-} | null
+}
 
 export interface AssetDistrictInfo {
   id?: string;
   districtName?: string;
-} | null
+}
 
 export interface AssetFacilityInfo {
   id?: string;
   facilityName?: string;
-} | null
+}
 
 export interface AssetCategoryInfo {
   id?: string;
   categoryName?: string;
-} | null
+}
 
 export interface AssetUserInfo {
   id?: string;
   fullName?: string;
   email?: string;
-} | null
+}
 
-export type AssetListItemStatus = typeof AssetListItemStatus[keyof typeof AssetListItemStatus];
-
+export type AssetListItemStatus =
+  (typeof AssetListItemStatus)[keyof typeof AssetListItemStatus];
 
 export const AssetListItemStatus = {
-  active: 'active',
-  disposed: 'disposed',
-  missing: 'missing',
-  under_maintenance: 'under_maintenance',
+  active: "active",
+  disposed: "disposed",
+  missing: "missing",
+  under_maintenance: "under_maintenance",
 } as const;
 
-export type AssetListItemCondition = typeof AssetListItemCondition[keyof typeof AssetListItemCondition];
-
+export type AssetListItemCondition =
+  (typeof AssetListItemCondition)[keyof typeof AssetListItemCondition];
 
 export const AssetListItemCondition = {
-  excellent: 'excellent',
-  good: 'good',
-  fair: 'fair',
-  poor: 'poor',
+  excellent: "excellent",
+  good: "good",
+  fair: "fair",
+  poor: "poor",
 } as const;
 
 export interface AssetListItem {
@@ -208,11 +208,11 @@ export interface AssetListItem {
   purchaseDate?: string | null;
   purchaseCost?: string | null;
   createdAt?: string;
-  category?: AssetCategoryInfo | null;
-  province?: AssetLocationInfo | null;
-  district?: AssetDistrictInfo | null;
-  facility?: AssetFacilityInfo | null;
-  assignedUser?: AssetUserInfo | null;
+  category?: AssetCategoryInfo;
+  province?: AssetLocationInfo;
+  district?: AssetDistrictInfo;
+  facility?: AssetFacilityInfo;
+  assignedUser?: AssetUserInfo;
 }
 
 export type AssetDetailActivityLogsItem = {
@@ -222,13 +222,13 @@ export type AssetDetailActivityLogsItem = {
   createdAt?: string;
 };
 
-export type AssetDetail = AssetListItem & ({
+export type AssetDetail = AssetListItem & {
   supplier?: string | null;
   warrantyExpiry?: string | null;
   usefulLifeYears?: number | null;
   updatedAt?: string;
   activity_logs?: AssetDetailActivityLogsItem[];
-});
+};
 
 export interface Pagination {
   page?: number;
@@ -247,24 +247,24 @@ export interface AssetListResponse {
   data?: AssetListResponseData;
 }
 
-export type CreateAssetRequestStatus = typeof CreateAssetRequestStatus[keyof typeof CreateAssetRequestStatus];
-
+export type CreateAssetRequestStatus =
+  (typeof CreateAssetRequestStatus)[keyof typeof CreateAssetRequestStatus];
 
 export const CreateAssetRequestStatus = {
-  active: 'active',
-  disposed: 'disposed',
-  missing: 'missing',
-  under_maintenance: 'under_maintenance',
+  active: "active",
+  disposed: "disposed",
+  missing: "missing",
+  under_maintenance: "under_maintenance",
 } as const;
 
-export type CreateAssetRequestCondition = typeof CreateAssetRequestCondition[keyof typeof CreateAssetRequestCondition];
-
+export type CreateAssetRequestCondition =
+  (typeof CreateAssetRequestCondition)[keyof typeof CreateAssetRequestCondition];
 
 export const CreateAssetRequestCondition = {
-  excellent: 'excellent',
-  good: 'good',
-  fair: 'fair',
-  poor: 'poor',
+  excellent: "excellent",
+  good: "good",
+  fair: "fair",
+  poor: "poor",
 } as const;
 
 export interface CreateAssetRequest {
@@ -287,24 +287,24 @@ export interface CreateAssetRequest {
   assigned_to_user?: string;
 }
 
-export type UpdateAssetRequestStatus = typeof UpdateAssetRequestStatus[keyof typeof UpdateAssetRequestStatus];
-
+export type UpdateAssetRequestStatus =
+  (typeof UpdateAssetRequestStatus)[keyof typeof UpdateAssetRequestStatus];
 
 export const UpdateAssetRequestStatus = {
-  active: 'active',
-  disposed: 'disposed',
-  missing: 'missing',
-  under_maintenance: 'under_maintenance',
+  active: "active",
+  disposed: "disposed",
+  missing: "missing",
+  under_maintenance: "under_maintenance",
 } as const;
 
-export type UpdateAssetRequestCondition = typeof UpdateAssetRequestCondition[keyof typeof UpdateAssetRequestCondition];
-
+export type UpdateAssetRequestCondition =
+  (typeof UpdateAssetRequestCondition)[keyof typeof UpdateAssetRequestCondition];
 
 export const UpdateAssetRequestCondition = {
-  excellent: 'excellent',
-  good: 'good',
-  fair: 'fair',
-  poor: 'poor',
+  excellent: "excellent",
+  good: "good",
+  fair: "fair",
+  poor: "poor",
 } as const;
 
 export interface UpdateAssetRequest {
@@ -360,10 +360,10 @@ export interface ProvinceInfo {
   provinceName?: string;
   flagUrl?: string | null;
   themeAccentColor?: string | null;
-} | null
+}
 
 export interface ProvincialDashboard {
-  province?: ProvinceInfo | null;
+  province?: ProvinceInfo;
   total_assets?: number;
   active_assets?: number;
   missing_assets?: number;
@@ -492,35 +492,35 @@ export type UpdateCategoryBody = {
 };
 
 export type GetAssetsParams = {
-page?: number;
-limit?: number;
-province_id?: string;
-district_id?: string;
-facility_id?: string;
-category_id?: string;
-status?: GetAssetsStatus;
-condition?: GetAssetsCondition;
-search?: string;
+  page?: number;
+  limit?: number;
+  province_id?: string;
+  district_id?: string;
+  facility_id?: string;
+  category_id?: string;
+  status?: GetAssetsStatus;
+  condition?: GetAssetsCondition;
+  search?: string;
 };
 
-export type GetAssetsStatus = typeof GetAssetsStatus[keyof typeof GetAssetsStatus];
-
+export type GetAssetsStatus =
+  (typeof GetAssetsStatus)[keyof typeof GetAssetsStatus];
 
 export const GetAssetsStatus = {
-  active: 'active',
-  disposed: 'disposed',
-  missing: 'missing',
-  under_maintenance: 'under_maintenance',
+  active: "active",
+  disposed: "disposed",
+  missing: "missing",
+  under_maintenance: "under_maintenance",
 } as const;
 
-export type GetAssetsCondition = typeof GetAssetsCondition[keyof typeof GetAssetsCondition];
-
+export type GetAssetsCondition =
+  (typeof GetAssetsCondition)[keyof typeof GetAssetsCondition];
 
 export const GetAssetsCondition = {
-  excellent: 'excellent',
-  good: 'good',
-  fair: 'fair',
-  poor: 'poor',
+  excellent: "excellent",
+  good: "good",
+  fair: "fair",
+  poor: "poor",
 } as const;
 
 export type GetAssetById200 = {
@@ -534,7 +534,7 @@ export type GetAssetQrData200 = {
 };
 
 export type GetProvincialDashboardParams = {
-province_id?: string;
+  province_id?: string;
 };
 
 export type GetProvincialDashboard200 = {
@@ -548,9 +548,9 @@ export type GetNationalDashboard200 = {
 };
 
 export type GetAssetsReportParams = {
-province_id?: string;
-status?: string;
-category_id?: string;
+  province_id?: string;
+  status?: string;
+  category_id?: string;
 };
 
 export type GetAssetsReport200Data = {
@@ -576,11 +576,11 @@ export type GetNotifications200 = {
 };
 
 export type ListStockItemsParams = {
-search?: string;
-/**
- * When "true", returns only items at or below their reorder level
- */
-low_stock?: string;
+  search?: string;
+  /**
+   * When "true", returns only items at or below their reorder level
+   */
+  low_stock?: string;
 };
 
 export type CreateStockItemBody = {
@@ -601,14 +601,14 @@ export type CreateStockItemBody = {
 
 export type UpdateStockItemBody = { [key: string]: unknown };
 
-export type RecordStockMovementBodyMovementType = typeof RecordStockMovementBodyMovementType[keyof typeof RecordStockMovementBodyMovementType];
-
+export type RecordStockMovementBodyMovementType =
+  (typeof RecordStockMovementBodyMovementType)[keyof typeof RecordStockMovementBodyMovementType];
 
 export const RecordStockMovementBodyMovementType = {
-  receive: 'receive',
-  issue: 'issue',
-  transfer: 'transfer',
-  adjust: 'adjust',
+  receive: "receive",
+  issue: "issue",
+  transfer: "transfer",
+  adjust: "adjust",
 } as const;
 
 export type RecordStockMovementBody = {
@@ -622,4 +622,3 @@ export type RecordStockMovementBody = {
   reference?: string | null;
   reason?: string | null;
 };
-

@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { eq, and, isNull, ilike, or, sql, desc } from "drizzle-orm";
-import { db, stockItems, stockMovements, facilities, users, provinces, agencies, activityLogs } from "@workspace/db";
+import { db, stockItems, stockMovements, facilities, districts, users, provinces, agencies, activityLogs } from "@workspace/db";
 import type { Request, Response, NextFunction } from "express";
-import { requireAuth, requireAssetAdmin } from "../lib/auth";
+import { requireAuth, requireAssetAdmin, isWithinAssetScope } from "../lib/auth";
 
 const router = Router();
 
@@ -247,6 +247,34 @@ router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (re
     : movementType === "issue" ? -quantity
     : movementType === "transfer" ? 0
     : quantity; // adjust = positive delta
+
+  // Validate transfer destination is in caller scope (single-location stock model:
+  // transfer reassigns the item's facility; per-location balances are tracked in follow-up #7).
+  if (movementType === "transfer") {
+    const toFacilityId = orNull(body.to_facility_id);
+    if (!toFacilityId) {
+      res.status(400).json({ success: false, message: "to_facility_id is required for transfers", data: null });
+      return;
+    }
+    const [destFacility] = await db
+      .select({ id: facilities.id, districtId: facilities.districtId, provinceId: districts.provinceId })
+      .from(facilities)
+      .leftJoin(districts, eq(facilities.districtId, districts.id))
+      .where(eq(facilities.id, toFacilityId))
+      .limit(1);
+    if (!destFacility) {
+      res.status(400).json({ success: false, message: "Destination facility not found", data: null });
+      return;
+    }
+    if (!isWithinAssetScope(req.user, {
+      provinceId: destFacility.provinceId ?? null,
+      districtId: destFacility.districtId,
+      facilityId: destFacility.id,
+    })) {
+      res.status(403).json({ success: false, message: "Cannot transfer to a facility outside your scope", data: null });
+      return;
+    }
+  }
   try {
     const result = await db.transaction(async (tx) => {
       const conditions = [eq(stockItems.id, req.params.id), isNull(stockItems.deletedAt), ...scopeFilter(req.user!)];

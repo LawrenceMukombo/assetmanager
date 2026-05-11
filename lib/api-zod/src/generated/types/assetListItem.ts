@@ -25,9 +25,9 @@ export interface AssetListItem {
   purchaseDate?: string | null;
   purchaseCost?: string | null;
   createdAt?: Date;
-  category?: AssetCategoryInfo | null;
-  province?: AssetLocationInfo | null;
-  district?: AssetDistrictInfo | null;
-  facility?: AssetFacilityInfo | null;
-  assignedUser?: AssetUserInfo | null;
+  category?: AssetCategoryInfo;
+  province?: AssetLocationInfo;
+  district?: AssetDistrictInfo;
+  facility?: AssetFacilityInfo;
+  assignedUser?: AssetUserInfo;
 }

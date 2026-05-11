@@ -10,4 +10,4 @@ export interface ProvinceInfo {
   provinceName?: string;
   flagUrl?: string | null;
   themeAccentColor?: string | null;
-} | null
+}

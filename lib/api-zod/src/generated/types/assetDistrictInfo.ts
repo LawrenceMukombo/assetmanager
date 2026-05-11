@@ -9,4 +9,4 @@
 export interface AssetDistrictInfo {
   id?: string;
   districtName?: string;
-} | null
+}

@@ -445,7 +445,7 @@ export const GetAssetsResponse = zod.object({
                 id: zod.string().optional(),
                 categoryName: zod.string().optional(),
               })
-              .nullish(),
+              .optional(),
             province: zod
               .object({
                 id: zod.string().optional(),
@@ -453,26 +453,26 @@ export const GetAssetsResponse = zod.object({
                 flagUrl: zod.string().nullish(),
                 themeAccentColor: zod.string().nullish(),
               })
-              .nullish(),
+              .optional(),
             district: zod
               .object({
                 id: zod.string().optional(),
                 districtName: zod.string().optional(),
               })
-              .nullish(),
+              .optional(),
             facility: zod
               .object({
                 id: zod.string().optional(),
                 facilityName: zod.string().optional(),
               })
-              .nullish(),
+              .optional(),
             assignedUser: zod
               .object({
                 id: zod.string().optional(),
                 fullName: zod.string().optional(),
                 email: zod.string().optional(),
               })
-              .nullish(),
+              .optional(),
           }),
         )
         .optional(),
@@ -542,7 +542,7 @@ export const GetAssetByIdResponse = zod.object({
           id: zod.string().optional(),
           categoryName: zod.string().optional(),
         })
-        .nullish(),
+        .optional(),
       province: zod
         .object({
           id: zod.string().optional(),
@@ -550,26 +550,26 @@ export const GetAssetByIdResponse = zod.object({
           flagUrl: zod.string().nullish(),
           themeAccentColor: zod.string().nullish(),
         })
-        .nullish(),
+        .optional(),
       district: zod
         .object({
           id: zod.string().optional(),
           districtName: zod.string().optional(),
         })
-        .nullish(),
+        .optional(),
       facility: zod
         .object({
           id: zod.string().optional(),
           facilityName: zod.string().optional(),
         })
-        .nullish(),
+        .optional(),
       assignedUser: zod
         .object({
           id: zod.string().optional(),
           fullName: zod.string().optional(),
           email: zod.string().optional(),
         })
-        .nullish(),
+        .optional(),
     })
     .and(
       zod.object({
@@ -681,7 +681,7 @@ export const GetProvincialDashboardResponse = zod.object({
           flagUrl: zod.string().nullish(),
           themeAccentColor: zod.string().nullish(),
         })
-        .nullish(),
+        .optional(),
       total_assets: zod.number().optional(),
       active_assets: zod.number().optional(),
       missing_assets: zod.number().optional(),

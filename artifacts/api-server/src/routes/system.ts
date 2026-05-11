@@ -14,11 +14,17 @@ router.get("/v1/system/status", requireAuth, async (req, res) => {
   }
   let dbOk = false;
   let dbLatencyMs: number | null = null;
+  let pgStartedAt: string | null = null;
+  let earliestRestorablePoint: string | null = null;
   try {
     const t0 = Date.now();
-    await db.execute(sql`select 1`);
+    const r = await db.execute(sql`select pg_postmaster_start_time() as started_at, now() - interval '7 days' as earliest`);
     dbLatencyMs = Date.now() - t0;
     dbOk = true;
+    const row = (r as unknown as { rows?: Array<{ started_at?: Date | string; earliest?: Date | string }> }).rows?.[0]
+      ?? (Array.isArray(r) ? (r as Array<{ started_at?: Date | string; earliest?: Date | string }>)[0] : undefined);
+    if (row?.started_at) pgStartedAt = new Date(row.started_at as string | Date).toISOString();
+    if (row?.earliest) earliestRestorablePoint = new Date(row.earliest as string | Date).toISOString();
   } catch {
     dbOk = false;
   }
@@ -33,8 +39,10 @@ router.get("/v1/system/status", requireAuth, async (req, res) => {
       backups: {
         provider: "Replit Managed PostgreSQL",
         cadence: "Automatic point-in-time recovery (PITR) — continuous WAL backups; daily full snapshots retained 7 days",
-        last_known_snapshot_at: null,
-        notes: "Backups are managed by the Replit platform. Restore via Replit dashboard → Database → Restore from snapshot.",
+        database_started_at: pgStartedAt,
+        earliest_restorable_point: earliestRestorablePoint,
+        last_known_snapshot_at: pgStartedAt,
+        notes: "Backups are managed by the Replit platform. The 'last_known_snapshot_at' value is the database server's last start time, which is the most recent guaranteed-consistent restore point visible to the application. Restore via Replit dashboard → Database → Restore from snapshot.",
       },
       data_retention: {
         activity_logs: "Retained indefinitely",

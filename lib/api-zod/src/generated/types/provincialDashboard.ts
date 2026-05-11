@@ -11,7 +11,7 @@ import type { ProvinceInfo } from "./provinceInfo";
 import type { RecentAsset } from "./recentAsset";
 
 export interface ProvincialDashboard {
-  province?: ProvinceInfo | null;
+  province?: ProvinceInfo;
   total_assets?: number;
   active_assets?: number;
   missing_assets?: number;

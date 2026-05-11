@@ -1254,7 +1254,6 @@ components:
 
     AssetLocationInfo:
       type: object
-      nullable: true
       properties:
         id:
           type: string
@@ -1269,7 +1268,6 @@ components:
 
     AssetDistrictInfo:
       type: object
-      nullable: true
       properties:
         id:
           type: string
@@ -1278,7 +1276,6 @@ components:
 
     AssetFacilityInfo:
       type: object
-      nullable: true
       properties:
         id:
           type: string
@@ -1287,7 +1284,6 @@ components:
 
     AssetCategoryInfo:
       type: object
-      nullable: true
       properties:
         id:
           type: string
@@ -1296,7 +1292,6 @@ components:
 
     AssetUserInfo:
       type: object
-      nullable: true
       properties:
         id:
           type: string
@@ -1547,7 +1542,6 @@ components:
 
     ProvinceInfo:
       type: object
-      nullable: true
       properties:
         provinceName:
           type: string

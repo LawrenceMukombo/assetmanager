@@ -33,6 +33,9 @@ type StockItem = {
   unitCost: string | null;
   supplier: string | null;
   notes: string | null;
+  agency?: { id: string; agencyName: string; agencyCode: string } | null;
+  province?: { id: string; provinceName: string } | null;
+  facility?: { id: string; facilityName: string } | null;
 };
 
 const EMPTY_FORM = {
@@ -155,6 +158,7 @@ export default function StockPage() {
                   <TableHead>Code</TableHead>
                   <TableHead>Item</TableHead>
                   <TableHead>Category</TableHead>
+                  <TableHead>Location</TableHead>
                   <TableHead className="text-right">On hand</TableHead>
                   <TableHead className="text-right">Reorder</TableHead>
                   <TableHead>UoM</TableHead>
@@ -170,6 +174,9 @@ export default function StockPage() {
                       <TableCell className="font-mono text-xs">{it.itemCode}</TableCell>
                       <TableCell className="font-medium">{it.itemName}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">{it.category ?? "—"}</TableCell>
+                      <TableCell className="text-sm">
+                        {[it.agency?.agencyName, it.province?.provinceName, it.facility?.facilityName].filter(Boolean).join(" · ") || <span className="text-muted-foreground">—</span>}
+                      </TableCell>
                       <TableCell className="text-right font-mono">{it.onHandQuantity.toLocaleString()}</TableCell>
                       <TableCell className="text-right font-mono text-muted-foreground">{it.reorderLevel.toLocaleString()}</TableCell>
                       <TableCell className="text-sm">{it.unitOfMeasure}</TableCell>
