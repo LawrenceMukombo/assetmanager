@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { sql, eq, desc, and } from "drizzle-orm";
+import { sql, eq, desc } from "drizzle-orm";
 import { db, activityLogs } from "@workspace/db";
 import { requireAuth } from "../lib/auth";
 
@@ -130,8 +130,5 @@ router.get("/v1/system/status", requireAuth, async (req, res) => {
     },
   });
 });
-
-// Suppress unused-import warning for `and` (kept for future query composition).
-void and;
 
 export default router;

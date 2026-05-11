@@ -3365,3 +3365,84 @@ export function useGetSystemStatus<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Verify DB connectivity and record a backup checkpoint (Super Admin / Agency Admin only)
+ */
+export const getRunSystemHealthCheckUrl = () => {
+  return `/api/v1/system/health-check`;
+};
+
+export const runSystemHealthCheck = async (
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getRunSystemHealthCheckUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRunSystemHealthCheckMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runSystemHealthCheck>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runSystemHealthCheck>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["runSystemHealthCheck"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runSystemHealthCheck>>,
+    void
+  > = () => {
+    return runSystemHealthCheck(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunSystemHealthCheckMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runSystemHealthCheck>>
+>;
+
+export type RunSystemHealthCheckMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Verify DB connectivity and record a backup checkpoint (Super Admin / Agency Admin only)
+ */
+export const useRunSystemHealthCheck = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runSystemHealthCheck>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runSystemHealthCheck>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getRunSystemHealthCheckMutationOptions(options));
+};

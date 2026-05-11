@@ -30,6 +30,11 @@ function scopeFilter(user: NonNullable<Express.Request["user"]>) {
     return user.agencyId ? [eq(stockItems.agencyId, user.agencyId)] : [sql`1=0`];
   }
   if (user.facilityId) return [eq(stockItems.facilityId, user.facilityId)];
+  if (user.districtId) {
+    return [
+      sql`${stockItems.facilityId} IN (SELECT id FROM ${facilities} WHERE district_id = ${user.districtId})`,
+    ];
+  }
   if (user.provinceId) return [eq(stockItems.provinceId, user.provinceId)];
   return [sql`1=0`];
 }

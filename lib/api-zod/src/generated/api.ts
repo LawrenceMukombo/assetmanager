@@ -977,3 +977,14 @@ export const GetSystemStatusResponse = zod
     data: zod.unknown().nullish(),
   })
   .describe("Standard API response envelope");
+
+/**
+ * @summary Verify DB connectivity and record a backup checkpoint (Super Admin / Agency Admin only)
+ */
+export const RunSystemHealthCheckResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
