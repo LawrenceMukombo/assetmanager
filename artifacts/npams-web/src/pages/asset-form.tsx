@@ -140,7 +140,7 @@ export default function AssetForm() {
     resolver: zodResolver(assetSchema),
     defaultValues: {
       asset_name: "",
-      asset_tag: `NPAMS-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+      asset_tag: "",
       category_id: "",
       serial_number: "",
       brand: "",
@@ -165,6 +165,74 @@ export default function AssetForm() {
 
   const selectedProvince = form.watch("province_id");
   const selectedDistrict = form.watch("district_id");
+  const selectedCategoryId = form.watch("category_id");
+
+  // Map asset category names to the 3-letter type code used in `[AGENCY]-[TYPE]-[NNN]`
+  // asset tags. Anything not in this map falls back to the first 3 letters of
+  // the category name (e.g. "Communication Equipment" → "COM").
+  const CATEGORY_TYPE_MAP: Record<string, string> = {
+    "Buildings & Infrastructure": "BLD",
+    "Vehicles & Transport": "VEH",
+    "Office Furniture": "OFF",
+    "ICT Equipment": "ICT",
+    "Communication Equipment": "COM",
+  };
+
+  const categoryToTypeCode = (name?: string | null): string | null => {
+    if (!name) return null;
+    if (CATEGORY_TYPE_MAP[name]) return CATEGORY_TYPE_MAP[name];
+    const letters = name.replace(/[^A-Za-z]/g, "").toUpperCase();
+    return letters.length >= 2 ? letters.slice(0, 3) : null;
+  };
+
+  // Track whether the user has manually edited the asset tag so we don't
+  // clobber their value when the category changes again.
+  const [tagUserEdited, setTagUserEdited] = useState(false);
+  const lastPrefilledTagRef = useRef<string>("");
+
+  // When the selected category changes (and we're creating, not editing),
+  // prefill the asset tag with the next code in the user's scope.
+  useEffect(() => {
+    if (isEdit) return;
+    const cat = categoriesData?.data?.find((c) => c.id === selectedCategoryId);
+    const type = categoryToTypeCode(cat?.categoryName);
+    if (!type) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await apiFetchJson<{ latestCode: string | null; agencyCode: string | null; type: string }>(
+          `/api/v1/assets/latest-code?type=${encodeURIComponent(type)}`,
+        );
+        if (cancelled || !r.ok) return;
+        const latest = r.data?.latestCode ?? null;
+        const agencyCode = r.data?.agencyCode ?? null;
+        let nextCode = "";
+        if (latest) {
+          const m = latest.match(new RegExp(`^([A-Z0-9]+)-${type}-(\\d+)$`));
+          if (m) {
+            const prefix = m[1];
+            const num = m[2];
+            const next = String(Number(num) + 1).padStart(num.length, "0");
+            nextCode = `${prefix}-${type}-${next}`;
+          }
+        } else if (agencyCode) {
+          nextCode = `${agencyCode}-${type}-001`;
+        }
+        if (!nextCode) return;
+        const current = form.getValues("asset_tag");
+        // Only overwrite when the field is empty or still holds a value we
+        // previously prefilled (i.e. the user hasn't typed anything custom).
+        if (!current || (!tagUserEdited && current === lastPrefilledTagRef.current)) {
+          lastPrefilledTagRef.current = nextCode;
+          form.setValue("asset_tag", nextCode, { shouldValidate: true, shouldDirty: false });
+        }
+      } catch {
+        // Leave the field as-is on failure; user can type a code manually.
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategoryId, categoriesData, isEdit]);
 
   const { data: districtsData } = useGetDistrictsByProvince(selectedProvince, {
     query: {
@@ -335,7 +403,18 @@ export default function AssetForm() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Asset Tag *</FormLabel>
-                        <FormControl><Input {...field} /></FormControl>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder={isEdit ? "" : "Pick a category to auto-fill"}
+                            onChange={(e) => {
+                              field.onChange(e);
+                              if (!isEdit && e.target.value !== lastPrefilledTagRef.current) {
+                                setTagUserEdited(true);
+                              }
+                            }}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}

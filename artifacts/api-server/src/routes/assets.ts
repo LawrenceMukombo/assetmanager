@@ -293,6 +293,66 @@ router.post("/v1/assets", requireAuth, requireAssetAdmin, async (req, res) => {
   }
 });
 
+// Returns the latest asset_tag in scope that matches `[AGENCY]-[TYPE]-[NNN]`
+// for the requested 3-letter `type` (e.g. BLD, VEH, OFF, ICT, COM), sorted by
+// the numeric suffix. Used by the New Asset form to prefill the next code.
+// Also returns the caller's agency code so the client can fall back to
+// `[AGENCY]-[TYPE]-001` when no asset of that type exists yet.
+router.get("/v1/assets/latest-code", requireAuth, async (req, res) => {
+  if (!req.user) return;
+  try {
+    const rawType = String((req.query as { type?: string }).type ?? "").toUpperCase();
+    if (!/^[A-Z]{2,5}$/.test(rawType)) {
+      res.status(400).json({ success: false, message: "type must be 2-5 uppercase letters", data: null });
+      return;
+    }
+
+    let agencyCode: string | null = null;
+    if (req.user.agencyId) {
+      const [ag] = await db
+        .select({ agencyCode: agencies.agencyCode })
+        .from(agencies)
+        .where(eq(agencies.id, req.user.agencyId))
+        .limit(1);
+      agencyCode = ag?.agencyCode ?? null;
+    }
+
+    const scopeConditions = (() => {
+      const u = req.user!;
+      if (u.scopeLevel === "national") return [];
+      if (u.scopeLevel === "agency" || u.agencyId) {
+        return u.agencyId ? [eq(assets.agencyId, u.agencyId)] : [sql`1=0`];
+      }
+      if (u.facilityId) return [eq(assets.facilityId, u.facilityId)];
+      if (u.districtId) return [eq(assets.districtId, u.districtId)];
+      if (u.provinceId) return [eq(assets.provinceId, u.provinceId)];
+      return [sql`1=0`];
+    })();
+
+    const conditions = [
+      isNull(assets.deletedAt),
+      sql`${assets.assetTag} ~ ${'^[A-Z0-9]+-' + rawType + '-[0-9]+$'}`,
+      ...scopeConditions,
+    ];
+
+    const [row] = await db
+      .select({ assetTag: assets.assetTag })
+      .from(assets)
+      .where(and(...conditions))
+      .orderBy(sql`CAST(SPLIT_PART(${assets.assetTag}, '-', 3) AS INTEGER) DESC`)
+      .limit(1);
+
+    res.json({
+      success: true,
+      message: "Latest asset code retrieved",
+      data: { latestCode: row?.assetTag ?? null, agencyCode, type: rawType },
+    });
+  } catch (err) {
+    req.log.error({ err }, "Get latest asset code error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
 router.get("/v1/assets/:id", requireAuth, async (req, res) => {
   try {
     const [row] = await db
