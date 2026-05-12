@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -82,8 +82,6 @@ export default function Reports() {
   const { user } = useAuth();
   const isNational = user?.scope_level === "national";
   const { toast } = useToast();
-  const printRef = useRef<HTMLDivElement>(null);
-
   const [reportData, setReportData] = useState<AssetReportRow[] | null>(null);
   const [summaryData, setSummaryData] = useState<SummaryRow[] | null>(null);
   const [loadingAssets, setLoadingAssets] = useState(false);
@@ -272,8 +270,114 @@ export default function Reports() {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
+  const buildAssetRegisterPdf = async (items: AssetReportRow[]): Promise<jsPDF> => {
+    const crestDataUrl = await loadCrestDataUrl();
+
+    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    const generatedLine = `Generated: ${new Date().toLocaleDateString("en-PG", { year: "numeric", month: "long", day: "numeric" })}${user?.full_name ? `   |   Prepared by: ${user.full_name}` : ""}`;
+
+    autoTable(doc, {
+      startY: 90,
+      head: [["Asset Name", "Tag", "Category", "Status", "Condition", "Province", "Facility", "Purchase Cost"]],
+      body: items.map(row => [
+        row.asset_name ?? "—",
+        row.asset_tag ?? "—",
+        row.category_name ?? "—",
+        (row.status ?? "—").replace(/_/g, " "),
+        row.condition ?? "—",
+        row.province_name ?? "—",
+        row.facility_name ?? row.district_name ?? "—",
+        formatCurrency(row.purchase_cost),
+      ]),
+      styles: { fontSize: 7.5, cellPadding: 4 },
+      headStyles: { fillColor: [15, 76, 129], textColor: 255, fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [240, 246, 252] },
+      margin: { left: 30, right: 30, top: 90, bottom: 50 },
+      didDrawPage: () => {
+        if (crestDataUrl) {
+          try { doc.addImage(crestDataUrl, "PNG", 30, 22, 48, 48); } catch { /* ignore */ }
+        }
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(16);
+        doc.setTextColor(15, 76, 129);
+        doc.text("ICSA — Asset Register", pageWidth / 2, 44, { align: "center" });
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(100);
+        doc.text(generatedLine, pageWidth / 2, 62, { align: "center" });
+        doc.setTextColor(0);
+
+        const pageCount = doc.getNumberOfPages();
+        const pageNum = doc.getCurrentPageInfo().pageNumber;
+        doc.setDrawColor(15, 76, 129);
+        doc.setLineWidth(0.5);
+        doc.line(30, pageHeight - 30, pageWidth - 30, pageHeight - 30);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(100);
+        doc.text("ICSA — Immigration & Citizenship Service Authority", 30, pageHeight - 18);
+        doc.text(`Page ${pageNum} of ${pageCount}`, pageWidth - 30, pageHeight - 18, { align: "right" });
+        doc.setTextColor(0);
+      },
+    });
+
+    // Re-stamp page numbers now that totals are known
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFillColor(255, 255, 255);
+      doc.rect(pageWidth - 110, pageHeight - 28, 80, 14, "F");
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100);
+      doc.text(`Page ${i} of ${totalPages}`, pageWidth - 30, pageHeight - 18, { align: "right" });
+      doc.setTextColor(0);
+    }
+
+    return doc;
+  };
+
+  const handlePrint = async () => {
+    setLoadingAssets(true);
+    try {
+      // Use the data already loaded in the print preview if available; otherwise fetch.
+      let items = reportData ?? null;
+      if (!items) {
+        const res = await apiFetch(`/api/v1/reports/assets${locationParams}`);
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.message ?? "Failed to fetch");
+        items = body.data?.items ?? body.data ?? [];
+      }
+      if (!items || items.length === 0) {
+        toast({ title: "No assets to print" });
+        return;
+      }
+
+      const doc = await buildAssetRegisterPdf(items);
+      doc.autoPrint();
+
+      // Open the branded PDF in a new tab and trigger the print dialog.
+      // This guarantees the printout matches the PDF (crest, footer, page numbers).
+      const blobUrl = doc.output("bloburl");
+      const win = window.open(blobUrl, "_blank");
+      if (!win) {
+        toast({
+          variant: "destructive",
+          title: "Popup blocked",
+          description: "Allow pop-ups for this site to open the print preview.",
+        });
+        return;
+      }
+      toast({ title: "Print preview opened", description: `${items.length} assets` });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Print failed";
+      toast({ variant: "destructive", title: "Print failed", description: msg });
+    } finally {
+      setLoadingAssets(false);
+    }
   };
 
   const downloadPDF = async () => {
@@ -285,74 +389,7 @@ export default function Reports() {
       const items: AssetReportRow[] = body.data?.items ?? body.data ?? [];
       if (items.length === 0) { toast({ title: "No assets found" }); return; }
 
-      const crestDataUrl = await loadCrestDataUrl();
-
-      const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-
-      const generatedLine = `Generated: ${new Date().toLocaleDateString("en-PG", { year: "numeric", month: "long", day: "numeric" })}${user?.full_name ? `   |   Prepared by: ${user.full_name}` : ""}`;
-
-      autoTable(doc, {
-        startY: 90,
-        head: [["Asset Name", "Tag", "Category", "Status", "Condition", "Province", "Facility", "Purchase Cost"]],
-        body: items.map(row => [
-          row.asset_name ?? "—",
-          row.asset_tag ?? "—",
-          row.category_name ?? "—",
-          (row.status ?? "—").replace(/_/g, " "),
-          row.condition ?? "—",
-          row.province_name ?? "—",
-          row.facility_name ?? row.district_name ?? "—",
-          formatCurrency(row.purchase_cost),
-        ]),
-        styles: { fontSize: 7.5, cellPadding: 4 },
-        headStyles: { fillColor: [15, 76, 129], textColor: 255, fontStyle: "bold" },
-        alternateRowStyles: { fillColor: [240, 246, 252] },
-        margin: { left: 30, right: 30, top: 90, bottom: 50 },
-        didDrawPage: () => {
-          // Header: crest top-left, title centered
-          if (crestDataUrl) {
-            try { doc.addImage(crestDataUrl, "PNG", 30, 22, 48, 48); } catch { /* ignore */ }
-          }
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(16);
-          doc.setTextColor(15, 76, 129);
-          doc.text("ICSA — Asset Register", pageWidth / 2, 44, { align: "center" });
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(9);
-          doc.setTextColor(100);
-          doc.text(generatedLine, pageWidth / 2, 62, { align: "center" });
-          doc.setTextColor(0);
-
-          // Footer: agency line + page numbers
-          const pageCount = doc.getNumberOfPages();
-          const pageNum = doc.getCurrentPageInfo().pageNumber;
-          doc.setDrawColor(15, 76, 129);
-          doc.setLineWidth(0.5);
-          doc.line(30, pageHeight - 30, pageWidth - 30, pageHeight - 30);
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(8);
-          doc.setTextColor(100);
-          doc.text("ICSA — Immigration & Citizenship Service Authority", 30, pageHeight - 18);
-          doc.text(`Page ${pageNum} of ${pageCount}`, pageWidth - 30, pageHeight - 18, { align: "right" });
-          doc.setTextColor(0);
-        },
-      });
-
-      // Re-stamp page numbers now that totals are known
-      const totalPages = doc.getNumberOfPages();
-      for (let i = 1; i <= totalPages; i++) {
-        doc.setPage(i);
-        doc.setFillColor(255, 255, 255);
-        doc.rect(pageWidth - 110, pageHeight - 28, 80, 14, "F");
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
-        doc.setTextColor(100);
-        doc.text(`Page ${i} of ${totalPages}`, pageWidth - 30, pageHeight - 18, { align: "right" });
-        doc.setTextColor(0);
-      }
-
+      const doc = await buildAssetRegisterPdf(items);
       doc.save("ICSA_Asset_Register.pdf");
       toast({ title: "PDF exported", description: `${items.length} assets` });
     } catch (err: unknown) {
@@ -601,74 +638,55 @@ export default function Reports() {
       </div>
 
       {reportData !== null && (
-        <div ref={printRef} className="space-y-4">
+        <div className="space-y-4">
           <div className="flex items-center justify-between print:hidden">
             <h3 className="text-lg font-semibold">Asset Register Preview</h3>
             <span className="text-sm text-muted-foreground">{reportData.length} assets</span>
           </div>
 
-          <div className="print-area">
-            <div className="hidden print:block mb-6">
-              <h1 className="text-2xl font-bold">ICSA — Asset Register Report</h1>
-              <p className="text-sm text-muted-foreground">
-                Generated: {new Date().toLocaleDateString("en-PG", { year: "numeric", month: "long", day: "numeric" })}
-                {user?.full_name ? ` | Prepared by: ${user.full_name}` : ""}
-              </p>
-            </div>
-
-            <div className="border rounded-lg overflow-auto">
-              <Table>
-                <TableHeader>
+          <div className="border rounded-lg overflow-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Asset Name</TableHead>
+                  <TableHead>Tag</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Province</TableHead>
+                  <TableHead>Facility</TableHead>
+                  <TableHead>Purchase Cost</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {reportData.length === 0 ? (
                   <TableRow>
-                    <TableHead>Asset Name</TableHead>
-                    <TableHead>Tag</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Province</TableHead>
-                    <TableHead>Facility</TableHead>
-                    <TableHead>Purchase Cost</TableHead>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      No assets found.
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {reportData.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                        No assets found.
+                ) : (
+                  reportData.map((row, i) => (
+                    <TableRow key={row.asset_tag ?? i}>
+                      <TableCell className="font-medium">{row.asset_name ?? "—"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground font-mono">{row.asset_tag ?? "—"}</TableCell>
+                      <TableCell>{row.category_name ?? "—"}</TableCell>
+                      <TableCell>
+                        <Badge className={`capitalize ${statusBadgeClass(row.status)}`}>
+                          {row.status?.replace("_", " ") ?? "—"}
+                        </Badge>
                       </TableCell>
+                      <TableCell>{row.province_name ?? "—"}</TableCell>
+                      <TableCell>{row.facility_name ?? row.district_name ?? "—"}</TableCell>
+                      <TableCell>{formatCurrency(row.purchase_cost)}</TableCell>
                     </TableRow>
-                  ) : (
-                    reportData.map((row, i) => (
-                      <TableRow key={row.asset_tag ?? i}>
-                        <TableCell className="font-medium">{row.asset_name ?? "—"}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground font-mono">{row.asset_tag ?? "—"}</TableCell>
-                        <TableCell>{row.category_name ?? "—"}</TableCell>
-                        <TableCell>
-                          <Badge className={`capitalize ${statusBadgeClass(row.status)}`}>
-                            {row.status?.replace("_", " ") ?? "—"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{row.province_name ?? "—"}</TableCell>
-                        <TableCell>{row.facility_name ?? row.district_name ?? "—"}</TableCell>
-                        <TableCell>{formatCurrency(row.purchase_cost)}</TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                  ))
+                )}
+              </TableBody>
+            </Table>
           </div>
         </div>
       )}
 
-      <style>{`
-        @media print {
-          body > * { visibility: hidden; }
-          .print-area, .print-area * { visibility: visible !important; }
-          .print-area { position: fixed; left: 0; top: 0; width: 100%; z-index: 9999; }
-          .print\\:hidden { display: none !important; }
-          .print\\:block { display: block !important; }
-        }
-      `}</style>
     </div>
   );
 }
