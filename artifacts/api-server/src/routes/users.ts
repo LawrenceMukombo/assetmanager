@@ -782,6 +782,90 @@ router.get("/v1/users/:id/password-reset-emails", requireAuth, requireUserAdmin,
   }
 });
 
+function csvEscape(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const s = String(value);
+  if (/[",\r\n]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+router.get("/v1/users/:id/password-reset-emails.csv", requireAuth, requireUserAdmin, async (req, res) => {
+  if (!req.user) return;
+  const targetId = String(req.params.id);
+
+  try {
+    const [targetScope] = await db.select().from(userScope).where(eq(userScope.userId, targetId)).limit(1);
+    if (req.user.scopeLevel !== "national" && targetScope?.provinceId !== req.user.provinceId) {
+      res.status(403).json({ success: false, message: "Cannot view audit data for users outside your province", data: null });
+      return;
+    }
+
+    const requestedByAlias = {
+      fullName: users.fullName,
+      email: users.email,
+    };
+
+    const rows = await db
+      .select({
+        id: passwordResetEmailLog.id,
+        recipientEmail: passwordResetEmailLog.recipientEmail,
+        requestedVia: passwordResetEmailLog.requestedVia,
+        requestedById: passwordResetEmailLog.requestedBy,
+        transport: passwordResetEmailLog.transport,
+        delivered: passwordResetEmailLog.delivered,
+        messageId: passwordResetEmailLog.messageId,
+        errorMessage: passwordResetEmailLog.errorMessage,
+        createdAt: passwordResetEmailLog.createdAt,
+        requestedByName: requestedByAlias.fullName,
+        requestedByEmail: requestedByAlias.email,
+      })
+      .from(passwordResetEmailLog)
+      .leftJoin(users, eq(users.id, passwordResetEmailLog.requestedBy))
+      .where(eq(passwordResetEmailLog.userId, targetId))
+      .orderBy(desc(passwordResetEmailLog.createdAt))
+      .limit(50);
+
+    const header = ["timestamp", "recipient", "requester", "transport", "delivered", "message_id", "error"];
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="password-reset-history-${targetId}.csv"`,
+    );
+    res.write(header.join(",") + "\r\n");
+
+    for (const row of rows) {
+      let requester: string;
+      if (row.requestedVia === "self") {
+        requester = "user (forgot password)";
+      } else if (row.requestedByName || row.requestedByEmail) {
+        requester = [row.requestedByName, row.requestedByEmail].filter(Boolean).join(" <") + (row.requestedByEmail ? ">" : "");
+      } else {
+        requester = "admin";
+      }
+      const line = [
+        row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt ?? ""),
+        row.recipientEmail ?? "",
+        requester,
+        row.transport ?? "",
+        row.delivered ? "yes" : "no",
+        row.messageId ?? "",
+        row.errorMessage ?? "",
+      ].map(csvEscape).join(",");
+      res.write(line + "\r\n");
+    }
+    res.end();
+  } catch (err) {
+    req.log.error({ err }, "Export password reset email history error");
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: "Internal server error", data: null });
+    } else {
+      res.end();
+    }
+  }
+});
+
 router.get("/v1/roles", requireAuth, requireUserAdmin, async (req, res) => {
   try {
     const rows = await db

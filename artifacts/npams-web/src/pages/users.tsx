@@ -29,7 +29,7 @@ import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_ROLES } from "@/App";
-import { apiFetchJson } from "@/lib/api-fetch";
+import { apiFetch, apiFetchJson } from "@/lib/api-fetch";
 import { Redirect } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -45,7 +45,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, ShieldCheck, Users as UsersIcon, Trash2, Activity as ActivityIcon, Mail, Loader2, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, ShieldCheck, Users as UsersIcon, Trash2, Activity as ActivityIcon, Mail, Loader2, ChevronDown, ChevronRight, AlertTriangle, Download } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageHeader } from "@/components/layout/page-header";
 import { Label } from "@/components/ui/label";
@@ -376,6 +376,43 @@ export default function Users() {
   const lastResetEmail = lastResetEmailResp?.data ?? null;
 
   const [showResetHistory, setShowResetHistory] = useState(false);
+  const [isDownloadingResetCsv, setIsDownloadingResetCsv] = useState(false);
+
+  const downloadResetHistoryCsv = async () => {
+    if (!editUserId) return;
+    setIsDownloadingResetCsv(true);
+    try {
+      const res = await apiFetch(`/api/v1/users/${editUserId}/password-reset-emails.csv`);
+      if (!res.ok) {
+        let message = "Could not download CSV";
+        try {
+          const body = await res.json();
+          if (body && typeof body.message === "string") message = body.message;
+        } catch {
+          /* non-JSON error body */
+        }
+        toast({ title: "Download failed", description: message, variant: "destructive" });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `password-reset-history-${editUserId}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({
+        title: "Download failed",
+        description: err instanceof Error ? err.message : "Network error",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloadingResetCsv(false);
+    }
+  };
   const {
     data: resetHistoryResp,
     refetch: refetchResetHistory,
@@ -1113,14 +1150,31 @@ export default function Users() {
                               </div>
                             )}
                             <div className="mt-2 pt-2 border-t">
-                              <button
-                                type="button"
-                                onClick={() => setShowResetHistory((s) => !s)}
-                                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                              >
-                                {showResetHistory ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                                Reset email history
-                              </button>
+                              <div className="flex items-center justify-between gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowResetHistory((s) => !s)}
+                                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                                >
+                                  {showResetHistory ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                  Reset email history
+                                </button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2 text-[11px] gap-1"
+                                  onClick={downloadResetHistoryCsv}
+                                  disabled={isDownloadingResetCsv}
+                                >
+                                  {isDownloadingResetCsv ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Download className="w-3 h-3" />
+                                  )}
+                                  Download CSV
+                                </Button>
+                              </div>
                               {showResetHistory && (
                                 <div className="mt-2 space-y-2">
                                   {isResetHistoryLoading ? (
