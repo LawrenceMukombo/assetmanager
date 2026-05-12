@@ -104,6 +104,62 @@ export const ForgotPasswordResponse = zod
   .describe("Standard API response envelope");
 
 /**
+ * @summary Validate a password reset token
+ */
+export const ValidatePasswordResetTokenQueryParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const ValidatePasswordResetTokenResponse = zod.object({
+  success: zod.boolean().optional(),
+  data: zod
+    .object({
+      valid: zod.boolean().optional(),
+      email: zod.string().nullish(),
+      full_name: zod.string().nullish(),
+    })
+    .optional(),
+});
+
+/**
+ * @summary Complete password reset using a single-use token
+ */
+export const resetPasswordBodyNewPasswordMin = 8;
+
+export const ResetPasswordBody = zod.object({
+  token: zod.string(),
+  new_password: zod.string().min(resetPasswordBodyNewPasswordMin),
+});
+
+export const ResetPasswordResponse = zod
+  .object({
+    success: zod.boolean(),
+    message: zod.string(),
+    data: zod.unknown().nullish(),
+  })
+  .describe("Standard API response envelope");
+
+/**
+ * @summary Email a single-use password reset link to the user
+ */
+export const SendUserPasswordResetParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const SendUserPasswordResetResponse = zod.object({
+  success: zod.boolean().optional(),
+  message: zod.string().optional(),
+  data: zod
+    .object({
+      email: zod.string().optional(),
+      delivered: zod.boolean().optional(),
+      transport: zod.string().optional(),
+      expires_at: zod.coerce.date().optional(),
+    })
+    .optional(),
+});
+
+/**
  * @summary List users (scoped)
  */
 export const GetUsersResponse = zod.object({

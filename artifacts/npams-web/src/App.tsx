@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { ProvinceBrandingProvider } from "@/hooks/use-province-branding";
 import Login from "@/pages/login";
+import ResetPassword from "@/pages/reset-password";
 import { AppShell } from "@/components/layout/app-shell";
 
 import PublicAsset from "@/pages/public-asset";
@@ -88,6 +89,7 @@ function Router() {
       <Route path="/public/asset/:id" component={PublicAsset} />
 
       <Route path="/login" component={Login} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/">
         <Redirect to="/dashboard" />
       </Route>

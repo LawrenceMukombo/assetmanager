@@ -25,6 +25,7 @@ import {
   notifications,
 } from "@workspace/db";
 import { requireAuth, requireUserAdmin } from "../lib/auth";
+import { createPasswordResetToken, sendPasswordResetEmail } from "./auth";
 
 const router = Router();
 
@@ -586,6 +587,56 @@ router.patch("/v1/users/:id/reactivate", requireAuth, requireUserAdmin, async (r
     res.json({ success: true, message: "User reactivated", data: null });
   } catch (err) {
     req.log.error({ err }, "Reactivate user error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
+router.post("/v1/users/:id/send-password-reset", requireAuth, requireUserAdmin, async (req, res) => {
+  if (!req.user) return;
+  const targetId = String(req.params.id);
+
+  try {
+    const [target] = await db
+      .select({ id: users.id, email: users.email, fullName: users.fullName, active: users.active })
+      .from(users)
+      .where(eq(users.id, targetId))
+      .limit(1);
+    if (!target) {
+      res.status(404).json({ success: false, message: "User not found", data: null });
+      return;
+    }
+    if (!target.active) {
+      res.status(400).json({ success: false, message: "Cannot send reset link to an inactive account. Reactivate the user first.", data: null });
+      return;
+    }
+
+    const [targetScope] = await db.select().from(userScope).where(eq(userScope.userId, targetId)).limit(1);
+    if (req.user.scopeLevel !== "national" && targetScope?.provinceId !== req.user.provinceId) {
+      res.status(403).json({ success: false, message: "Cannot modify user outside your province", data: null });
+      return;
+    }
+
+    const { rawToken, expiresAt } = await createPasswordResetToken(target.id, req.user.userId, "admin");
+    const result = await sendPasswordResetEmail(
+      { email: target.email, fullName: target.fullName },
+      rawToken,
+      expiresAt,
+    );
+
+    res.json({
+      success: true,
+      message: result.delivered
+        ? `Password reset link emailed to ${target.email}`
+        : `Reset link generated for ${target.email}, but no SMTP is configured — link was logged on the server. Use the direct password reset for offline cases.`,
+      data: {
+        email: target.email,
+        delivered: result.delivered,
+        transport: result.transport,
+        expires_at: expiresAt.toISOString(),
+      },
+    });
+  } catch (err) {
+    req.log.error({ err }, "Send password reset error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });

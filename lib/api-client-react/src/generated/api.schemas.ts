@@ -439,6 +439,40 @@ export type ForgotPasswordBody = {
   email: string;
 };
 
+export type ValidatePasswordResetTokenParams = {
+  token: string;
+};
+
+export type ValidatePasswordResetToken200Data = {
+  valid?: boolean;
+  email?: string | null;
+  full_name?: string | null;
+};
+
+export type ValidatePasswordResetToken200 = {
+  success?: boolean;
+  data?: ValidatePasswordResetToken200Data;
+};
+
+export type ResetPasswordBody = {
+  token: string;
+  /** @minLength 8 */
+  new_password: string;
+};
+
+export type SendUserPasswordReset200Data = {
+  email?: string;
+  delivered?: boolean;
+  transport?: string;
+  expires_at?: string;
+};
+
+export type SendUserPasswordReset200 = {
+  success?: boolean;
+  message?: string;
+  data?: SendUserPasswordReset200Data;
+};
+
 export type GetUsers200 = {
   success?: boolean;
   data?: UserWithRole[];

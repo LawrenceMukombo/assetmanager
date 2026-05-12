@@ -1,8 +1,10 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
+import crypto from "crypto";
+import { and, gt, isNull } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { users, userRoles, roles, userScope, provinces, agencies } from "@workspace/db";
+import { users, userRoles, roles, userScope, provinces, agencies, passwordResetTokens, refreshTokens } from "@workspace/db";
 import {
   signAccessToken,
   issueRefreshToken,
@@ -11,6 +13,52 @@ import {
   requireAuth,
   type TokenPayload,
 } from "../lib/auth";
+import { sendEmail, resolveAppBaseUrl } from "../lib/mailer";
+
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+export async function createPasswordResetToken(
+  userId: string,
+  requestedBy: string | null,
+  requestedVia: "admin" | "self",
+): Promise<{ rawToken: string; expiresAt: Date }> {
+  const rawToken = crypto.randomBytes(32).toString("base64url");
+  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+  const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+  await db.insert(passwordResetTokens).values({
+    userId,
+    tokenHash,
+    expiresAt,
+    requestedBy,
+    requestedVia,
+  });
+  return { rawToken, expiresAt };
+}
+
+export async function sendPasswordResetEmail(
+  user: { email: string; fullName: string },
+  rawToken: string,
+  expiresAt: Date,
+) {
+  const url = `${resolveAppBaseUrl()}/reset-password?token=${encodeURIComponent(rawToken)}`;
+  const expiresIso = expiresAt.toISOString();
+  const subject = "NPAMS — Reset your password";
+  const text =
+    `Hello ${user.fullName},\n\n` +
+    `A password reset has been requested for your NPAMS account (${user.email}).\n` +
+    `Open the link below to choose a new password. The link can only be used once and expires at ${expiresIso}.\n\n` +
+    `${url}\n\n` +
+    `If you did not request this reset, you can safely ignore this email — your current password remains active until the link is used.\n\n` +
+    `— NPAMS`;
+  const html =
+    `<p>Hello ${user.fullName},</p>` +
+    `<p>A password reset has been requested for your NPAMS account (<strong>${user.email}</strong>).</p>` +
+    `<p>Open the link below to choose a new password. The link can only be used once and expires at <strong>${expiresIso}</strong>.</p>` +
+    `<p><a href="${url}">${url}</a></p>` +
+    `<p>If you did not request this reset, you can safely ignore this email — your current password remains active until the link is used.</p>` +
+    `<p>— NPAMS</p>`;
+  return sendEmail({ to: user.email, subject, text, html });
+}
 
 const router = Router();
 
@@ -235,12 +283,112 @@ router.post("/v1/auth/logout", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/v1/auth/forgot-password", (_req, res) => {
-  res.json({
-    success: true,
-    message: "If that email exists, a reset link will be sent",
-    data: null,
-  });
+router.post("/v1/auth/forgot-password", async (req, res) => {
+  const { email } = req.body as { email?: string };
+  const genericResponse = () =>
+    res.json({
+      success: true,
+      message: "If that email exists, a reset link will be sent",
+      data: null,
+    });
+
+  if (!email || typeof email !== "string") {
+    return genericResponse();
+  }
+
+  try {
+    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    if (!user || !user.active) {
+      return genericResponse();
+    }
+    const { rawToken, expiresAt } = await createPasswordResetToken(user.id, null, "self");
+    await sendPasswordResetEmail({ email: user.email, fullName: user.fullName }, rawToken, expiresAt);
+    return genericResponse();
+  } catch (err) {
+    req.log.error({ err }, "Forgot password error");
+    return genericResponse();
+  }
+});
+
+router.get("/v1/auth/reset-password/validate", async (req, res) => {
+  const token = (req.query.token as string | undefined) ?? "";
+  if (!token) {
+    res.json({ success: true, message: "Token validity checked", data: { valid: false, email: null, full_name: null } });
+    return;
+  }
+  try {
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const [row] = await db
+      .select({ email: users.email, fullName: users.fullName, active: users.active })
+      .from(passwordResetTokens)
+      .innerJoin(users, eq(passwordResetTokens.userId, users.id))
+      .where(
+        and(
+          eq(passwordResetTokens.tokenHash, tokenHash),
+          isNull(passwordResetTokens.usedAt),
+          gt(passwordResetTokens.expiresAt, new Date()),
+        ),
+      )
+      .limit(1);
+
+    if (!row || !row.active) {
+      res.json({ success: true, message: "Token validity checked", data: { valid: false, email: null, full_name: null } });
+      return;
+    }
+    res.json({ success: true, message: "Token validity checked", data: { valid: true, email: row.email, full_name: row.fullName } });
+  } catch (err) {
+    req.log.error({ err }, "Validate reset token error");
+    res.json({ success: true, message: "Token validity checked", data: { valid: false, email: null, full_name: null } });
+  }
+});
+
+router.post("/v1/auth/reset-password", async (req, res) => {
+  const { token, new_password } = req.body as { token?: string; new_password?: string };
+  if (!token || !new_password) {
+    res.status(400).json({ success: false, message: "token and new_password are required", data: null });
+    return;
+  }
+  if (typeof new_password !== "string" || new_password.length < 8) {
+    res.status(400).json({ success: false, message: "Password must be at least 8 characters", data: null });
+    return;
+  }
+  try {
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const [row] = await db
+      .select({ id: passwordResetTokens.id, userId: passwordResetTokens.userId })
+      .from(passwordResetTokens)
+      .where(
+        and(
+          eq(passwordResetTokens.tokenHash, tokenHash),
+          isNull(passwordResetTokens.usedAt),
+          gt(passwordResetTokens.expiresAt, new Date()),
+        ),
+      )
+      .limit(1);
+
+    if (!row) {
+      res.status(400).json({ success: false, message: "Reset link is invalid or has expired", data: null });
+      return;
+    }
+
+    const [account] = await db.select({ active: users.active }).from(users).where(eq(users.id, row.userId)).limit(1);
+    if (!account || !account.active) {
+      res.status(400).json({ success: false, message: "Account is inactive", data: null });
+      return;
+    }
+
+    const newHash = await bcrypt.hash(new_password, 12);
+    await db.transaction(async (tx) => {
+      await tx.update(users).set({ passwordHash: newHash, updatedAt: new Date() }).where(eq(users.id, row.userId));
+      await tx.update(passwordResetTokens).set({ usedAt: new Date() }).where(eq(passwordResetTokens.id, row.id));
+      await tx.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.userId, row.userId));
+    });
+
+    res.json({ success: true, message: "Password updated successfully", data: null });
+  } catch (err) {
+    req.log.error({ err }, "Reset password error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
 });
 
 router.get("/v1/auth/me", requireAuth, async (req, res) => {

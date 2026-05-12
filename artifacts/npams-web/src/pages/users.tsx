@@ -41,7 +41,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, ShieldCheck, Users as UsersIcon, Trash2, Activity as ActivityIcon } from "lucide-react";
+import { Plus, Pencil, ShieldCheck, Users as UsersIcon, Trash2, Activity as ActivityIcon, Mail, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Label } from "@/components/ui/label";
 
@@ -204,6 +204,20 @@ export default function Users() {
   const [deleteUser, setDeleteUser] = useState<UserRow | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const [isSendingResetLink, setIsSendingResetLink] = useState(false);
+
+  const handleSendResetLink = async () => {
+    if (!editUser?.id) return;
+    setIsSendingResetLink(true);
+    const result = await apiFetchJson(`/api/v1/users/${editUser.id}/send-password-reset`, { method: "POST" });
+    setIsSendingResetLink(false);
+    if (result.ok) {
+      toast({ title: "Password reset link sent", description: result.message });
+    } else {
+      toast({ variant: "destructive", title: "Could not send reset link", description: result.message });
+    }
+  };
 
   const isNationalAdmin = (user as { scope_level?: string } | null)?.scope_level === "national";
 
@@ -844,10 +858,30 @@ export default function Users() {
                       name="password"
                       render={({ field }) => (
                         <FormItem className="col-span-2">
-                          <FormLabel>Reset Password (optional)</FormLabel>
+                          <div className="flex items-center justify-between gap-2">
+                            <FormLabel>Reset Password (optional)</FormLabel>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={handleSendResetLink}
+                              disabled={isSendingResetLink || !editUser?.active}
+                              title={editUser?.active ? "Email a single-use reset link to the user" : "Reactivate the user before sending a reset link"}
+                            >
+                              {isSendingResetLink ? (
+                                <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Sending…</>
+                              ) : (
+                                <><Mail className="w-3 h-3 mr-1" /> Send reset link</>
+                              )}
+                            </Button>
+                          </div>
                           <FormControl>
                             <Input type="password" autoComplete="new-password" placeholder="Leave blank to keep current password" {...field} />
                           </FormControl>
+                          <p className="text-xs text-muted-foreground">
+                            Set a password directly for offline accounts, or send a reset link so the user can choose their own. The link is single-use and expires in 1 hour.
+                          </p>
                           <FormMessage />
                         </FormItem>
                       )}
