@@ -20,6 +20,7 @@ import {
 } from "@workspace/db";
 import type { Request, Response, NextFunction } from "express";
 import { requireAuth, requireAssetAdmin } from "../lib/auth";
+import { readPageParams, paginatedResponse } from "../lib/pagination";
 
 const router = Router();
 
@@ -191,6 +192,29 @@ router.get("/v1/purchase-requests", requireAuth, async (req, res) => {
     }
     if (pending === "true") {
       conditions.push(sql`${purchaseRequests.status} = 'submitted'`);
+    }
+    const pageParams = readPageParams(req);
+    if (pageParams.enabled) {
+      const totalRow = await db
+        .select({ cnt: sql<number>`count(*)::int` })
+        .from(purchaseRequests)
+        .innerJoin(stockItems, eq(purchaseRequests.stockItemId, stockItems.id))
+        .where(and(...conditions));
+      const total = Number(totalRow[0]?.cnt ?? 0);
+      const items = await db
+        .select(REQUEST_SELECT)
+        .from(purchaseRequests)
+        .innerJoin(stockItems, eq(purchaseRequests.stockItemId, stockItems.id))
+        .leftJoin(users, eq(purchaseRequests.requestedBy, users.id))
+        .leftJoin(agencies, eq(purchaseRequests.agencyId, agencies.id))
+        .leftJoin(provinces, eq(purchaseRequests.provinceId, provinces.id))
+        .leftJoin(facilities, eq(purchaseRequests.facilityId, facilities.id))
+        .where(and(...conditions))
+        .orderBy(desc(purchaseRequests.createdAt))
+        .limit(pageParams.pageSize)
+        .offset(pageParams.offset);
+      res.json({ success: true, message: "Purchase requests retrieved", data: paginatedResponse(items, total, pageParams) });
+      return;
     }
     const rows = await db
       .select(REQUEST_SELECT)
@@ -375,7 +399,7 @@ router.post("/v1/purchase-requests", requireAuth, async (req, res) => {
       })
       .from(stockItems)
       .leftJoin(facilities, eq(stockItems.facilityId, facilities.id))
-      .where(eq(stockItems.id, stockItemId))
+      .where(eq(stockItems.id, stockItemId as string))
       .limit(1);
     if (!item) {
       req.log.warn(

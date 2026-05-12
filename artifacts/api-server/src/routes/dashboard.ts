@@ -5,7 +5,7 @@ import { requireAuth, requireNational } from "../lib/auth";
 
 const router = Router();
 
-const VALID_STATUSES   = ["active", "missing", "under_maintenance", "disposed", "transferred"] as const;
+const VALID_STATUSES   = ["active", "missing", "under_maintenance", "disposed"] as const;
 const VALID_CONDITIONS = ["new", "good", "fair", "poor", "unserviceable"] as const;
 
 // ─── PROVINCIAL DASHBOARD (supports cross-filter params) ─────────────────────
@@ -34,8 +34,8 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
   const districtId      = (req.query.district_id as string | undefined) || undefined;
   const facilityId      = (req.query.facility_id as string | undefined) || undefined;
 
-  const safeStatus    = statusFilter    && VALID_STATUSES.includes(statusFilter as typeof VALID_STATUSES[number])    ? statusFilter    : undefined;
-  const safeCondition = conditionFilter && VALID_CONDITIONS.includes(conditionFilter as typeof VALID_CONDITIONS[number]) ? conditionFilter : undefined;
+  const safeStatus    = (statusFilter    && VALID_STATUSES.includes(statusFilter as typeof VALID_STATUSES[number])    ? statusFilter    : undefined) as "active" | "missing" | "under_maintenance" | "disposed" | undefined;
+  const safeCondition = (conditionFilter && VALID_CONDITIONS.includes(conditionFilter as typeof VALID_CONDITIONS[number]) ? conditionFilter : undefined) as "excellent" | "good" | "fair" | "poor" | undefined;
 
   try {
     const baseConditions = [
@@ -242,8 +242,8 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
   const facilityIdParam = (req.query.facility_id as string | undefined) || undefined;
   const regionParam     = (req.query.region as string | undefined) || undefined;
 
-  const safeStatus    = statusFilter    && VALID_STATUSES.includes(statusFilter as typeof VALID_STATUSES[number])    ? statusFilter    : undefined;
-  const safeCondition = conditionFilter && VALID_CONDITIONS.includes(conditionFilter as typeof VALID_CONDITIONS[number]) ? conditionFilter : undefined;
+  const safeStatus    = (statusFilter    && VALID_STATUSES.includes(statusFilter as typeof VALID_STATUSES[number])    ? statusFilter    : undefined) as "active" | "missing" | "under_maintenance" | "disposed" | undefined;
+  const safeCondition = (conditionFilter && VALID_CONDITIONS.includes(conditionFilter as typeof VALID_CONDITIONS[number]) ? conditionFilter : undefined) as "excellent" | "good" | "fair" | "poor" | undefined;
 
   try {
     let categoryId: string | undefined;

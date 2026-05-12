@@ -4,13 +4,14 @@ import {
   db, maintenanceSchedules, assets, users, provinces, notifications, activityLogs,
 } from "@workspace/db";
 import { requireAuth, requireAssetAdmin } from "../lib/auth";
+import { readPageParams, paginatedResponse, paginateArray } from "../lib/pagination";
 
 const router = Router();
 
 router.get("/v1/maintenance", requireAuth, async (req, res) => {
   try {
     const { status, assetId, priority } = req.query as { status?: string; assetId?: string; priority?: string };
-    const { user } = req;
+    const user = req.user!;
 
     const rows = await db
       .select({
@@ -48,6 +49,12 @@ router.get("/v1/maintenance", requireAuth, async (req, res) => {
     if (assetId) filtered = filtered.filter(r => r.assetId === assetId);
     if (priority) filtered = filtered.filter(r => r.priority === priority);
 
+    const pageParams = readPageParams(req);
+    if (pageParams.enabled) {
+      const { items, total } = paginateArray(filtered, pageParams);
+      res.json({ success: true, data: paginatedResponse(items, total, pageParams) });
+      return;
+    }
     res.json({ success: true, data: filtered });
   } catch (err) {
     req.log.error({ err }, "List maintenance error");
@@ -63,7 +70,7 @@ router.post("/v1/maintenance", requireAuth, requireAssetAdmin, async (req, res) 
     };
 
     if (!assetId || !title?.trim() || !scheduledDate) {
-      return res.status(400).json({ success: false, message: "assetId, title, and scheduledDate are required", data: null });
+      res.status(400).json({ success: false, message: "assetId, title, and scheduledDate are required", data: null }); return;
     }
 
     const [created] = await db.insert(maintenanceSchedules).values({
@@ -75,7 +82,7 @@ router.post("/v1/maintenance", requireAuth, requireAssetAdmin, async (req, res) 
       assignedTo: assignedTo ?? null,
       estimatedCost: estimatedCost != null ? String(estimatedCost) : null,
       notes: notes?.trim() ?? null,
-      createdBy: req.user.userId,
+      createdBy: req.user!.userId,
     }).returning();
 
     if (assignedTo) {
@@ -88,7 +95,7 @@ router.post("/v1/maintenance", requireAuth, requireAssetAdmin, async (req, res) 
     }
 
     await db.insert(activityLogs).values({
-      userId: req.user.userId,
+      userId: req.user!.userId,
       actionType: "MAINTENANCE_SCHEDULED",
       entityType: "asset",
       entityId: assetId,
@@ -129,10 +136,10 @@ router.get("/v1/maintenance/:id", requireAuth, async (req, res) => {
       .leftJoin(assets, eq(maintenanceSchedules.assetId, assets.id))
       .leftJoin(provinces, eq(assets.provinceId, provinces.id))
       .leftJoin(users, eq(maintenanceSchedules.assignedTo, users.id))
-      .where(eq(maintenanceSchedules.id, req.params.id))
+      .where(eq(maintenanceSchedules.id, req.params.id as string))
       .limit(1);
 
-    if (!row) return res.status(404).json({ success: false, message: "Not found", data: null });
+    if (!row) { res.status(404).json({ success: false, message: "Not found", data: null }); return; }
     res.json({ success: true, data: row });
   } catch (err) {
     req.log.error({ err }, "Get maintenance error");
@@ -163,12 +170,12 @@ router.patch("/v1/maintenance/:id", requireAuth, requireAssetAdmin, async (req, 
     if (notes !== undefined) patch.notes = notes?.trim() ?? null;
     if (completionNotes !== undefined) patch.completionNotes = completionNotes?.trim() ?? null;
 
-    const [updated] = await db.update(maintenanceSchedules).set(patch).where(eq(maintenanceSchedules.id, req.params.id)).returning();
-    if (!updated) return res.status(404).json({ success: false, message: "Not found", data: null });
+    const [updated] = await db.update(maintenanceSchedules).set(patch).where(eq(maintenanceSchedules.id, req.params.id as string)).returning();
+    if (!updated) { res.status(404).json({ success: false, message: "Not found", data: null }); return; }
 
     if (status === "completed") {
       await db.insert(activityLogs).values({
-        userId: req.user.userId,
+        userId: req.user!.userId,
         actionType: "MAINTENANCE_COMPLETED",
         entityType: "asset",
         entityId: updated.assetId,
@@ -185,8 +192,8 @@ router.patch("/v1/maintenance/:id", requireAuth, requireAssetAdmin, async (req, 
 
 router.delete("/v1/maintenance/:id", requireAuth, requireAssetAdmin, async (req, res) => {
   try {
-    const [deleted] = await db.delete(maintenanceSchedules).where(eq(maintenanceSchedules.id, req.params.id)).returning();
-    if (!deleted) return res.status(404).json({ success: false, message: "Not found", data: null });
+    const [deleted] = await db.delete(maintenanceSchedules).where(eq(maintenanceSchedules.id, req.params.id as string)).returning();
+    if (!deleted) { res.status(404).json({ success: false, message: "Not found", data: null }); return; }
     res.json({ success: true, data: null });
   } catch (err) {
     req.log.error({ err }, "Delete maintenance error");

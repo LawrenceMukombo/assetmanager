@@ -260,7 +260,7 @@ router.post("/v1/assets", requireAuth, requireAssetAdmin, async (req, res) => {
         supplier: orNull(body.supplier),
         warrantyExpiry: orNull(body.warranty_expiry),
         usefulLifeYears: body.useful_life_years != null && body.useful_life_years !== "" ? Number(body.useful_life_years) : null,
-        depreciationMethod: orNull(body.depreciation_method) ?? "none",
+        depreciationMethod: (orNull(body.depreciation_method) ?? "none") as "none" | "straight_line" | "declining_balance",
         salvageValue: orNull(body.salvage_value),
         photoUrl: orNull(body.photo_url),
         notes: orNull(body.notes),
@@ -633,7 +633,7 @@ router.put("/v1/assets/:id", requireAuth, requireAssetAdmin, async (req, res) =>
         supplier: orNull(body.supplier),
         warrantyExpiry: orNull(body.warranty_expiry),
         usefulLifeYears: body.useful_life_years != null && body.useful_life_years !== "" ? Number(body.useful_life_years) : null,
-        depreciationMethod: orNull(body.depreciation_method) ?? "none",
+        depreciationMethod: (orNull(body.depreciation_method) ?? "none") as "none" | "straight_line" | "declining_balance",
         salvageValue: orNull(body.salvage_value),
         photoUrl: body.photo_url !== undefined ? orNull(body.photo_url) : undefined,
         notes: body.notes !== undefined ? orNull(body.notes) : undefined,
@@ -1094,7 +1094,7 @@ export async function runWarrantyCheck(): Promise<number> {
   const adminUsers = await db
     .select({ id: users.id, provinceId: users.id })
     .from(users)
-    .where(isNull(users.deletedAt));
+    .where(eq(users.active, true));
 
   let notifCount = 0;
 

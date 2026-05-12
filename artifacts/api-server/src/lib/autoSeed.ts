@@ -67,6 +67,7 @@ export async function autoSeedIfEmpty(): Promise<void> {
   await seedIcaPerLocationStockBalances();
   await seedAssetHistory();
   await pruneLegacyCategories();
+  await seedExampleWorkflowData();
 
   if (usersExist && agenciesExist) {
     logger.info("Auto-seed: idempotent top-up complete");
@@ -90,7 +91,7 @@ async function seedAgencyAssets(): Promise<void> {
     assetTag: string; assetName: string; categoryName: string;
     serialNumber?: string; brand?: string; model?: string;
     purchaseDate: string; purchaseCost: string; supplier: string;
-    usefulLifeYears: number; status: "active" | "missing" | "under_maintenance" | "disposed" | "transferred";
+    usefulLifeYears: number; status: "active" | "missing" | "under_maintenance" | "disposed";
     condition: "excellent" | "good" | "fair" | "poor"; salvageValue: string; notes: string;
   };
   const icaAssets: SeedAsset[] = [
@@ -1199,6 +1200,266 @@ async function seedAdditionalIcaUsers(): Promise<void> {
       });
   }
   logger.info({ count: icaUsers.length, agency: "PNGICA" }, "Auto-seed: ICSA staff users");
+}
+
+// Seeds a small but realistic set of example purchase requests, maintenance
+// schedules, and audit sessions/assignments/items for PNGICA. Idempotent:
+// every entity is keyed on a stable natural key (PR request_number, asset+title
+// for maintenance, session name for audits) and uses onConflictDoNothing where
+// the schema allows; otherwise the function bails out early when prior rows
+// for that natural key already exist.
+async function seedExampleWorkflowData(): Promise<void> {
+  const [ica] = await db.select({ id: agencies.id }).from(agencies).where(eq(agencies.agencyCode, "PNGICA")).limit(1);
+  if (!ica) return;
+
+  // Bail out completely if example workflow data already exists for ICSA.
+  const existingPr = await db
+    .select({ id: purchaseRequests.id })
+    .from(purchaseRequests)
+    .where(eq(purchaseRequests.agencyId, ica.id))
+    .limit(1);
+  const existingMs = await db
+    .select({ id: maintenanceSchedules.id })
+    .from(maintenanceSchedules)
+    .innerJoin(assets, eq(assets.id, maintenanceSchedules.assetId))
+    .where(eq(assets.agencyId, ica.id))
+    .limit(1);
+  // Audit gating uses our seeded session names so unrelated existing sessions
+  // (e.g. user-created or E2E test sessions) don't block example backfill.
+  const SEEDED_AUDIT_SESSION_NAMES = [
+    "Q2 2026 National Asset Verification",
+    "Lae & Mt Hagen Regional Stock-take",
+  ] as const;
+  const existingAs = await db
+    .select({ id: auditSessions.id })
+    .from(auditSessions)
+    .where(inArray(auditSessions.name, [...SEEDED_AUDIT_SESSION_NAMES]));
+  if (existingPr.length > 0 && existingMs.length > 0 && existingAs.length >= SEEDED_AUDIT_SESSION_NAMES.length) return;
+
+  // Resolve required lookups in parallel.
+  const [admin] = await db.select({ id: users.id }).from(users).where(eq(users.email, "immigration.admin@npams.gov.pg")).limit(1);
+  const [helen] = await db.select({ id: users.id }).from(users).where(eq(users.email, "helen.pala@ica.gov.pg")).limit(1);
+  const [daniel] = await db.select({ id: users.id }).from(users).where(eq(users.email, "daniel.maima@ica.gov.pg")).limit(1);
+  const [robert] = await db.select({ id: users.id }).from(users).where(eq(users.email, "robert.kennedy@ica.gov.pg")).limit(1);
+  const [aaron] = await db.select({ id: users.id }).from(users).where(eq(users.email, "aaron.kalo@ica.gov.pg")).limit(1);
+  const [maria] = await db.select({ id: users.id }).from(users).where(eq(users.email, "maria.tanda@ica.gov.pg")).limit(1);
+  if (!admin) return;
+
+  const requester = helen?.id ?? admin.id;
+  const ictRequester = daniel?.id ?? admin.id;
+  const approver = robert?.id ?? admin.id;
+  const auditor = aaron?.id ?? admin.id;
+
+  // Pick a few ICSA stock items and assets to attach the records to.
+  const stockRows = await db
+    .select({ id: stockItems.id, code: stockItems.itemCode, facilityId: stockItems.facilityId, provinceId: stockItems.provinceId })
+    .from(stockItems)
+    .where(and(eq(stockItems.agencyId, ica.id), isNull(stockItems.deletedAt)))
+    .limit(20);
+  const byCode = new Map<string, typeof stockRows[number]>();
+  for (const r of stockRows) byCode.set(r.code, r);
+
+  const assetRows = await db
+    .select({
+      id: assets.id, tag: assets.assetTag, facilityId: assets.facilityId,
+      districtId: facilities.districtId, provinceId: districts.provinceId,
+    })
+    .from(assets)
+    .leftJoin(facilities, eq(facilities.id, assets.facilityId))
+    .leftJoin(districts, eq(districts.id, facilities.districtId))
+    .where(eq(assets.agencyId, ica.id));
+  const assetByTag = new Map<string, typeof assetRows[number]>();
+  for (const a of assetRows) assetByTag.set(a.tag, a);
+
+  // ── 1) Purchase Requests ─────────────────────────────────────────────────
+  if (existingPr.length === 0) {
+    type PrSeed = {
+      requestNumber: string; itemCode: string; supplier: string; quantity: number;
+      unitCost: string; status: "draft" | "submitted" | "approved" | "rejected" | "received" | "closed";
+      notes: string; rejectedReason?: string; daysAgo: number; requesterId?: string;
+    };
+    const candidates: PrSeed[] = [
+      { requestNumber: "PR-2026-0001", itemCode: "PNGICA-STK-001", supplier: "Office National PNG",     quantity: 50,  unitCost: "12.50",  status: "submitted", notes: "Top-up for HQ records section",                  daysAgo: 2 },
+      { requestNumber: "PR-2026-0002", itemCode: "PNGICA-STK-013", supplier: "Ela Motors PNG",          quantity: 12,  unitCost: "55.00",  status: "approved",  notes: "Vehicle service stock — Hilux fleet",            daysAgo: 6, requesterId: ictRequester },
+      { requestNumber: "PR-2026-0003", itemCode: "PNGICA-STK-001", supplier: "Office National PNG",     quantity: 100, unitCost: "12.30",  status: "received",  notes: "Q1 bulk paper order — fully received",           daysAgo: 21 },
+      { requestNumber: "PR-2026-0004", itemCode: "PNGICA-STK-013", supplier: "Boroko Motors",           quantity: 6,   unitCost: "62.00",  status: "rejected",  notes: "Duplicate of PR-2026-0002",                       daysAgo: 5, rejectedReason: "Duplicate request — already covered by PR-2026-0002" },
+      { requestNumber: "PR-2026-0005", itemCode: "PNGICA-STK-001", supplier: "Office National PNG",     quantity: 25,  unitCost: "12.80",  status: "draft",     notes: "Lae regional office quarterly stationery",       daysAgo: 1, requesterId: maria?.id },
+      { requestNumber: "PR-2026-0006", itemCode: "PNGICA-STK-013", supplier: "Ela Motors PNG",          quantity: 8,   unitCost: "55.00",  status: "closed",    notes: "Closed — service completed Q4 2025",             daysAgo: 95, requesterId: ictRequester },
+    ];
+    let inserted = 0;
+    for (const p of candidates) {
+      const stock = byCode.get(p.itemCode);
+      if (!stock) continue;
+      const createdAt = new Date(Date.now() - p.daysAgo * 24 * 60 * 60 * 1000);
+      const approvedAt = (p.status === "approved" || p.status === "received" || p.status === "closed")
+        ? new Date(createdAt.getTime() + 24 * 60 * 60 * 1000) : null;
+      const receivedAt = (p.status === "received" || p.status === "closed")
+        ? new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000) : null;
+      const closedAt = p.status === "closed" ? new Date(createdAt.getTime() + 14 * 24 * 60 * 60 * 1000) : null;
+      const [row] = await db.insert(purchaseRequests).values({
+        requestNumber: p.requestNumber,
+        stockItemId: stock.id,
+        supplier: p.supplier,
+        quantity: p.quantity,
+        receivedQuantity: (p.status === "received" || p.status === "closed") ? p.quantity : 0,
+        unitCost: p.unitCost,
+        notes: p.notes,
+        status: p.status,
+        agencyId: ica.id,
+        provinceId: stock.provinceId ?? null,
+        facilityId: stock.facilityId ?? null,
+        requestedBy: p.requesterId ?? requester,
+        approvedBy: approvedAt ? approver : null,
+        approvedAt,
+        rejectedReason: p.rejectedReason ?? null,
+        receivedAt,
+        closedAt,
+        createdAt,
+        updatedAt: closedAt ?? receivedAt ?? approvedAt ?? createdAt,
+      }).onConflictDoNothing().returning({ id: purchaseRequests.id });
+      if (row) inserted++;
+    }
+    if (inserted > 0) logger.info({ inserted }, "Auto-seed: example purchase requests");
+  }
+
+  // ── 2) Maintenance Schedules ─────────────────────────────────────────────
+  if (existingMs.length === 0) {
+    type MsSeed = {
+      assetTag: string; title: string; description: string;
+      priority: "low" | "medium" | "high" | "critical";
+      status: "scheduled" | "in_progress" | "completed" | "cancelled";
+      daysFromNow: number; estimatedCost: string;
+      assignedTo?: string; completionNotes?: string; actualCost?: string;
+    };
+    const items: MsSeed[] = [
+      { assetTag: "PNGICA-VEH-005", title: "Engine service — overdue",          description: "Engine oil, filter and full inspection — staff bus", priority: "high",     status: "in_progress", daysFromNow: -3, estimatedCost: "1850", assignedTo: ictRequester },
+      { assetTag: "PNGICA-PDP-005", title: "Printer feed assembly replacement", description: "Mt Hagen Quantum 2 — intermittent feed failure",     priority: "critical", status: "scheduled",   daysFromNow:  4, estimatedCost: "4200" },
+      { assetTag: "PNGICA-VEH-001", title: "Quarterly fleet service",           description: "Routine 10,000 km service — DG vehicle",             priority: "medium",   status: "scheduled",   daysFromNow: 14, estimatedCost: "950" },
+      { assetTag: "PNGICA-VEH-002", title: "Tyres replaced (full set)",         description: "Vanimo Hilux — 4 tyres replaced under warranty",     priority: "medium",   status: "completed",   daysFromNow: -28, estimatedCost: "3200", actualCost: "3050", completionNotes: "Completed by Ela Motors PNG, warranty applied", assignedTo: ictRequester },
+      { assetTag: "PNGICA-BRD-004", title: "eGate firmware upgrade",            description: "Vision-Box eGate — Q2 firmware update",              priority: "low",      status: "scheduled",   daysFromNow: 30, estimatedCost: "0", assignedTo: ictRequester },
+    ];
+    let inserted = 0;
+    for (const m of items) {
+      const asset = assetByTag.get(m.assetTag);
+      if (!asset) continue;
+      const scheduledDate = new Date(Date.now() + m.daysFromNow * 24 * 60 * 60 * 1000);
+      const completedDate = m.status === "completed"
+        ? new Date(scheduledDate.getTime() + 2 * 24 * 60 * 60 * 1000) : null;
+      const dup = await db
+        .select({ id: maintenanceSchedules.id })
+        .from(maintenanceSchedules)
+        .where(and(eq(maintenanceSchedules.assetId, asset.id), eq(maintenanceSchedules.title, m.title)))
+        .limit(1);
+      if (dup.length > 0) continue;
+      await db.insert(maintenanceSchedules).values({
+        assetId: asset.id,
+        title: m.title,
+        description: m.description,
+        priority: m.priority,
+        status: m.status,
+        scheduledDate,
+        completedDate,
+        assignedTo: m.assignedTo ?? null,
+        estimatedCost: m.estimatedCost,
+        actualCost: m.actualCost ?? null,
+        completionNotes: m.completionNotes ?? null,
+        createdBy: admin.id,
+      });
+      inserted++;
+    }
+    if (inserted > 0) logger.info({ inserted }, "Auto-seed: example maintenance schedules");
+  }
+
+  // ── 3) Audit Sessions + Assignments + Items ──────────────────────────────
+  if (existingAs.length < SEEDED_AUDIT_SESSION_NAMES.length) {
+    type SessionSeed = {
+      name: string; description: string;
+      status: "planned" | "active" | "completed" | "cancelled";
+      startDaysAgo: number; endDaysFromNow: number;
+      facilityNames: string[]; assetTags: string[];
+    };
+    const sessions: SessionSeed[] = [
+      {
+        name: "Q2 2026 National Asset Verification",
+        description: "Quarterly verification sweep across HQ and key border posts",
+        status: "active",
+        startDaysAgo: 7, endDaysFromNow: 21,
+        facilityNames: ["ICSA Konedobu Headquarters", "ICSA Jacksons Airport Immigration", "ICSA Vanimo Border Post"],
+        assetTags: ["PNGICA-VEH-001", "PNGICA-BRD-004", "PNGICA-BIO-004"],
+      },
+      {
+        name: "Lae & Mt Hagen Regional Stock-take",
+        description: "Regional office reconciliation of vehicles, ICT and PDP equipment",
+        status: "planned",
+        startDaysAgo: -7, endDaysFromNow: 28,
+        facilityNames: ["ICSA Lae Regional Office", "ICSA Mt Hagen Regional Office"],
+        assetTags: ["PNGICA-PDP-005", "PNGICA-VEH-008"],
+      },
+    ];
+    let sessionsInserted = 0, assignmentsInserted = 0, itemsInserted = 0;
+    for (const s of sessions) {
+      const dup = await db.select({ id: auditSessions.id }).from(auditSessions).where(eq(auditSessions.name, s.name)).limit(1);
+      if (dup.length > 0) continue;
+      const startDate = new Date(Date.now() - s.startDaysAgo * 24 * 60 * 60 * 1000);
+      const endDate = new Date(Date.now() + s.endDaysFromNow * 24 * 60 * 60 * 1000);
+      // Province for the session = first relevant facility's province (or null = national).
+      const facRows = await db
+        .select({ id: facilities.id, name: facilities.facilityName, districtId: facilities.districtId, provinceId: districts.provinceId })
+        .from(facilities)
+        .leftJoin(districts, eq(districts.id, facilities.districtId))
+        .where(inArray(facilities.facilityName, s.facilityNames));
+      const sessionProvinceId = s.facilityNames.length > 1 ? null : (facRows[0]?.provinceId ?? null);
+      const [sessionRow] = await db.insert(auditSessions).values({
+        name: s.name,
+        description: s.description,
+        provinceId: sessionProvinceId,
+        createdBy: admin.id,
+        status: s.status,
+        startDate,
+        endDate,
+      }).returning({ id: auditSessions.id });
+      sessionsInserted++;
+
+      for (const fac of facRows) {
+        const dueDate = new Date(endDate.getTime() - 3 * 24 * 60 * 60 * 1000);
+        const assignmentStatus: "pending" | "in_progress" | "completed" =
+          s.status === "active" ? "in_progress" : s.status === "completed" ? "completed" : "pending";
+        const [assignmentRow] = await db.insert(auditAssignments).values({
+          sessionId: sessionRow.id,
+          provinceId: fac.provinceId ?? null,
+          districtId: fac.districtId ?? null,
+          facilityId: fac.id,
+          assignedTo: auditor,
+          status: assignmentStatus,
+          dueDate,
+        }).returning({ id: auditAssignments.id });
+        assignmentsInserted++;
+
+        // Attach any seeded asset that lives at this facility.
+        const itemsToAdd = s.assetTags
+          .map((t) => assetByTag.get(t))
+          .filter((a): a is NonNullable<typeof a> => !!a && a.facilityId === fac.id);
+        for (const a of itemsToAdd) {
+          const itemStatus: "pending" | "verified" | "not_found" | "damaged" =
+            assignmentStatus === "completed" ? "verified" :
+            assignmentStatus === "in_progress" ? "verified" : "pending";
+          await db.insert(auditItems).values({
+            assignmentId: assignmentRow.id,
+            assetId: a.id,
+            status: itemStatus,
+            conditionObserved: itemStatus === "verified" ? "good" : null,
+            verifiedBy: itemStatus === "verified" ? auditor : null,
+            verifiedAt: itemStatus === "verified" ? new Date() : null,
+            notes: itemStatus === "verified" ? "On site, condition matches register" : null,
+          });
+          itemsInserted++;
+        }
+      }
+    }
+    if (sessionsInserted > 0) {
+      logger.info({ sessions: sessionsInserted, assignments: assignmentsInserted, items: itemsInserted }, "Auto-seed: example audit sessions");
+    }
+  }
 }
 
 // Distributes per-location stock balances for every PNGICA stock item across

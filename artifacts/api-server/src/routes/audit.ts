@@ -5,12 +5,13 @@ import {
   provinces, districts, facilities, users, assets, notifications,
 } from "@workspace/db";
 import { requireAuth, requireAssetAdmin } from "../lib/auth";
+import { readPageParams, paginatedResponse, paginateArray } from "../lib/pagination";
 
 const router = Router();
 
 router.get("/v1/audit/sessions", requireAuth, async (req, res) => {
   try {
-    const { user } = req;
+    const user = req.user!;
     const rows = await db
       .select({
         id: auditSessions.id,
@@ -33,6 +34,12 @@ router.get("/v1/audit/sessions", requireAuth, async (req, res) => {
       ? rows
       : rows.filter(r => !r.provinceId || r.provinceId === user.provinceId);
 
+    const pageParams = readPageParams(req);
+    if (pageParams.enabled) {
+      const { items, total } = paginateArray(filtered, pageParams);
+      res.json({ success: true, data: paginatedResponse(items, total, pageParams) });
+      return;
+    }
     res.json({ success: true, data: filtered });
   } catch (err) {
     req.log.error({ err }, "List audit sessions error");
@@ -45,15 +52,15 @@ router.post("/v1/audit/sessions", requireAuth, requireAssetAdmin, async (req, re
     const { name, description, provinceId, startDate, endDate } = req.body as {
       name: string; description?: string; provinceId?: string; startDate?: string; endDate?: string;
     };
-    if (!name?.trim()) return res.status(400).json({ success: false, message: "Name is required", data: null });
+    if (!name?.trim()) { res.status(400).json({ success: false, message: "Name is required", data: null }); return; }
 
-    const scopedProvinceId = req.user.scopeLevel !== "national" ? req.user.provinceId : (provinceId ?? null);
+    const scopedProvinceId = req.user!.scopeLevel !== "national" ? req.user!.provinceId : (provinceId ?? null);
 
     const [created] = await db.insert(auditSessions).values({
       name: name.trim(),
       description: description?.trim() ?? null,
       provinceId: scopedProvinceId,
-      createdBy: req.user.userId,
+      createdBy: req.user!.userId,
       startDate: startDate ? new Date(startDate) : null,
       endDate: endDate ? new Date(endDate) : null,
     }).returning();
@@ -83,10 +90,10 @@ router.get("/v1/audit/sessions/:id", requireAuth, async (req, res) => {
       .from(auditSessions)
       .leftJoin(provinces, eq(auditSessions.provinceId, provinces.id))
       .leftJoin(users, eq(auditSessions.createdBy, users.id))
-      .where(eq(auditSessions.id, req.params.id))
+      .where(eq(auditSessions.id, req.params.id as string))
       .limit(1);
 
-    if (!session) return res.status(404).json({ success: false, message: "Session not found", data: null });
+    if (!session) { res.status(404).json({ success: false, message: "Session not found", data: null }); return; }
 
     const assignments = await db
       .select({
@@ -108,7 +115,7 @@ router.get("/v1/audit/sessions/:id", requireAuth, async (req, res) => {
       .leftJoin(districts, eq(auditAssignments.districtId, districts.id))
       .leftJoin(facilities, eq(auditAssignments.facilityId, facilities.id))
       .leftJoin(users, eq(auditAssignments.assignedTo, users.id))
-      .where(eq(auditAssignments.sessionId, req.params.id))
+      .where(eq(auditAssignments.sessionId, req.params.id as string))
       .orderBy(desc(auditAssignments.createdAt));
 
     const assignmentIds = assignments.map(a => a.id);
@@ -132,8 +139,8 @@ router.get("/v1/audit/sessions/:id", requireAuth, async (req, res) => {
 
 router.get("/v1/audit/sessions/:id/neighbors", requireAuth, async (req, res) => {
   try {
-    const { user } = req;
-    const id = req.params.id;
+    const user = req.user!;
+    const id = req.params.id as string;
     const { status } = req.query as { status?: string };
 
     const rows = await db
@@ -164,12 +171,16 @@ router.get("/v1/audit/sessions/:id/neighbors", requireAuth, async (req, res) => 
       // Confirm the session itself exists & is visible to the user (regardless of filter)
       const visible = (user.scopeLevel === "national" ? rows : rows.filter(r => !r.provinceId || r.provinceId === user.provinceId))
         .some(r => r.id === id);
-      if (!visible) return res.status(404).json({ success: false, message: "Session not found", data: null });
-      return res.json({
+      if (!visible) {
+        res.status(404).json({ success: false, message: "Session not found", data: null });
+        return;
+      }
+      res.json({
         success: true,
         message: "Neighbors retrieved",
         data: { previous: null, next: null, position: 0, total: filtered.length, in_context: false },
       });
+      return;
     }
 
     res.json({
@@ -203,10 +214,10 @@ router.patch("/v1/audit/sessions/:id", requireAuth, requireAssetAdmin, async (re
 
     const [updated] = await db.update(auditSessions)
       .set(patch)
-      .where(eq(auditSessions.id, req.params.id))
+      .where(eq(auditSessions.id, req.params.id as string))
       .returning();
 
-    if (!updated) return res.status(404).json({ success: false, message: "Session not found", data: null });
+    if (!updated) { res.status(404).json({ success: false, message: "Session not found", data: null }); return; }
     res.json({ success: true, data: updated });
   } catch (err) {
     req.log.error({ err }, "Patch audit session error");
@@ -220,11 +231,11 @@ router.post("/v1/audit/sessions/:id/assignments", requireAuth, requireAssetAdmin
       provinceId?: string; districtId?: string; facilityId?: string; assignedTo?: string; dueDate?: string;
     };
 
-    const [session] = await db.select().from(auditSessions).where(eq(auditSessions.id, req.params.id)).limit(1);
-    if (!session) return res.status(404).json({ success: false, message: "Session not found", data: null });
+    const [session] = await db.select().from(auditSessions).where(eq(auditSessions.id, req.params.id as string)).limit(1);
+    if (!session) { res.status(404).json({ success: false, message: "Session not found", data: null }); return; }
 
     const [assignment] = await db.insert(auditAssignments).values({
-      sessionId: req.params.id,
+      sessionId: req.params.id as string,
       provinceId: provinceId ?? session.provinceId ?? null,
       districtId: districtId ?? null,
       facilityId: facilityId ?? null,
@@ -281,7 +292,7 @@ router.get("/v1/audit/assignments/mine", requireAuth, async (req, res) => {
       .leftJoin(districts, eq(auditAssignments.districtId, districts.id))
       .leftJoin(provinces, eq(auditAssignments.provinceId, provinces.id))
       .leftJoin(auditSessions, eq(auditAssignments.sessionId, auditSessions.id))
-      .where(eq(auditAssignments.assignedTo, req.user.userId))
+      .where(eq(auditAssignments.assignedTo, req.user!.userId))
       .orderBy(desc(auditAssignments.createdAt));
 
     res.json({ success: true, data: rows });
@@ -313,10 +324,10 @@ router.get("/v1/audit/assignments/:id", requireAuth, async (req, res) => {
       .leftJoin(provinces, eq(auditAssignments.provinceId, provinces.id))
       .leftJoin(users, eq(auditAssignments.assignedTo, users.id))
       .leftJoin(auditSessions, eq(auditAssignments.sessionId, auditSessions.id))
-      .where(eq(auditAssignments.id, req.params.id))
+      .where(eq(auditAssignments.id, req.params.id as string))
       .limit(1);
 
-    if (!assignment) return res.status(404).json({ success: false, message: "Assignment not found", data: null });
+    if (!assignment) { res.status(404).json({ success: false, message: "Assignment not found", data: null }); return; }
 
     const items = await db
       .select({
@@ -336,7 +347,7 @@ router.get("/v1/audit/assignments/:id", requireAuth, async (req, res) => {
       })
       .from(auditItems)
       .leftJoin(assets, eq(auditItems.assetId, assets.id))
-      .where(eq(auditItems.assignmentId, req.params.id))
+      .where(eq(auditItems.assignmentId, req.params.id as string))
       .orderBy(assets.assetTag);
 
     res.json({ success: true, data: { ...assignment, items } });
@@ -353,15 +364,15 @@ router.patch("/v1/audit/items/:id", requireAuth, async (req, res) => {
     };
 
     const patch: Record<string, unknown> = {};
-    if (status) { patch.status = status; patch.verifiedBy = req.user.userId; patch.verifiedAt = new Date(); }
+    if (status) { patch.status = status; patch.verifiedBy = req.user!.userId; patch.verifiedAt = new Date(); }
     if (conditionObserved !== undefined) patch.conditionObserved = conditionObserved;
     if (gpsLat !== undefined) patch.gpsLat = String(gpsLat);
     if (gpsLon !== undefined) patch.gpsLon = String(gpsLon);
     if (photoUrl !== undefined) patch.photoUrl = photoUrl;
     if (notes !== undefined) patch.notes = notes;
 
-    const [updated] = await db.update(auditItems).set(patch).where(eq(auditItems.id, req.params.id)).returning();
-    if (!updated) return res.status(404).json({ success: false, message: "Item not found", data: null });
+    const [updated] = await db.update(auditItems).set(patch).where(eq(auditItems.id, req.params.id as string)).returning();
+    if (!updated) { res.status(404).json({ success: false, message: "Item not found", data: null }); return; }
 
     const pending = await db
       .select({ cnt: count() })

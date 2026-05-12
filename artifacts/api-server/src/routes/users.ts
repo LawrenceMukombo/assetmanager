@@ -26,6 +26,7 @@ import {
   notifications,
 } from "@workspace/db";
 import { requireAuth, requireUserAdmin } from "../lib/auth";
+import { readPageParams, paginatedResponse, paginateArray } from "../lib/pagination";
 import { createPasswordResetToken, sendPasswordResetEmail } from "./auth";
 import { sendEmail, resolveAppBaseUrl } from "../lib/mailer";
 import { logger } from "../lib/logger";
@@ -348,6 +349,12 @@ router.get("/v1/users", requireAuth, async (req, res) => {
       };
     });
 
+    const pageParams = readPageParams(req);
+    if (pageParams.enabled) {
+      const { items, total } = paginateArray(enriched, pageParams);
+      res.json({ success: true, message: "Users retrieved", data: paginatedResponse(items, total, pageParams) });
+      return;
+    }
     res.json({ success: true, message: "Users retrieved", data: enriched });
   } catch (err) {
     req.log.error({ err }, "Get users error");

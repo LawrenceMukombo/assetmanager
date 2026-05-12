@@ -3,6 +3,7 @@ import { eq, and, isNull, ilike, or, sql, desc } from "drizzle-orm";
 import { db, stockItems, stockBalances, stockMovements, facilities, districts, users, provinces, agencies, activityLogs } from "@workspace/db";
 import type { Request, Response, NextFunction } from "express";
 import { requireAuth, requireAssetAdmin, isWithinAssetScope } from "../lib/auth";
+import { readPageParams, paginatedResponse, paginateArray } from "../lib/pagination";
 
 const router = Router();
 
@@ -43,7 +44,7 @@ router.get("/v1/stock", requireAuth, async (req, res) => {
   if (!req.user) return;
   try {
     const { search, low_stock, category } = req.query as { search?: string; low_stock?: string; category?: string };
-    const conditions = [isNull(stockItems.deletedAt), ...scopeFilter(req.user)];
+    const conditions = [isNull(stockItems.deletedAt), ...scopeFilter(req.user!)];
     if (search) {
       conditions.push(or(ilike(stockItems.itemName, `%${search}%`), ilike(stockItems.itemCode, `%${search}%`))!);
     }
@@ -140,6 +141,12 @@ router.get("/v1/stock", requireAuth, async (req, res) => {
       return { ...r, balances, totalQuantity, lowLocationCount };
     });
 
+    const pageParams = readPageParams(req);
+    if (pageParams.enabled) {
+      const { items, total } = paginateArray(enriched, pageParams);
+      res.json({ success: true, message: "Stock items retrieved", data: paginatedResponse(items, total, pageParams) });
+      return;
+    }
     res.json({ success: true, message: "Stock items retrieved", data: enriched });
   } catch (err) {
     req.log.error({ err }, "Get stock items error");
@@ -416,7 +423,7 @@ router.get("/v1/stock/:id/neighbors", requireAuth, async (req, res) => {
       return;
     }
 
-    const conditions = [isNull(stockItems.deletedAt), ...scopeFilter(req.user)];
+    const conditions = [isNull(stockItems.deletedAt), ...scopeFilter(req.user!)];
     if (search) {
       conditions.push(or(ilike(stockItems.itemName, `%${search}%`), ilike(stockItems.itemCode, `%${search}%`))!);
     }
@@ -476,7 +483,7 @@ router.get("/v1/stock/:id/neighbors", requireAuth, async (req, res) => {
 router.get("/v1/stock/:id", requireAuth, async (req, res) => {
   if (!req.user) return;
   try {
-    const conditions = [eq(stockItems.id, req.params.id), isNull(stockItems.deletedAt), ...scopeFilter(req.user)];
+    const conditions = [eq(stockItems.id, req.params.id as string), isNull(stockItems.deletedAt), ...scopeFilter(req.user!)];
     const [row] = await db
       .select({
         id: stockItems.id,
@@ -516,7 +523,7 @@ router.get("/v1/stock/:id", requireAuth, async (req, res) => {
       })
       .from(stockBalances)
       .leftJoin(facilities, eq(stockBalances.facilityId, facilities.id))
-      .where(eq(stockBalances.stockItemId, req.params.id))
+      .where(eq(stockBalances.stockItemId, req.params.id as string))
       .orderBy(facilities.facilityName);
     const movements = await db
       .select({
@@ -533,7 +540,7 @@ router.get("/v1/stock/:id", requireAuth, async (req, res) => {
       .from(stockMovements)
       .leftJoin(users, eq(stockMovements.actorUserId, users.id))
       .leftJoin(facilities, eq(stockMovements.fromFacilityId, facilities.id))
-      .where(eq(stockMovements.stockItemId, req.params.id))
+      .where(eq(stockMovements.stockItemId, req.params.id as string))
       .orderBy(desc(stockMovements.createdAt))
       .limit(100);
     res.json({ success: true, message: "Stock item retrieved", data: { ...row, balances, movements } });
@@ -547,7 +554,7 @@ router.patch("/v1/stock/:id", requireAuth, requireStockAdmin, async (req, res) =
   if (!req.user) return;
   const body = req.body;
   try {
-    const conditions = [eq(stockItems.id, req.params.id), isNull(stockItems.deletedAt), ...scopeFilter(req.user)];
+    const conditions = [eq(stockItems.id, req.params.id as string), isNull(stockItems.deletedAt), ...scopeFilter(req.user!)];
     const [existing] = await db.select({ id: stockItems.id }).from(stockItems).where(and(...conditions)).limit(1);
     if (!existing) {
       res.status(404).json({ success: false, message: "Stock item not found", data: null });
@@ -562,7 +569,7 @@ router.patch("/v1/stock/:id", requireAuth, requireStockAdmin, async (req, res) =
     if (body.unit_cost !== undefined) patch.unitCost = orNull(body.unit_cost);
     if (body.supplier !== undefined) patch.supplier = orNull(body.supplier);
     if (body.notes !== undefined) patch.notes = orNull(body.notes);
-    const [updated] = await db.update(stockItems).set(patch).where(eq(stockItems.id, req.params.id)).returning();
+    const [updated] = await db.update(stockItems).set(patch).where(eq(stockItems.id, req.params.id as string)).returning();
     res.json({ success: true, message: "Stock item updated", data: updated });
   } catch (err) {
     req.log.error({ err }, "Update stock item error");
@@ -580,7 +587,7 @@ router.patch("/v1/stock/:id/balances", requireAuth, requireStockAdmin, async (re
   }
   const facilityId = body.facility_id ?? null;
   try {
-    const conditions = [eq(stockItems.id, req.params.id), isNull(stockItems.deletedAt), ...scopeFilter(req.user)];
+    const conditions = [eq(stockItems.id, req.params.id as string), isNull(stockItems.deletedAt), ...scopeFilter(req.user!)];
     const [item] = await db.select({ id: stockItems.id }).from(stockItems).where(and(...conditions)).limit(1);
     if (!item) {
       res.status(404).json({ success: false, message: "Stock item not found", data: null });
@@ -598,7 +605,7 @@ router.patch("/v1/stock/:id/balances", requireAuth, requireStockAdmin, async (re
         return;
       }
       const isAgencyScoped = req.user.scopeLevel === "agency" || !!req.user.agencyId;
-      if (!isAgencyScoped && !isWithinAssetScope(req.user, {
+      if (!isAgencyScoped && !isWithinAssetScope(req.user!, {
         provinceId: fac.provinceId ?? null,
         districtId: fac.districtId,
         facilityId: fac.id,
@@ -655,7 +662,7 @@ router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (re
       .limit(1);
     if (!row) return { ok: false, status: 400, message: `${label === "source" ? "Source" : "Destination"} facility not found` };
     const isAgencyScoped = req.user!.scopeLevel === "agency" || !!req.user!.agencyId;
-    if (!isAgencyScoped && !isWithinAssetScope(req.user, {
+    if (!isAgencyScoped && !isWithinAssetScope(req.user!, {
       provinceId: row.provinceId ?? null,
       districtId: row.districtId,
       facilityId: row.id,
@@ -687,7 +694,7 @@ router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (re
 
   try {
     const result = await db.transaction(async (tx) => {
-      const conditions = [eq(stockItems.id, req.params.id), isNull(stockItems.deletedAt), ...scopeFilter(req.user!)];
+      const conditions = [eq(stockItems.id, req.params.id as string), isNull(stockItems.deletedAt), ...scopeFilter(req.user!)];
       const [item] = await tx
         .select({
           id: stockItems.id,
@@ -828,7 +835,7 @@ router.post("/v1/stock/:id/movements", requireAuth, requireAssetAdmin, async (re
 router.get("/v1/stock/:id/movements", requireAuth, async (req, res) => {
   if (!req.user) return;
   try {
-    const conditions = [eq(stockItems.id, req.params.id), isNull(stockItems.deletedAt), ...scopeFilter(req.user)];
+    const conditions = [eq(stockItems.id, req.params.id as string), isNull(stockItems.deletedAt), ...scopeFilter(req.user!)];
     const [item] = await db.select({ id: stockItems.id }).from(stockItems).where(and(...conditions)).limit(1);
     if (!item) {
       res.status(404).json({ success: false, message: "Stock item not found", data: null });
@@ -847,7 +854,7 @@ router.get("/v1/stock/:id/movements", requireAuth, async (req, res) => {
       })
       .from(stockMovements)
       .leftJoin(users, eq(stockMovements.actorUserId, users.id))
-      .where(eq(stockMovements.stockItemId, req.params.id))
+      .where(eq(stockMovements.stockItemId, req.params.id as string))
       .orderBy(desc(stockMovements.createdAt));
     res.json({ success: true, message: "Movements retrieved", data: movements });
   } catch (err) {
