@@ -12,5 +12,7 @@ export interface Notification {
   title?: string;
   message?: string;
   readStatus?: boolean;
+  entityType?: string | null;
+  entityId?: string | null;
   createdAt?: Date;
 }

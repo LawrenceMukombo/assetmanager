@@ -31,6 +31,8 @@ export default function Notifications() {
     }
     if (entityType === "asset" && entityId) {
       setLocation(`/assets/${entityId}`);
+    } else if (entityType === "user" && entityId) {
+      setLocation(`/users?edit=${entityId}`);
     }
   };
 
@@ -55,7 +57,8 @@ export default function Notifications() {
           </div>
         ) : (
           notifications.map(n => {
-            const hasLink = n.entityType === "asset" && n.entityId;
+            const hasLink = (n.entityType === "asset" || n.entityType === "user") && n.entityId;
+            const linkLabel = n.entityType === "user" ? "View User" : "View Asset";
             return (
               <Card
                 key={n.id}
@@ -72,7 +75,7 @@ export default function Notifications() {
                       <div className="flex items-center gap-2 shrink-0">
                         {hasLink && (
                           <span className="text-xs text-primary flex items-center gap-1">
-                            <ExternalLink className="w-3 h-3" /> View Asset
+                            <ExternalLink className="w-3 h-3" /> {linkLabel}
                           </span>
                         )}
                         <span className="text-xs text-muted-foreground whitespace-nowrap">

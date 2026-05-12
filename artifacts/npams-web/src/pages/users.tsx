@@ -24,13 +24,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_ROLES } from "@/App";
 import { apiFetch, apiFetchJson } from "@/lib/api-fetch";
-import { Redirect } from "wouter";
+import { Redirect, useSearch, useLocation } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -502,6 +502,24 @@ export default function Users() {
     setShowResetHistory(false);
     editForm.reset();
   };
+
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const handledDeepLinkRef = useRef<string | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const editId = params.get("edit");
+    if (!editId) return;
+    if (handledDeepLinkRef.current === editId) return;
+    const list = data?.data ?? [];
+    const target = list.find((u) => u.id === editId);
+    if (!target) return;
+    handledDeepLinkRef.current = editId;
+    openEditUser(target as UserRow);
+    params.delete("edit");
+    const remaining = params.toString();
+    navigate(remaining ? `/users?${remaining}` : "/users", { replace: true });
+  }, [search, data, navigate]);
 
   const onSubmitEdit = async (values: EditUserFormValues) => {
     if (!editUser?.id) return;

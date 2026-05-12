@@ -961,6 +961,8 @@ export const GetNotificationsResponse = zod.object({
         title: zod.string().optional(),
         message: zod.string().optional(),
         readStatus: zod.boolean().optional(),
+        entityType: zod.string().nullish(),
+        entityId: zod.string().nullish(),
         createdAt: zod.coerce.date().optional(),
       }),
     )

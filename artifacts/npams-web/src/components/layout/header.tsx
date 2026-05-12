@@ -45,6 +45,17 @@ export function Header() {
     queryClient.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
   };
 
+  const handleNotifClick = (n: { id?: string | null; readStatus?: boolean | null; entityType?: string | null; entityId?: string | null }) => {
+    if (!n.readStatus && n.id) markOneRead(n.id);
+    if (n.entityType === "asset" && n.entityId) {
+      setNotifOpen(false);
+      setLocation(`/assets/${n.entityId}`);
+    } else if (n.entityType === "user" && n.entityId) {
+      setNotifOpen(false);
+      setLocation(`/users?edit=${n.entityId}`);
+    }
+  };
+
   const headerTitle = isNational
     ? "National Public Asset Management System"
     : isAgency
@@ -139,7 +150,7 @@ export function Header() {
                   <div
                     key={n.id}
                     className={`flex items-start gap-3 px-4 py-3 border-b last:border-0 hover:bg-muted/50 cursor-pointer transition-colors ${!n.readStatus ? "bg-primary/5" : ""}`}
-                    onClick={() => { if (!n.readStatus && n.id) markOneRead(n.id); }}
+                    onClick={() => handleNotifClick(n)}
                   >
                     <div className="mt-0.5 shrink-0">
                       {!n.readStatus

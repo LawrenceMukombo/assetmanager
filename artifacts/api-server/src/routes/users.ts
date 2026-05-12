@@ -58,6 +58,131 @@ async function getPasswordResetAlertCounts(): Promise<Map<string, number>> {
   return map;
 }
 
+const PASSWORD_RESET_BURST_ACTION = "PASSWORD_RESET_BURST_ALERT";
+
+export async function dispatchPasswordResetBurstAlertIfNeeded(targetUserId: string): Promise<boolean> {
+  try {
+    const since = new Date(Date.now() - PASSWORD_RESET_ALERT_WINDOW_MINUTES * 60 * 1000);
+
+    const [{ count: rawCount } = { count: 0 }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(passwordResetEmailLog)
+      .where(
+        and(
+          eq(passwordResetEmailLog.userId, targetUserId),
+          gte(passwordResetEmailLog.createdAt, since),
+        ),
+      );
+    const count = Number(rawCount ?? 0);
+    if (count <= PASSWORD_RESET_ALERT_THRESHOLD) return false;
+
+    // Debounce: skip if we already alerted for this user within the window.
+    const [recentAlert] = await db
+      .select({ id: activityLogs.id })
+      .from(activityLogs)
+      .where(
+        and(
+          eq(activityLogs.actionType, PASSWORD_RESET_BURST_ACTION),
+          eq(activityLogs.entityType, "user"),
+          eq(activityLogs.entityId, targetUserId),
+          gte(activityLogs.createdAt, since),
+        ),
+      )
+      .limit(1);
+    if (recentAlert) return false;
+
+    const [target] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        fullName: users.fullName,
+        provinceId: userScope.provinceId,
+        agencyId: userScope.agencyId,
+      })
+      .from(users)
+      .leftJoin(userScope, eq(userScope.userId, users.id))
+      .where(eq(users.id, targetUserId))
+      .limit(1);
+    if (!target) return false;
+
+    const userAdminRoleNames = ["Super Admin", "Provincial Admin", "Agency Admin"];
+
+    const adminRows = await db
+      .select({
+        id: users.id,
+        roleName: roles.roleName,
+        scopeLevel: roles.scopeLevel,
+        provinceId: userScope.provinceId,
+        agencyId: userScope.agencyId,
+      })
+      .from(users)
+      .innerJoin(userRoles, eq(userRoles.userId, users.id))
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .leftJoin(userScope, eq(userScope.userId, users.id))
+      .where(and(eq(users.active, true), sql`${roles.roleName} IN ('Super Admin','Provincial Admin','Agency Admin')`));
+
+    const recipients = new Set<string>();
+    for (const a of adminRows) {
+      if (!a.id || !userAdminRoleNames.includes(a.roleName)) continue;
+      if (a.scopeLevel === "national" || a.roleName === "Super Admin") {
+        recipients.add(a.id);
+        continue;
+      }
+      if (a.roleName === "Provincial Admin" && target.provinceId && a.provinceId === target.provinceId) {
+        recipients.add(a.id);
+        continue;
+      }
+      if (a.roleName === "Agency Admin" && target.agencyId && a.agencyId === target.agencyId) {
+        recipients.add(a.id);
+        continue;
+      }
+    }
+
+    if (recipients.size === 0) return false;
+
+    const title = `Unusual password reset activity: ${target.fullName}`;
+    const message =
+      `${target.fullName} (${target.email}) received ${count} password reset emails in the last ` +
+      `${PASSWORD_RESET_ALERT_WINDOW_MINUTES} minute${PASSWORD_RESET_ALERT_WINDOW_MINUTES === 1 ? "" : "s"}, ` +
+      `which is above the threshold of ${PASSWORD_RESET_ALERT_THRESHOLD}. ` +
+      `Open the user profile to review the reset history.`;
+
+    await db
+      .insert(notifications)
+      .values(
+        Array.from(recipients).map((uid) => ({
+          userId: uid,
+          title,
+          message,
+          entityType: "user",
+          entityId: target.id,
+        })),
+      )
+      .catch(() => null);
+
+    await db
+      .insert(activityLogs)
+      .values({
+        userId: null,
+        actionType: PASSWORD_RESET_BURST_ACTION,
+        entityType: "user",
+        entityId: target.id,
+        description: `Dispatched password-reset burst alert (${count} resets in ${PASSWORD_RESET_ALERT_WINDOW_MINUTES}m) to ${recipients.size} admin(s).`,
+        metadata: {
+          count,
+          threshold: PASSWORD_RESET_ALERT_THRESHOLD,
+          windowMinutes: PASSWORD_RESET_ALERT_WINDOW_MINUTES,
+          recipientCount: recipients.size,
+        },
+      })
+      .catch(() => null);
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function validateGeoIntegrity(
   provinceId: string | null | undefined,
   districtId: string | null | undefined,

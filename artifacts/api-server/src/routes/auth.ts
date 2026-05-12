@@ -15,6 +15,7 @@ import {
   type TokenPayload,
 } from "../lib/auth";
 import { sendEmail, resolveAppBaseUrl } from "../lib/mailer";
+import { dispatchPasswordResetBurstAlertIfNeeded } from "./users";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 const RESET_TOKEN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -100,6 +101,12 @@ export async function sendPasswordResetEmail(
     });
   } catch (logErr) {
     logger.error({ err: logErr, userId: user.id }, "[mailer] Failed to write password reset audit log entry");
+  }
+
+  try {
+    await dispatchPasswordResetBurstAlertIfNeeded(user.id);
+  } catch (alertErr) {
+    logger.error({ err: alertErr, userId: user.id }, "[mailer] Failed to dispatch password reset burst alert");
   }
 
   if (thrownError) throw thrownError;

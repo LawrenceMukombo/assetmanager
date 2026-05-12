@@ -18,6 +18,8 @@ export const notifications = pgTable("notifications", {
   title: varchar("title", { length: 255 }).notNull(),
   message: text("message").notNull(),
   readStatus: boolean("read_status").notNull().default(false),
+  entityType: varchar("entity_type", { length: 100 }),
+  entityId: uuid("entity_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
