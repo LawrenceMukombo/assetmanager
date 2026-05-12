@@ -21,10 +21,11 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { Boxes, Plus, AlertTriangle, ArrowRight, ShoppingCart, TrendingDown, TrendingUp, Minus, X } from "lucide-react";
+import { Boxes, Plus, AlertTriangle, ArrowRight, ShoppingCart, TrendingDown, TrendingUp, Minus, X, Flame } from "lucide-react";
 import { ReorderDialog, type ReorderItem } from "@/components/reorder-dialog";
 import { PageHeader } from "@/components/layout/page-header";
 import { Sparkline } from "@/components/sparkline";
+import { isCategorySpiking } from "@/lib/category-spike";
 
 type StockBalanceSummary = {
   facilityId: string | null;
@@ -289,6 +290,7 @@ export default function StockPage() {
               {categorySummary!.map((c) => {
                 const label = c.category ?? "Uncategorised";
                 const active = categoryFilter === c.categoryKey;
+                const spiking = isCategorySpiking(c.burnRate30d, c.burnRate30dPrev);
                 // Delta vs the equally-sized previous window. When the prior window is zero
                 // we cannot express a meaningful percentage, so we fall back
                 // to "new activity" / "no change" labels.
@@ -326,11 +328,25 @@ export default function StockPage() {
                     key={c.categoryKey}
                     type="button"
                     onClick={() => setCategoryFilter(active ? null : c.categoryKey)}
-                    className={`text-left rounded-md border p-3 transition hover:bg-muted/50 ${active ? "border-primary ring-1 ring-primary" : "border-border"}`}
+                    className={`text-left rounded-md border p-3 transition hover:bg-muted/50 ${
+                      active
+                        ? "border-primary ring-1 ring-primary"
+                        : spiking
+                          ? "border-amber-400 ring-1 ring-amber-300/60 bg-amber-50/40 dark:bg-amber-950/20"
+                          : "border-border"
+                    }`}
+                    aria-label={spiking ? `${label} category. Consumption is spiking.` : undefined}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="font-medium text-sm">{label}</div>
-                      <Badge variant="outline" className="shrink-0">{c.itemCount} item{c.itemCount === 1 ? "" : "s"}</Badge>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {spiking && (
+                          <Badge className="bg-amber-100 text-amber-800 border-amber-200 gap-0.5">
+                            <Flame className="w-3 h-3" /> Spiking
+                          </Badge>
+                        )}
+                        <Badge variant="outline">{c.itemCount} item{c.itemCount === 1 ? "" : "s"}</Badge>
+                      </div>
                     </div>
                     <div className="mt-2 text-xl font-semibold">{formatPGK(c.totalValue)}</div>
                     <div className="text-xs text-muted-foreground">{c.totalQuantity.toLocaleString()} units on hand</div>

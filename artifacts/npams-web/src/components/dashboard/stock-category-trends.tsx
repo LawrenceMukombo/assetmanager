@@ -3,8 +3,9 @@ import { useLocation } from "wouter";
 import { apiFetchJson } from "@/lib/api-fetch";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Boxes, TrendingDown, TrendingUp, Minus } from "lucide-react";
+import { Boxes, TrendingDown, TrendingUp, Minus, Flame } from "lucide-react";
 import { Sparkline } from "@/components/sparkline";
+import { isCategorySpiking } from "@/lib/category-spike";
 
 type CategorySummary = {
   category: string | null;
@@ -38,9 +39,14 @@ export function StockCategoryTrends() {
   // appears (rather than getting pushed off by a freshly-active one with the
   // same burn). When both windows are zero we tie-break on on-hand value so
   // big-ticket categories stay visible.
+  // Spiking categories float to the front so a director scanning the dashboard
+  // sees the unusual movers first, regardless of their absolute burn rank.
   const topCategories = (categorySummary ?? [])
     .slice()
     .sort((a, b) => {
+      const aSpike = isCategorySpiking(a.burnRate30d, a.burnRate30dPrev);
+      const bSpike = isCategorySpiking(b.burnRate30d, b.burnRate30dPrev);
+      if (aSpike !== bSpike) return aSpike ? -1 : 1;
       if (b.burnRate30d !== a.burnRate30d) return b.burnRate30d - a.burnRate30d;
       if (b.burnRate30dPrev !== a.burnRate30dPrev) return b.burnRate30dPrev - a.burnRate30dPrev;
       return Number(b.totalValue) - Number(a.totalValue);
@@ -67,6 +73,7 @@ export function StockCategoryTrends() {
             const label = c.category ?? "Uncategorised";
             const cur = c.burnRate30d;
             const prev = c.burnRate30dPrev;
+            const spiking = isCategorySpiking(cur, prev);
             // Same delta semantics as the Stock page, kept consistent so a
             // director jumping between the two pages sees identical numbers.
             let deltaLabel: string;
@@ -102,14 +109,25 @@ export function StockCategoryTrends() {
                 key={c.categoryKey}
                 type="button"
                 onClick={() => setLocation(`/stock?category=${encodeURIComponent(c.categoryKey)}`)}
-                className="text-left rounded-md border border-border p-3 transition hover:bg-muted/50 hover:shadow-sm"
-                aria-label={`Open Stock page filtered to ${label}. 30-day burn ${cur}, ${deltaLabel}.`}
+                className={`text-left rounded-md border p-3 transition hover:bg-muted/50 hover:shadow-sm ${
+                  spiking
+                    ? "border-amber-400 ring-1 ring-amber-300/60 bg-amber-50/40 dark:bg-amber-950/20"
+                    : "border-border"
+                }`}
+                aria-label={`Open Stock page filtered to ${label}. 30-day burn ${cur}, ${deltaLabel}.${spiking ? " Consumption is spiking." : ""}`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="font-medium text-sm truncate">{label}</div>
-                  <Badge variant="outline" className="shrink-0 text-[10px] px-1.5">
-                    {c.itemCount}
-                  </Badge>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {spiking && (
+                      <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-[10px] px-1.5 gap-0.5">
+                        <Flame className="w-3 h-3" /> Spiking
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className="text-[10px] px-1.5">
+                      {c.itemCount}
+                    </Badge>
+                  </div>
                 </div>
                 <div className="mt-2 text-lg font-semibold leading-tight">
                   {cur.toLocaleString()}
