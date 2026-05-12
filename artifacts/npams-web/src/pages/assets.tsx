@@ -69,6 +69,7 @@ import { getCategoryMeta } from "@/lib/category";
 import { cn } from "@/lib/utils";
 import { DistrictPicker } from "@/components/district-picker";
 import { PageHeader } from "@/components/layout/page-header";
+import { DataTablePagination } from "@/components/data-table-pagination";
 import { Box } from "lucide-react";
 
 const ALL = "__all__";
@@ -843,34 +844,15 @@ export default function Assets() {
           </Table>
         </div>
 
-        {pagination &&
-          pagination.total_pages &&
-          pagination.total_pages > 1 && (
-            <div className="flex items-center justify-between p-4 border-t">
-              <div className="text-sm text-muted-foreground">
-                Showing page {pagination.page} of {pagination.total_pages} (
-                {pagination.total} total)
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page === 1}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page === pagination.total_pages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
+        {pagination && pagination.total !== undefined && pagination.total > 0 && (
+          <DataTablePagination
+            page={pagination.page ?? page}
+            pageSize={pagination.limit ?? 10}
+            total={pagination.total}
+            onPageChange={(p) => setPage(p)}
+            label="assets"
+          />
+        )}
       </div>
 
       <AlertDialog

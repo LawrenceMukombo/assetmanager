@@ -32,6 +32,7 @@ import { ADMIN_ROLES } from "@/App";
 import { apiFetch, apiFetchJson } from "@/lib/api-fetch";
 import { Redirect, useSearch, useLocation } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DataTablePagination, useClientPagination } from "@/components/data-table-pagination";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -260,6 +261,8 @@ export default function Users() {
   const { data, isLoading, refetch } = useGetUsers({
     query: { queryKey: getGetUsersQueryKey() },
   });
+  const { pageItems: usersPageItems, paginationProps: usersPaginationProps } =
+    useClientPagination<UserRow>((data?.data as UserRow[]) ?? [], 20);
   const { data: provincesData } = useGetProvinces({
     query: { queryKey: getGetProvincesQueryKey() },
   });
@@ -651,7 +654,7 @@ export default function Users() {
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No users found.</TableCell>
                   </TableRow>
-                ) : (data?.data as UserRow[])?.map((u) => (
+                ) : usersPageItems.map((u) => (
                   <TableRow
                     key={u.id}
                     className="cursor-pointer hover:bg-muted/50 transition-colors"
@@ -722,6 +725,7 @@ export default function Users() {
                 ))}
               </TableBody>
             </Table>
+            <DataTablePagination {...usersPaginationProps} label="users" />
           </div>
         </TabsContent>
 

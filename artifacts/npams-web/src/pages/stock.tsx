@@ -18,6 +18,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { DataTablePagination, useClientPagination } from "@/components/data-table-pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
@@ -120,6 +121,8 @@ export default function StockPage() {
       return r.data ?? [];
     },
   });
+  const { pageItems: stockPageItems, paginationProps: stockPaginationProps } =
+    useClientPagination<StockItem>(items ?? [], 20);
 
   type CategorySummary = {
     category: string | null;
@@ -441,7 +444,7 @@ export default function StockPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items?.map((it) => {
+                {stockPageItems.map((it) => {
                   const balances = it.balances ?? [];
                   const total = it.totalQuantity ?? it.onHandQuantity;
                   const lowLocs = it.lowLocationCount ?? 0;
@@ -496,6 +499,9 @@ export default function StockPage() {
             </Table>
           )}
         </CardContent>
+        {!isLoading && (items?.length ?? 0) > 0 && (
+          <DataTablePagination {...stockPaginationProps} label="items" />
+        )}
       </Card>
 
       <ReorderDialog item={reorderItem} open={!!reorderItem} onOpenChange={(o) => !o && setReorderItem(null)} />

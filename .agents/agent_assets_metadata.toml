@@ -32,12 +32,6 @@ type = "slides"
 title = "NPAMS — ICSA Sponsor Summary (PowerPoint)"
 
 [[outputs]]
-id = "syammxULoZ6LCmcEuKWTO"
-uri = "file://proposals/assets/screens/01-login.jpg"
-type = "image"
-title = "01 — Login (ICSA branded)"
-
-[[outputs]]
 id = "hrl2ki6Dn0C0dUkwPAhM4"
 uri = "file://proposals/assets/screens/02-dashboard.jpg"
 type = "image"
@@ -78,12 +72,6 @@ id = "Sjwx_VkrrcKlxPf9QUi5p"
 uri = "file://proposals/assets/screens/08-locations.jpg"
 type = "image"
 title = "08 — Locations"
-
-[[outputs]]
-id = "MfG1Crln3al3rFsxbqnAP"
-uri = "file://proposals/assets/screens/09-audit.jpg"
-type = "image"
-title = "09 — Audit sessions"
 
 [[outputs]]
 id = "w3gS8GNr-Gr9033ubKObU"

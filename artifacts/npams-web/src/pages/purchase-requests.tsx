@@ -30,6 +30,7 @@ import {
   ClipboardList, Check, X, PackageCheck, Plus, ShieldCheck, ChevronRight, Inbox, FileSpreadsheet, ListChecks, ShoppingCart,
 } from "lucide-react";
 import { format } from "date-fns";
+import { DataTablePagination, useClientPagination } from "@/components/data-table-pagination";
 import { PageHeader } from "@/components/layout/page-header";
 
 type PurchaseRequest = {
@@ -76,6 +77,37 @@ const STATUS_BADGE: Record<PurchaseRequest["status"], string> = {
 
 function StatusBadge({ status }: { status: PurchaseRequest["status"] }) {
   return <Badge className={STATUS_BADGE[status]}>{status}</Badge>;
+}
+
+function PaginatedPRTable({
+  items,
+  renderRow,
+}: {
+  items: PurchaseRequest[];
+  renderRow: (r: PurchaseRequest) => React.ReactNode;
+}) {
+  const { pageItems, paginationProps } = useClientPagination<PurchaseRequest>(items, 20);
+  return (
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Request #</TableHead>
+            <TableHead>Item</TableHead>
+            <TableHead className="text-right">Qty</TableHead>
+            <TableHead>Supplier</TableHead>
+            <TableHead>Required by</TableHead>
+            <TableHead>Requested by</TableHead>
+            <TableHead>Created</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>{pageItems.map(renderRow)}</TableBody>
+      </Table>
+      <DataTablePagination {...paginationProps} label="requests" />
+    </>
+  );
 }
 
 export default function PurchaseRequestsPage() {
@@ -182,75 +214,60 @@ export default function PurchaseRequestsPage() {
       return <div className="p-12 text-center text-sm text-muted-foreground">No purchase requests in this view.</div>;
     }
     return (
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Request #</TableHead>
-            <TableHead>Item</TableHead>
-            <TableHead className="text-right">Qty</TableHead>
-            <TableHead>Supplier</TableHead>
-            <TableHead>Required by</TableHead>
-            <TableHead>Requested by</TableHead>
-            <TableHead>Created</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {items.map((r) => {
-            const remaining = r.quantity - r.receivedQuantity;
-            return (
-              <TableRow key={r.id}>
-                <TableCell className="font-mono text-xs">
-                  <button
-                    type="button"
-                    onClick={() => openDetail(r.id)}
-                    className="text-primary hover:underline inline-flex items-center gap-1"
-                  >
-                    {r.requestNumber} <ChevronRight className="w-3 h-3" />
-                  </button>
-                </TableCell>
-                <TableCell>
-                  <div className="font-medium">{r.stockItem.itemName}</div>
-                  <div className="text-xs text-muted-foreground font-mono">{r.stockItem.itemCode}</div>
-                </TableCell>
-                <TableCell className="text-right font-mono">
-                  {r.quantity.toLocaleString()} {r.stockItem.unitOfMeasure}
-                  {r.receivedQuantity > 0 && r.receivedQuantity < r.quantity && (
-                    <div className="text-xs text-muted-foreground">{r.receivedQuantity} received</div>
-                  )}
-                </TableCell>
-                <TableCell className="text-sm">{r.supplier ?? <span className="text-muted-foreground">—</span>}</TableCell>
-                <TableCell className="text-sm">{r.requiredByDate ? format(new Date(r.requiredByDate), "dd MMM yyyy") : <span className="text-muted-foreground">—</span>}</TableCell>
-                <TableCell className="text-sm">{r.requester?.fullName ?? "—"}</TableCell>
-                <TableCell className="text-sm">{format(new Date(r.createdAt), "dd MMM yyyy")}</TableCell>
-                <TableCell><StatusBadge status={r.status} /></TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2 flex-wrap">
-                    {isAdmin && r.status === "submitted" && (
-                      <>
-                        <Button size="sm" variant="outline"
-                          onClick={() => { setApproveTarget(r); setApproveSign(user?.full_name ?? ""); }}>
-                          <Check className="w-4 h-4 mr-1" /> Approve
-                        </Button>
-                        <Button size="sm" variant="outline" className="text-destructive"
-                          onClick={() => { setRejectTarget(r); setRejectReason(""); setRejectSign(user?.full_name ?? ""); }}>
-                          <X className="w-4 h-4 mr-1" /> Reject
-                        </Button>
-                      </>
-                    )}
-                    {isAdmin && (r.status === "approved" || r.status === "received") && remaining > 0 && (
-                      <Button size="sm" onClick={() => { setReceiveTarget(r); setReceiveQty(String(remaining)); setReceiveRef(""); setReceiveSign(user?.full_name ?? ""); }}>
-                        <PackageCheck className="w-4 h-4 mr-1" /> Receive
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+      <PaginatedPRTable items={items} renderRow={renderPRRow} />
+    );
+  };
+
+  const renderPRRow = (r: PurchaseRequest) => {
+    const remaining = r.quantity - r.receivedQuantity;
+    return (
+      <TableRow key={r.id}>
+        <TableCell className="font-mono text-xs">
+          <button
+            type="button"
+            onClick={() => openDetail(r.id)}
+            className="text-primary hover:underline inline-flex items-center gap-1"
+          >
+            {r.requestNumber} <ChevronRight className="w-3 h-3" />
+          </button>
+        </TableCell>
+        <TableCell>
+          <div className="font-medium">{r.stockItem.itemName}</div>
+          <div className="text-xs text-muted-foreground font-mono">{r.stockItem.itemCode}</div>
+        </TableCell>
+        <TableCell className="text-right font-mono">
+          {r.quantity.toLocaleString()} {r.stockItem.unitOfMeasure}
+          {r.receivedQuantity > 0 && r.receivedQuantity < r.quantity && (
+            <div className="text-xs text-muted-foreground">{r.receivedQuantity} received</div>
+          )}
+        </TableCell>
+        <TableCell className="text-sm">{r.supplier ?? <span className="text-muted-foreground">—</span>}</TableCell>
+        <TableCell className="text-sm">{r.requiredByDate ? format(new Date(r.requiredByDate), "dd MMM yyyy") : <span className="text-muted-foreground">—</span>}</TableCell>
+        <TableCell className="text-sm">{r.requester?.fullName ?? "—"}</TableCell>
+        <TableCell className="text-sm">{format(new Date(r.createdAt), "dd MMM yyyy")}</TableCell>
+        <TableCell><StatusBadge status={r.status} /></TableCell>
+        <TableCell className="text-right">
+          <div className="flex justify-end gap-2 flex-wrap">
+            {isAdmin && r.status === "submitted" && (
+              <>
+                <Button size="sm" variant="outline"
+                  onClick={() => { setApproveTarget(r); setApproveSign(user?.full_name ?? ""); }}>
+                  <Check className="w-4 h-4 mr-1" /> Approve
+                </Button>
+                <Button size="sm" variant="outline" className="text-destructive"
+                  onClick={() => { setRejectTarget(r); setRejectReason(""); setRejectSign(user?.full_name ?? ""); }}>
+                  <X className="w-4 h-4 mr-1" /> Reject
+                </Button>
+              </>
+            )}
+            {isAdmin && (r.status === "approved" || r.status === "received") && remaining > 0 && (
+              <Button size="sm" onClick={() => { setReceiveTarget(r); setReceiveQty(String(remaining)); setReceiveRef(""); setReceiveSign(user?.full_name ?? ""); }}>
+                <PackageCheck className="w-4 h-4 mr-1" /> Receive
+              </Button>
+            )}
+          </div>
+        </TableCell>
+      </TableRow>
     );
   };
 

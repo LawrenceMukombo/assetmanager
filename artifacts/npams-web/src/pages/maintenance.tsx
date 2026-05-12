@@ -22,6 +22,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { DataTablePagination, useClientPagination } from "@/components/data-table-pagination";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -135,6 +136,8 @@ export default function Maintenance() {
   });
 
   const filtered = (records ?? []).filter(r => statusFilter === "all" || r.status === statusFilter);
+  const { pageItems: maintPageItems, paginationProps: maintPaginationProps } =
+    useClientPagination<MaintenanceRecord>(filtered, 20);
   const overdue = (records ?? []).filter(r => r.status === "scheduled" && isPast(new Date(r.scheduledDate)));
   const dueSoon = (records ?? []).filter(r => r.status === "scheduled" && !isPast(new Date(r.scheduledDate)) &&
     isWithinInterval(new Date(r.scheduledDate), { start: new Date(), end: addDays(new Date(), 7) }));
@@ -216,7 +219,7 @@ export default function Maintenance() {
                       <p>No maintenance tasks found.</p>
                     </TableCell>
                   </TableRow>
-                ) : filtered.map(r => {
+                ) : maintPageItems.map(r => {
                   const isOverdue = r.status === "scheduled" && isPast(new Date(r.scheduledDate));
                   return (
                     <TableRow key={r.id}>
@@ -291,6 +294,9 @@ export default function Maintenance() {
                 })}
               </TableBody>
             </Table>
+            {!isLoading && filtered.length > 0 && (
+              <DataTablePagination {...maintPaginationProps} label="tasks" />
+            )}
           </Card>
         </TabsContent>
       </Tabs>

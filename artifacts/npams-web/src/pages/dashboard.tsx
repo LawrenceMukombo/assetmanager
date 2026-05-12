@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Box, AlertTriangle, Wrench, DollarSign, Map,
   ArrowUpDown, ArrowUp, ArrowDown, Activity, TrendingUp,
@@ -804,11 +805,14 @@ function NationalDashboard() {
         }}
       />
 
-      {/* Stock Category Trends — surfaces the same 8-week burn-rate signal
-          that the Stock page shows so directors landing on the dashboard
-          first can spot rising/falling consumption without drilling in. */}
-      <StockCategoryTrends />
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="trends">Trends</TabsTrigger>
+          <TabsTrigger value="provinces">Provinces</TabsTrigger>
+        </TabsList>
 
+        <TabsContent value="overview" className="space-y-6 mt-0">
       {/* Pivot + Charts Row */}
       <div className="flex items-center justify-between">
         <PivotControl value={pivot} onChange={setPivot} includeDistrict={false} />
@@ -1010,6 +1014,14 @@ function NationalDashboard() {
         </Card>
       </div>
 
+        </TabsContent>
+
+        <TabsContent value="trends" className="space-y-6 mt-0">
+          {/* Stock Category Trends — surfaces the same 8-week burn-rate signal
+              that the Stock page shows so directors landing on the dashboard
+              first can spot rising/falling consumption without drilling in. */}
+          <StockCategoryTrends />
+
       {/* Acquisition Trend */}
       {trendData.length > 0 && (
         <Card>
@@ -1039,7 +1051,9 @@ function NationalDashboard() {
           </CardContent>
         </Card>
       )}
+        </TabsContent>
 
+        <TabsContent value="provinces" className="space-y-6 mt-0">
       {/* Province Table */}
       <Card>
         <CardHeader className="pb-2">
@@ -1099,6 +1113,8 @@ function NationalDashboard() {
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Detail Drawer */}
       {drawer && (
@@ -1309,10 +1325,14 @@ function ProvincialDashboard() {
           accent={d?.has_filters ? "hsl(var(--primary))" : undefined} />
       </div>
 
-      {/* Stock Category Trends — same widget as the National dashboard,
-          scoped automatically by the API to the user's province/agency. */}
-      <StockCategoryTrends />
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="trends">Trends</TabsTrigger>
+          <TabsTrigger value="recent">Recent Assets</TabsTrigger>
+        </TabsList>
 
+        <TabsContent value="overview" className="space-y-6 mt-0">
       {/* Pivot + Charts */}
       <div className="flex items-center justify-between">
         <PivotControl value={pivot} onChange={setPivot} />
@@ -1551,6 +1571,13 @@ function ProvincialDashboard() {
         </Card>
       </div>
 
+        </TabsContent>
+
+        <TabsContent value="trends" className="space-y-6 mt-0">
+          {/* Stock Category Trends — same widget as the National dashboard,
+              scoped automatically by the API to the user's province/agency. */}
+          <StockCategoryTrends />
+
       {/* Acquisition Trend */}
       {trendData.length > 0 && (
         <Card>
@@ -1574,7 +1601,9 @@ function ProvincialDashboard() {
           </CardContent>
         </Card>
       )}
+        </TabsContent>
 
+        <TabsContent value="recent" className="space-y-6 mt-0">
       {/* Recent / Filtered Assets */}
       <Card>
         <CardHeader className="pb-2">
@@ -1633,6 +1662,8 @@ function ProvincialDashboard() {
           </Table>
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Detail Drawer */}
       {drawer && (

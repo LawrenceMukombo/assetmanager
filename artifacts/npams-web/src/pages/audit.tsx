@@ -25,6 +25,52 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ClipboardList, Plus, ChevronRight, CalendarClock, CheckCircle2, ClipboardCheck } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { DataTablePagination, useClientPagination } from "@/components/data-table-pagination";
+
+function PaginatedAuditGrid({
+  list,
+  onCardClick,
+}: {
+  list: AuditSession[];
+  onCardClick: (s: AuditSession) => void;
+}) {
+  const { pageItems, paginationProps } = useClientPagination<AuditSession>(list, 12);
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {pageItems.map(s => (
+          <Card
+            key={s.id}
+            className="cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => onCardClick(s)}
+          >
+            <CardHeader className="pb-2">
+              <div className="flex items-start justify-between gap-2">
+                <CardTitle className="text-base leading-tight">{s.name}</CardTitle>
+                <Badge className={`text-xs shrink-0 ${STATUS_COLORS[s.status] ?? ""}`}>{statusLabel(s.status)}</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {s.description && <p className="text-sm text-muted-foreground line-clamp-2">{s.description}</p>}
+              <div className="text-xs text-muted-foreground space-y-1">
+                {s.provinceName && <p className="flex items-center gap-1"><CalendarClock className="w-3 h-3" />{s.provinceName}</p>}
+                {s.startDate && <p>Start: {format(new Date(s.startDate), "dd MMM yyyy")}</p>}
+                {s.endDate && <p>End: {format(new Date(s.endDate), "dd MMM yyyy")}</p>}
+                <p>Created by {s.createdByName ?? "system"} · {format(new Date(s.createdAt), "dd MMM yyyy")}</p>
+              </div>
+              <div className="flex items-center gap-1 pt-1 text-primary text-sm font-medium">
+                View Details <ChevronRight className="w-4 h-4" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <div className="mt-3 rounded-lg border bg-card">
+        <DataTablePagination {...paginationProps} label="sessions" pageSizeOptions={[6, 12, 24, 48]} />
+      </div>
+    </>
+  );
+}
 
 interface AuditSession {
   id: string; name: string; description?: string; status: string;
@@ -174,42 +220,18 @@ export default function Audit() {
                     {isAdmin && <p className="text-sm mt-1">Create a new session to begin auditing assets.</p>}
                   </div>
                 ) : (
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {list.map(s => (
-                      <Card
-                        key={s.id}
-                        className="cursor-pointer hover:shadow-md transition-shadow"
-                        onClick={() => {
-                          const ctx: Record<string, string> = {};
-                          if (tab === "active") ctx.status = "active";
-                          const nonce = Math.random().toString(36).slice(2, 10);
-                          try {
-                            sessionStorage.setItem(`npams_audit_sessions_list_ctx_${nonce}`, JSON.stringify(ctx));
-                          } catch { /* ignore */ }
-                          setLocation(`/audit/${s.id}?ctx=${nonce}`);
-                        }}
-                      >
-                        <CardHeader className="pb-2">
-                          <div className="flex items-start justify-between gap-2">
-                            <CardTitle className="text-base leading-tight">{s.name}</CardTitle>
-                            <Badge className={`text-xs shrink-0 ${STATUS_COLORS[s.status] ?? ""}`}>{statusLabel(s.status)}</Badge>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                          {s.description && <p className="text-sm text-muted-foreground line-clamp-2">{s.description}</p>}
-                          <div className="text-xs text-muted-foreground space-y-1">
-                            {s.provinceName && <p className="flex items-center gap-1"><CalendarClock className="w-3 h-3" />{s.provinceName}</p>}
-                            {s.startDate && <p>Start: {format(new Date(s.startDate), "dd MMM yyyy")}</p>}
-                            {s.endDate && <p>End: {format(new Date(s.endDate), "dd MMM yyyy")}</p>}
-                            <p>Created by {s.createdByName ?? "system"} · {format(new Date(s.createdAt), "dd MMM yyyy")}</p>
-                          </div>
-                          <div className="flex items-center gap-1 pt-1 text-primary text-sm font-medium">
-                            View Details <ChevronRight className="w-4 h-4" />
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
+                  <PaginatedAuditGrid
+                    list={list}
+                    onCardClick={(s) => {
+                      const ctx: Record<string, string> = {};
+                      if (tab === "active") ctx.status = "active";
+                      const nonce = Math.random().toString(36).slice(2, 10);
+                      try {
+                        sessionStorage.setItem(`npams_audit_sessions_list_ctx_${nonce}`, JSON.stringify(ctx));
+                      } catch { /* ignore */ }
+                      setLocation(`/audit/${s.id}?ctx=${nonce}`);
+                    }}
+                  />
                 );
               })()
             )}
