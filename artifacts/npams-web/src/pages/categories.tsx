@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Edit, Trash, Tags } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { getCategoryMeta } from "@/lib/category";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_ROLES } from "@/App";
@@ -172,7 +173,20 @@ export default function Categories() {
                 className="cursor-pointer hover:bg-muted/50 transition-colors"
                 onClick={() => openEdit(cat)}
               >
-                <TableCell className="font-medium">{cat.categoryName}</TableCell>
+                <TableCell className="font-medium">
+                  {(() => {
+                    const meta = getCategoryMeta(cat.categoryName, cat.categoryCode);
+                    const Icon = meta.icon;
+                    return (
+                      <span className="inline-flex items-center gap-2">
+                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-md shrink-0 ${meta.chipClass}`} aria-hidden>
+                          <Icon className="w-4 h-4" />
+                        </span>
+                        <span>{cat.categoryName}</span>
+                      </span>
+                    );
+                  })()}
+                </TableCell>
                 <TableCell className="font-mono text-sm">{cat.categoryCode || "-"}</TableCell>
                 <TableCell className="text-muted-foreground">{cat.description || "-"}</TableCell>
                 <TableCell className="text-right font-mono text-sm">{cat.assetCount ?? 0}</TableCell>

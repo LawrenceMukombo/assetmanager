@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import { getCategoryMeta, getCategoryColor } from "@/lib/category";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DashboardMap from "@/components/dashboard/dashboard-map";
 import { useAuth } from "@/hooks/use-auth";
@@ -519,7 +520,7 @@ function StatCard({ title, value, icon: Icon, description, accent, onClick, acti
 
 // ─── Filter Chips ─────────────────────────────────────────────────────────────
 
-interface ChipItem { name: string; label: string; value: number; fill?: string; id?: string }
+interface ChipItem { name: string; label: string; value: number; fill?: string; id?: string; icon?: ComponentType<{ className?: string }> }
 
 function FilterChips({ items, activeKey, activeValue, onToggle, useId = false }: {
   items: ChipItem[];
@@ -550,7 +551,11 @@ function FilterChips({ items, activeKey, activeValue, onToggle, useId = false }:
                 : "border-border hover:bg-muted cursor-pointer",
             ].join(" ")}
           >
-            {item.fill && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.fill }} />}
+            {item.icon ? (
+              <item.icon className="w-3.5 h-3.5 flex-shrink-0" />
+            ) : item.fill ? (
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.fill }} />
+            ) : null}
             <span>{item.label}</span>
             <span className="text-muted-foreground ml-0.5">{item.value.toLocaleString()}</span>
           </button>
@@ -706,7 +711,7 @@ function NationalDashboard() {
   // Chart data
   const statusData  = (d?.assets_by_status  ?? []).map(s => ({ name: s.status,    label: STATUS_LABELS[s.status] ?? capitalize(s.status),    value: s.count, fill: STATUS_COLORS[s.status]    ?? FALLBACK_STATUS_COLOR, raw: s.value }));
   const condData    = (d?.assets_by_condition ?? []).map(c => ({ name: c.condition, label: CONDITION_LABELS[c.condition] ?? capitalize(c.condition), value: c.count, fill: CONDITION_COLORS[c.condition] ?? FALLBACK_STATUS_COLOR, raw: c.value }));
-  const catData     = (d?.top_categories     ?? []).filter(c => c.category_name).map((c, i) => ({ name: c.category_name!, value: c.count, fill: CATEGORY_COLORS[i % CATEGORY_COLORS.length], raw: c.total_value }));
+  const catData     = (d?.top_categories     ?? []).filter(c => c.category_name).map((c, i) => ({ name: c.category_name!, value: c.count, fill: getCategoryColor(c.category_name) || CATEGORY_COLORS[i % CATEGORY_COLORS.length], raw: c.total_value, icon: getCategoryMeta(c.category_name).icon }));
   const trendData   = d?.acquisition_trend  ?? [];
 
   const cellOpacity = (active: boolean | null, dim: boolean) =>
@@ -912,7 +917,7 @@ function NationalDashboard() {
             )}
             {pivot === "category" && catData.length > 0 && (
               <FilterChips
-                items={catData.map(c => ({ name: c.name, label: c.name, value: c.value, fill: c.fill }))}
+                items={catData.map(c => ({ name: c.name, label: c.name, value: c.value, fill: c.fill, icon: c.icon }))}
                 activeValue={filters.categoryName}
                 onToggle={name => toggleFilter("categoryName", name)}
               />
@@ -1191,7 +1196,7 @@ function ProvincialDashboard() {
   // Chart data
   const statusData  = (d?.assets_by_status    ?? []).map(s => ({ name: s.status,     label: STATUS_LABELS[s.status]        ?? capitalize(s.status),     value: s.count, fill: STATUS_COLORS[s.status]     ?? FALLBACK_STATUS_COLOR, raw: s.value }));
   const condData    = (d?.assets_by_condition  ?? []).map(c => ({ name: c.condition, label: CONDITION_LABELS[c.condition]   ?? capitalize(c.condition),  value: c.count, fill: CONDITION_COLORS[c.condition] ?? FALLBACK_STATUS_COLOR, raw: c.value }));
-  const catData     = (d?.assets_by_category   ?? []).filter(c => c.category_name).map((c, i) => ({ name: c.category_name!, value: c.count, fill: CATEGORY_COLORS[i % CATEGORY_COLORS.length], raw: c.value }));
+  const catData     = (d?.assets_by_category   ?? []).filter(c => c.category_name).map((c, i) => ({ name: c.category_name!, value: c.count, fill: getCategoryColor(c.category_name) || CATEGORY_COLORS[i % CATEGORY_COLORS.length], raw: c.value, icon: getCategoryMeta(c.category_name).icon }));
   const distData    = (d?.assets_by_district   ?? []).map(dist => ({ name: dist.district_name, id: dist.district_id, assets: dist.total_assets, missing: dist.missing_assets, value: dist.total_value }));
   const trendData   = d?.acquisition_trend    ?? [];
 
@@ -1441,7 +1446,7 @@ function ProvincialDashboard() {
             )}
             {pivot === "category" && catData.length > 0 && (
               <FilterChips
-                items={catData.map(c => ({ name: c.name, label: c.name, value: c.value, fill: c.fill }))}
+                items={catData.map(c => ({ name: c.name, label: c.name, value: c.value, fill: c.fill, icon: c.icon }))}
                 activeValue={filters.categoryName}
                 onToggle={name => toggleFilter("categoryName", name)}
               />

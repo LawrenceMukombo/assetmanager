@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Edit, Printer, Download, Activity, ArrowRight, TrendingDown, ImageIcon, FileText, Wrench, CheckCircle, AlertTriangle, Trash2, Box, ChevronLeft, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { statusBadgeClass } from "@/lib/status";
+import { getCategoryMeta } from "@/lib/category";
 import QRCode from "react-qr-code";
 import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
@@ -496,14 +497,25 @@ export default function AssetDetailPage() {
                 <CardContent className="grid sm:grid-cols-2 gap-y-4 gap-x-6">
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Category</p>
-                    <p className="font-medium flex items-center gap-2">
-                      <span>{asset.category?.categoryName || "N/A"}</span>
-                      {asset.category?.categoryCode && (
-                        <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                          {asset.category.categoryCode}
-                        </span>
-                      )}
-                    </p>
+                    {asset.category?.categoryName ? (() => {
+                      const meta = getCategoryMeta(asset.category.categoryName, asset.category.categoryCode);
+                      const Icon = meta.icon;
+                      return (
+                        <p className="font-medium flex items-center gap-2">
+                          <span className={`inline-flex items-center justify-center w-7 h-7 rounded-md shrink-0 ${meta.chipClass}`} aria-hidden>
+                            <Icon className="w-4 h-4" />
+                          </span>
+                          <span>{asset.category.categoryName}</span>
+                          {asset.category.categoryCode && (
+                            <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                              {asset.category.categoryCode}
+                            </span>
+                          )}
+                        </p>
+                      );
+                    })() : (
+                      <p className="font-medium">N/A</p>
+                    )}
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Condition</p>

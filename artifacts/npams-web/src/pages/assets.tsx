@@ -65,6 +65,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { statusBadgeClass } from "@/lib/status";
+import { getCategoryMeta } from "@/lib/category";
 import { cn } from "@/lib/utils";
 import { DistrictPicker } from "@/components/district-picker";
 import { PageHeader } from "@/components/layout/page-header";
@@ -617,6 +618,8 @@ export default function Assets() {
               <div className="flex flex-wrap gap-1.5">
                 {categoriesData?.data?.map((c) => {
                   const isSelected = categoryId === c.id;
+                  const meta = getCategoryMeta(c.categoryName, c.categoryCode);
+                  const Icon = meta.icon;
                   return (
                     <button
                       key={c.id}
@@ -626,18 +629,22 @@ export default function Assets() {
                         setPage(1);
                       }}
                       className={cn(
-                        "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border transition-all duration-150",
+                        "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition-all duration-150",
                         "hover:scale-105 active:scale-95 cursor-pointer select-none",
                         isSelected
                           ? "bg-primary text-primary-foreground border-primary shadow-sm"
                           : "bg-background text-foreground border-border hover:border-primary/50 hover:bg-accent"
                       )}
                     >
+                      <Icon
+                        className="h-3.5 w-3.5 shrink-0"
+                        style={isSelected ? undefined : { color: meta.color }}
+                      />
                       <span>{c.categoryName}</span>
                       {c.categoryCode && (
                         <span
                           className={cn(
-                            "ml-1.5 font-mono text-[10px] px-1 py-0.5 rounded",
+                            "ml-0.5 font-mono text-[10px] px-1 py-0.5 rounded",
                             isSelected
                               ? "bg-primary-foreground/20 text-primary-foreground"
                               : "bg-muted text-muted-foreground"
@@ -742,16 +749,32 @@ export default function Assets() {
                       {asset.assetName}
                     </TableCell>
                     <TableCell>
-                      {asset.category?.categoryName ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <span>{asset.category.categoryName}</span>
-                          {asset.category.categoryCode && (
-                            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                              {asset.category.categoryCode}
+                      {asset.category?.categoryName ? (() => {
+                        const meta = getCategoryMeta(
+                          asset.category.categoryName,
+                          asset.category.categoryCode,
+                        );
+                        const Icon = meta.icon;
+                        return (
+                          <span className="inline-flex items-center gap-1.5">
+                            <span
+                              className={cn(
+                                "inline-flex items-center justify-center w-6 h-6 rounded-md shrink-0",
+                                meta.chipClass,
+                              )}
+                              aria-hidden
+                            >
+                              <Icon className="w-3.5 h-3.5" />
                             </span>
-                          )}
-                        </span>
-                      ) : (
+                            <span>{asset.category.categoryName}</span>
+                            {asset.category.categoryCode && (
+                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                                {asset.category.categoryCode}
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })() : (
                         "N/A"
                       )}
                     </TableCell>
