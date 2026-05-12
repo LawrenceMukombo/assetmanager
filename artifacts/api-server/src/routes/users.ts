@@ -27,6 +27,8 @@ import {
 } from "@workspace/db";
 import { requireAuth, requireUserAdmin } from "../lib/auth";
 import { createPasswordResetToken, sendPasswordResetEmail } from "./auth";
+import { sendEmail, resolveAppBaseUrl } from "../lib/mailer";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -110,6 +112,8 @@ export async function dispatchPasswordResetBurstAlertIfNeeded(targetUserId: stri
     const adminRows = await db
       .select({
         id: users.id,
+        email: users.email,
+        fullName: users.fullName,
         roleName: roles.roleName,
         scopeLevel: roles.scopeLevel,
         provinceId: userScope.provinceId,
@@ -121,20 +125,16 @@ export async function dispatchPasswordResetBurstAlertIfNeeded(targetUserId: stri
       .leftJoin(userScope, eq(userScope.userId, users.id))
       .where(and(eq(users.active, true), sql`${roles.roleName} IN ('Super Admin','Provincial Admin','Agency Admin')`));
 
-    const recipients = new Set<string>();
+    const recipients = new Map<string, { email: string; fullName: string }>();
     for (const a of adminRows) {
       if (!a.id || !userAdminRoleNames.includes(a.roleName)) continue;
-      if (a.scopeLevel === "national" || a.roleName === "Super Admin") {
-        recipients.add(a.id);
-        continue;
-      }
-      if (a.roleName === "Provincial Admin" && target.provinceId && a.provinceId === target.provinceId) {
-        recipients.add(a.id);
-        continue;
-      }
-      if (a.roleName === "Agency Admin" && target.agencyId && a.agencyId === target.agencyId) {
-        recipients.add(a.id);
-        continue;
+      const matches =
+        a.scopeLevel === "national" ||
+        a.roleName === "Super Admin" ||
+        (a.roleName === "Provincial Admin" && target.provinceId && a.provinceId === target.provinceId) ||
+        (a.roleName === "Agency Admin" && target.agencyId && a.agencyId === target.agencyId);
+      if (matches && a.email) {
+        recipients.set(a.id, { email: a.email, fullName: a.fullName });
       }
     }
 
@@ -150,7 +150,7 @@ export async function dispatchPasswordResetBurstAlertIfNeeded(targetUserId: stri
     await db
       .insert(notifications)
       .values(
-        Array.from(recipients).map((uid) => ({
+        Array.from(recipients.keys()).map((uid) => ({
           userId: uid,
           title,
           message,
@@ -159,6 +159,50 @@ export async function dispatchPasswordResetBurstAlertIfNeeded(targetUserId: stri
         })),
       )
       .catch(() => null);
+
+    const emailEnabled =
+      (process.env.PASSWORD_RESET_BURST_EMAIL_ENABLED ?? "true").toLowerCase() !== "false";
+    let emailsSent = 0;
+    let emailsFailed = 0;
+    if (emailEnabled) {
+      const editUrl = `${resolveAppBaseUrl()}/users?edit=${encodeURIComponent(target.id)}`;
+      const subject = `NPAMS — Unusual password reset activity for ${target.fullName}`;
+      const windowLabel = `${PASSWORD_RESET_ALERT_WINDOW_MINUTES} minute${
+        PASSWORD_RESET_ALERT_WINDOW_MINUTES === 1 ? "" : "s"
+      }`;
+      for (const recipient of recipients.values()) {
+        const text =
+          `Hello ${recipient.fullName},\n\n` +
+          `NPAMS detected unusual password reset activity on a user account.\n\n` +
+          `User: ${target.fullName} (${target.email})\n` +
+          `Reset emails sent: ${count} in the last ${windowLabel}\n` +
+          `Alert threshold: ${PASSWORD_RESET_ALERT_THRESHOLD}\n\n` +
+          `Open the user profile to review the reset history and take action if needed:\n` +
+          `${editUrl}\n\n` +
+          `— NPAMS`;
+        const html =
+          `<p>Hello ${recipient.fullName},</p>` +
+          `<p>NPAMS detected unusual password reset activity on a user account.</p>` +
+          `<ul>` +
+          `<li><strong>User:</strong> ${target.fullName} (${target.email})</li>` +
+          `<li><strong>Reset emails sent:</strong> ${count} in the last ${windowLabel}</li>` +
+          `<li><strong>Alert threshold:</strong> ${PASSWORD_RESET_ALERT_THRESHOLD}</li>` +
+          `</ul>` +
+          `<p>Open the user profile to review the reset history and take action if needed:</p>` +
+          `<p><a href="${editUrl}">${editUrl}</a></p>` +
+          `<p>— NPAMS</p>`;
+        try {
+          await sendEmail({ to: recipient.email, subject, text, html });
+          emailsSent += 1;
+        } catch (err) {
+          emailsFailed += 1;
+          logger.error(
+            { err, targetUserId: target.id },
+            "[mailer] Failed to send password reset burst alert email",
+          );
+        }
+      }
+    }
 
     await db
       .insert(activityLogs)
@@ -173,6 +217,9 @@ export async function dispatchPasswordResetBurstAlertIfNeeded(targetUserId: stri
           threshold: PASSWORD_RESET_ALERT_THRESHOLD,
           windowMinutes: PASSWORD_RESET_ALERT_WINDOW_MINUTES,
           recipientCount: recipients.size,
+          emailEnabled,
+          emailsSent,
+          emailsFailed,
         },
       })
       .catch(() => null);
