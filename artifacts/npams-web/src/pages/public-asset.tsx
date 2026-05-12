@@ -124,7 +124,7 @@ export default function PublicAsset() {
 
   const StatusIcon = asset ? (STATUS_ICONS[asset.status] ?? FileText) : FileText;
   const statusColor = asset ? (STATUS_COLORS[asset.status] ?? "#94a3b8") : "#94a3b8";
-  const accent = asset?.province?.themeAccentColor ?? "#CE1126";
+  const accent = asset?.province?.themeAccentColor ?? "#0F4C81";
 
   const warrantyOk = asset?.warrantyExpiry ? new Date(asset.warrantyExpiry) > new Date() : null;
 
@@ -133,10 +133,10 @@ export default function PublicAsset() {
       {/* Top banner */}
       <div className="border-b bg-white shadow-sm">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-          <img src="/flags/png_national.svg" alt="PNG" className="w-8 h-8 rounded-full object-cover border" />
+          <img src="/agencies/pngica.png" alt="ICSA" className="w-9 h-9 rounded-sm object-contain bg-white p-0.5 border" />
           <div>
-            <p className="text-xs text-muted-foreground font-medium">NPAMS · Papua New Guinea</p>
-            <p className="text-[10px] text-muted-foreground">National Public Asset Management System</p>
+            <p className="text-xs text-muted-foreground font-medium">ICSA · Papua New Guinea</p>
+            <p className="text-[10px] text-muted-foreground">PNG Immigration &amp; Citizenship Authority</p>
           </div>
           {asset?.province?.flagUrl && (
             <img
@@ -282,7 +282,7 @@ export default function PublicAsset() {
 
         <div className="text-center pt-4 pb-8">
           <p className="text-[10px] text-muted-foreground">
-            This record is publicly accessible via QR code scan. Managed by NPAMS · Papua New Guinea.
+            This record is publicly accessible via QR code scan. Managed by ICSA · Papua New Guinea.
           </p>
         </div>
       </div>

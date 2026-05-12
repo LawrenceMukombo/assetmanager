@@ -256,7 +256,7 @@ export default function Reports() {
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(16);
-      doc.text("NPAMS — National Asset Register", pageWidth / 2, 40, { align: "center" });
+      doc.text("ICSA — Asset Register", pageWidth / 2, 40, { align: "center" });
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       doc.setTextColor(100);
@@ -280,12 +280,12 @@ export default function Reports() {
           formatCurrency(row.purchase_cost),
         ]),
         styles: { fontSize: 7.5, cellPadding: 4 },
-        headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: "bold" },
-        alternateRowStyles: { fillColor: [245, 247, 255] },
+        headStyles: { fillColor: [15, 76, 129], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [240, 246, 252] },
         margin: { left: 30, right: 30 },
       });
 
-      doc.save("NPAMS_Asset_Register.pdf");
+      doc.save("ICSA_Asset_Register.pdf");
       toast({ title: "PDF exported", description: `${items.length} assets` });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Export failed";
@@ -541,7 +541,7 @@ export default function Reports() {
 
           <div className="print-area">
             <div className="hidden print:block mb-6">
-              <h1 className="text-2xl font-bold">NPAMS — Asset Register Report</h1>
+              <h1 className="text-2xl font-bold">ICSA — Asset Register Report</h1>
               <p className="text-sm text-muted-foreground">
                 Generated: {new Date().toLocaleDateString("en-PG", { year: "numeric", month: "long", day: "numeric" })}
                 {user?.full_name ? ` | Prepared by: ${user.full_name}` : ""}

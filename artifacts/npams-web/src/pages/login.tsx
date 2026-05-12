@@ -90,7 +90,7 @@ export default function Login() {
     setIsLoading(true);
     try {
       await login(values);
-      toast({ title: "Login successful", description: "Welcome to NPAMS." });
+      toast({ title: "Login successful", description: "Welcome to ICSA Asset Management." });
     } catch (error: unknown) {
       toast({
         variant: "destructive",
@@ -147,7 +147,7 @@ export default function Login() {
               PNG Immigration &amp; Citizenship Authority
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Asset Management System &middot; Powered by NPAMS
+              Asset Management System
             </p>
             <p className="text-xs text-muted-foreground/70 mt-0.5">
               Independent State of Papua New Guinea
@@ -244,7 +244,7 @@ export default function Login() {
                 </div>
               ) : (
                 <div className="text-sm text-muted-foreground">
-                  Enter the email address associated with your NPAMS account and we&rsquo;ll send you a link to reset
+                  Enter the email address associated with your ICSA account and we&rsquo;ll send you a link to reset
                   your password.
                 </div>
               )}

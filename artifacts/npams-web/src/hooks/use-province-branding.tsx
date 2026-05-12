@@ -33,10 +33,10 @@ function loadFromStorage(): ProvinceBranding {
   return { provinceName: null, flagUrl: null, themeAccentColor: null, flagColors: [] };
 }
 
-const NATIONAL_FLAG = "/flags/png_national.svg";
+const DEFAULT_FAVICON = "/agencies/pngica.png";
 
 function setFavicon(url: string | null) {
-  const href = url && url.trim() ? url : NATIONAL_FLAG;
+  const href = url && url.trim() ? url : DEFAULT_FAVICON;
   const type = href.endsWith(".svg") ? "image/svg+xml" : "image/png";
   let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
   if (!link) {

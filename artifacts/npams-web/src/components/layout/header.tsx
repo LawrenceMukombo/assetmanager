@@ -57,16 +57,16 @@ export function Header() {
   };
 
   const headerTitle = isNational
-    ? "National Public Asset Management System"
+    ? "ICSA — Asset Management System"
     : isAgency
     ? agencyDisplayName
       ? `${agencyDisplayName} — Asset Management System`
-      : "Agency Asset Management System"
+      : "ICSA — Asset Management System"
     : branding.provinceName
     ? `${branding.provinceName} — Asset Management System`
-    : "Provincial Asset Management";
+    : "ICSA — Asset Management System";
 
-  const nationalColors = ["#CE1126", "#000000", "#FCD116"];
+  const nationalColors = ["#0F4C81", "#FCD116", "#CE1126"];
 
   const provinceColors = branding.flagColors?.length
     ? branding.flagColors
@@ -95,9 +95,9 @@ export function Header() {
         <div className="flex items-center gap-3">
           {isNational ? (
             <img
-              src="/flags/png_national.svg"
-              alt="Papua New Guinea National Flag"
-              className="h-6 w-10 object-cover rounded-sm border hidden sm:block"
+              src="/agencies/pngica.png"
+              alt="ICSA — PNG Immigration & Citizenship Authority"
+              className="h-9 w-9 object-contain rounded-sm bg-white p-0.5 ring-1 ring-border hidden sm:block"
             />
           ) : branding.flagUrl ? (
             <img

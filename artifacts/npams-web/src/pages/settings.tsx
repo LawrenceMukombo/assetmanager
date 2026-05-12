@@ -401,12 +401,12 @@ export default function Settings() {
             <Card>
               <CardHeader>
                 <CardTitle>Tenant Configuration</CardTitle>
-                <CardDescription>Global platform settings for NPAMS.</CardDescription>
+                <CardDescription>Global platform settings for ICSA Asset Management.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div>
                   <p className="text-sm font-medium">Platform Name</p>
-                  <p className="text-sm text-muted-foreground">National Public Asset Management System</p>
+                  <p className="text-sm text-muted-foreground">ICSA — Asset Management System</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium">Country</p>

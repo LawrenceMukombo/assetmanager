@@ -107,7 +107,7 @@ export default function ResetPassword() {
             <ShieldCheck className="w-6 h-6" />
           </div>
           <h1 className="text-xl font-semibold tracking-tight">Reset your password</h1>
-          <p className="text-sm text-muted-foreground mt-1">NPAMS account recovery</p>
+          <p className="text-sm text-muted-foreground mt-1">ICSA account recovery</p>
         </div>
 
         <div className="px-8 py-7 space-y-5">

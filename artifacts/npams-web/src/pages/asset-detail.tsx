@@ -775,7 +775,7 @@ export default function AssetDetailPage() {
               >
                 {/* Header */}
                 <div className="text-center border-b pb-2 mb-2">
-                  <p className="text-[10px] font-bold tracking-widest text-gray-500 uppercase">NPAMS · Papua New Guinea</p>
+                  <p className="text-[10px] font-bold tracking-widest text-gray-500 uppercase">ICSA · Papua New Guinea</p>
                 </div>
 
                 {/* QR Code */}
@@ -855,7 +855,7 @@ export default function AssetDetailPage() {
 
                 {/* Footer */}
                 <div className="text-center border-t pt-2">
-                  <p className="text-[9px] text-gray-400 uppercase tracking-wide">National Public Asset Management System</p>
+                  <p className="text-[9px] text-gray-400 uppercase tracking-wide">PNG Immigration &amp; Citizenship Authority — Asset Management</p>
                   <p className="text-[9px] text-gray-400">Scan QR to view full record</p>
                 </div>
               </div>
