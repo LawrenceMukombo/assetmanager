@@ -53,6 +53,14 @@ interface RoleItem {
 
 const NATIONAL_SCOPES = ["national"];
 
+function geoErrorField(message: string): "facility_id" | "district_id" | "province_id" | null {
+  const m = message.toLowerCase();
+  if (m.includes("facility")) return "facility_id";
+  if (m.includes("district")) return "district_id";
+  if (m.includes("province")) return "province_id";
+  return null;
+}
+
 const ROLE_PERMISSIONS: Record<string, { description: string; permissions: string[] }> = {
   "Super Admin": {
     description: "Full platform access — national scope. Manages all provinces, users, roles, and system configuration.",
@@ -135,6 +143,7 @@ const userSchema = z.object({
   role_id: z.string().min(1, "Role is required"),
   province_id: z.string().optional(),
   district_id: z.string().optional(),
+  facility_id: z.string().optional(),
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
@@ -185,18 +194,34 @@ function formatActionType(action: string): string {
     .join(" ");
 }
 
+const PROVINCIAL_LIKE_SCOPES = ["provincial", "district", "facility"] as const;
+
 export default function Users() {
   const { user } = useAuth();
   const isAdmin = ADMIN_ROLES.includes(user?.role as typeof ADMIN_ROLES[number]);
   const { toast } = useToast();
 
+  const adminScope = (user?.scope ?? {}) as {
+    province_id?: string | null;
+    district_id?: string | null;
+    facility_id?: string | null;
+  };
+  const adminProvinceId = adminScope.province_id ?? "";
+  const adminDistrictId = adminScope.district_id ?? "";
+  const adminFacilityId = adminScope.facility_id ?? "";
+  const adminScopeLevel = user?.scope_level ?? "";
+  const adminIsNational = adminScopeLevel === "national";
+
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedProvinceId, setSelectedProvinceId] = useState("");
+  const [selectedDistrictId, setSelectedDistrictId] = useState("");
   const [selectedRoleScope, setSelectedRoleScope] = useState("");
 
   const [editUser, setEditUser] = useState<UserRow | null>(null);
   const [editProvinceId, setEditProvinceId] = useState("");
   const [editDistrictId, setEditDistrictId] = useState("");
+  const [editFacilityId, setEditFacilityId] = useState("");
+  const [editRoleId, setEditRoleId] = useState("");
   const [editRoleScope, setEditRoleScope] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -220,6 +245,7 @@ export default function Users() {
   };
 
   const isNationalAdmin = (user as { scope_level?: string } | null)?.scope_level === "national";
+  const [editGeoError, setEditGeoError] = useState<{ field: "province_id" | "district_id" | "facility_id"; message: string } | null>(null);
 
   const token = localStorage.getItem("npams_token");
 
@@ -233,6 +259,24 @@ export default function Users() {
     query: {
       queryKey: getGetDistrictsByProvinceQueryKey(selectedProvinceId),
       enabled: !!selectedProvinceId,
+    },
+  });
+  const { data: facilitiesData } = useGetFacilitiesByDistrict(selectedDistrictId, {
+    query: {
+      queryKey: getGetFacilitiesByDistrictQueryKey(selectedDistrictId),
+      enabled: !!selectedDistrictId,
+    },
+  });
+  const { data: editDistrictsData } = useGetDistrictsByProvince(editProvinceId, {
+    query: {
+      queryKey: getGetDistrictsByProvinceQueryKey(editProvinceId),
+      enabled: !!editProvinceId,
+    },
+  });
+  const { data: editFacilitiesData } = useGetFacilitiesByDistrict(editDistrictId, {
+    query: {
+      queryKey: getGetFacilitiesByDistrictQueryKey(editDistrictId),
+      enabled: !!editDistrictId,
     },
   });
   const { data: rolesData } = useQuery<RoleItem[]>({
@@ -250,7 +294,12 @@ export default function Users() {
         form.reset();
       },
       onError: (err: Error) => {
-        toast({ variant: "destructive", title: "Failed to create user", description: err.message });
+        const field = geoErrorField(err.message);
+        if (field) {
+          form.setError(field, { type: "server", message: err.message });
+        } else {
+          toast({ variant: "destructive", title: "Failed to create user", description: err.message });
+        }
       },
     },
   });
@@ -282,7 +331,7 @@ export default function Users() {
     defaultValues: {
       full_name: "", email: "", password: "", phone_number: "",
       department: "", job_title: "", gender: "", date_of_birth: "",
-      role_id: "", province_id: "", district_id: "",
+      role_id: "", province_id: "", district_id: "", facility_id: "",
     },
   });
 
@@ -292,19 +341,6 @@ export default function Users() {
       full_name: "", password: "", phone_number: "",
       department: "", job_title: "", gender: "", date_of_birth: "",
       role_id: "", province_id: "", district_id: "", facility_id: "",
-    },
-  });
-
-  const { data: editDistrictsData } = useGetDistrictsByProvince(editProvinceId, {
-    query: {
-      queryKey: getGetDistrictsByProvinceQueryKey(editProvinceId),
-      enabled: !!editProvinceId,
-    },
-  });
-  const { data: editFacilitiesData } = useGetFacilitiesByDistrict(editDistrictId, {
-    query: {
-      queryKey: getGetFacilitiesByDistrictQueryKey(editDistrictId),
-      enabled: !!editDistrictId,
     },
   });
 
@@ -322,6 +358,26 @@ export default function Users() {
   if (!isAdmin) return <Redirect to="/dashboard" />;
 
   const onSubmit = (values: UserFormValues) => {
+    const role = rolesData?.find((r) => r.id === values.role_id);
+    const scope = role?.scopeLevel ?? "";
+    if (scope === "provincial" || scope === "district" || scope === "facility") {
+      if (!values.province_id) {
+        form.setError("province_id", { type: "manual", message: "Province is required for this role." });
+        return;
+      }
+    }
+    if (scope === "district" || scope === "facility") {
+      if (!values.district_id) {
+        form.setError("district_id", { type: "manual", message: "District is required for this role." });
+        return;
+      }
+    }
+    if (scope === "facility") {
+      if (!values.facility_id) {
+        form.setError("facility_id", { type: "manual", message: "Facility is required for this role." });
+        return;
+      }
+    }
     const payload: Record<string, string | undefined> = {
       full_name: values.full_name,
       email: values.email,
@@ -335,6 +391,7 @@ export default function Users() {
     if (values.date_of_birth) payload.date_of_birth = values.date_of_birth;
     if (values.province_id) payload.province_id = values.province_id;
     if (values.district_id) payload.district_id = values.district_id;
+    if (values.facility_id) payload.facility_id = values.facility_id;
     createMutation.mutate({ data: payload as UserFormValues });
   };
 
@@ -343,8 +400,12 @@ export default function Users() {
     setEditError(null);
     const provinceId = u.scope?.provinceId ?? "";
     const districtId = u.scope?.districtId ?? "";
+    const facilityId = u.scope?.facilityId ?? "";
     setEditProvinceId(provinceId);
     setEditDistrictId(districtId);
+    setEditFacilityId(facilityId);
+    setEditRoleId(u.role?.id ?? "");
+    setEditGeoError(null);
     const role = rolesData?.find(r => r.id === u.role?.id);
     setEditRoleScope(role?.scopeLevel ?? u.role?.scopeLevel ?? "");
     editForm.reset({
@@ -358,7 +419,7 @@ export default function Users() {
       role_id: u.role?.id ?? "",
       province_id: provinceId,
       district_id: districtId,
-      facility_id: u.scope?.facilityId ?? "",
+      facility_id: facilityId,
     });
   };
 
@@ -370,6 +431,7 @@ export default function Users() {
 
   const onSubmitEdit = async (values: EditUserFormValues) => {
     if (!editUser?.id) return;
+    setEditGeoError(null);
     setIsSavingEdit(true);
     setEditError(null);
     const isNationalRole = NATIONAL_SCOPES.includes(editRoleScope);
@@ -405,7 +467,12 @@ export default function Users() {
       closeEditUser();
       refetch();
     } else {
-      setEditError(result.message);
+      const field = geoErrorField(result.message ?? "");
+      if (field) {
+        setEditGeoError({ field, message: result.message ?? "Invalid location selection" });
+      } else {
+        setEditError(result.message);
+      }
     }
   };
 
@@ -441,7 +508,20 @@ export default function Users() {
         subtitle="Manage system access, roles, and permissions."
         breadcrumbs={[{ label: "Users" }]}
         actions={
-          <Button onClick={() => { setIsAddOpen(true); setSelectedProvinceId(""); setSelectedRoleScope(""); }}>
+          <Button onClick={() => {
+            setIsAddOpen(true);
+            setSelectedProvinceId(adminIsNational ? "" : adminProvinceId);
+            setSelectedDistrictId(adminIsNational ? "" : adminDistrictId);
+            setSelectedRoleScope("");
+            form.reset({
+              full_name: "", email: "", password: "", phone_number: "",
+              department: "", job_title: "", gender: "", date_of_birth: "",
+              role_id: "",
+              province_id: adminIsNational ? "" : adminProvinceId,
+              district_id: adminIsNational ? "" : adminDistrictId,
+              facility_id: adminIsNational ? "" : adminFacilityId,
+            });
+          }}>
             <Plus className="w-4 h-4" /> Add user
           </Button>
         }
@@ -519,21 +599,9 @@ export default function Users() {
                       />
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => openEditUser(u)}>
-                          <Pencil className="w-3 h-3 mr-1" /> Edit
-                        </Button>
-                        {isNationalAdmin && u.id !== user?.id && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => openDeleteUser(u)}
-                          >
-                            <Trash2 className="w-3 h-3 mr-1" /> Delete
-                          </Button>
-                        )}
-                      </div>
+                      <Button variant="ghost" size="sm" onClick={() => openEditUser(u)}>
+                        <Pencil className="w-3 h-3 mr-1" /> Edit
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -701,7 +769,9 @@ export default function Users() {
                         if (role?.scopeLevel === "national") {
                           form.setValue("province_id", "");
                           form.setValue("district_id", "");
+                          form.setValue("facility_id", "");
                           setSelectedProvinceId("");
+                          setSelectedDistrictId("");
                         }
                       }}
                       value={field.value}
@@ -725,51 +795,109 @@ export default function Users() {
                 <FormField
                   control={form.control}
                   name="province_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Province Scope</FormLabel>
-                      <Select
-                        onValueChange={(val) => {
-                          field.onChange(val);
-                          setSelectedProvinceId(val);
-                          form.setValue("district_id", "");
-                        }}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger><SelectValue placeholder="Select province" /></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {provincesData?.data?.map((p) => (
-                            <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  render={({ field }) => {
+                    const provinceRequired = (PROVINCIAL_LIKE_SCOPES as readonly string[]).includes(selectedRoleScope);
+                    const lockProvince = !adminIsNational && !!adminProvinceId;
+                    return (
+                      <FormItem>
+                        <FormLabel>Province Scope{provinceRequired ? " *" : ""}</FormLabel>
+                        <Select
+                          onValueChange={(val) => {
+                            field.onChange(val);
+                            setSelectedProvinceId(val);
+                            setSelectedDistrictId("");
+                            form.setValue("district_id", "");
+                            form.setValue("facility_id", "");
+                          }}
+                          value={field.value}
+                          disabled={lockProvince}
+                        >
+                          <FormControl>
+                            <SelectTrigger><SelectValue placeholder="Select province" /></SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {provincesData?.data?.map((p) => (
+                              <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {provinceRequired && !field.value && (
+                          <p className="text-xs text-destructive">Province is required for this role.</p>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
                 />
               )}
               {!isNationalRole && selectedProvinceId && (
                 <FormField
                   control={form.control}
                   name="district_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>District Scope (optional)</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger><SelectValue placeholder="Select district (optional)" /></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {districtsData?.data?.map((d) => (
-                            <SelectItem key={d.id} value={d.id!}>{d.districtName}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  render={({ field }) => {
+                    const districtRequired = selectedRoleScope === "district" || selectedRoleScope === "facility";
+                    const lockDistrict = !adminIsNational && !!adminDistrictId;
+                    return (
+                      <FormItem>
+                        <FormLabel>District Scope{districtRequired ? " *" : " (optional)"}</FormLabel>
+                        <Select
+                          onValueChange={(val) => {
+                            field.onChange(val);
+                            setSelectedDistrictId(val);
+                            form.setValue("facility_id", "");
+                          }}
+                          value={field.value}
+                          disabled={lockDistrict}
+                        >
+                          <FormControl>
+                            <SelectTrigger><SelectValue placeholder={districtRequired ? "Select district" : "Select district (optional)"} /></SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {districtsData?.data?.map((d) => (
+                              <SelectItem key={d.id} value={d.id!}>{d.districtName}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {districtRequired && !field.value && (
+                          <p className="text-xs text-destructive">District is required for this role.</p>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
+              )}
+              {!isNationalRole && selectedDistrictId && (
+                <FormField
+                  control={form.control}
+                  name="facility_id"
+                  render={({ field }) => {
+                    const facilityRequired = selectedRoleScope === "facility";
+                    const lockFacility = !adminIsNational && !!adminFacilityId;
+                    return (
+                      <FormItem>
+                        <FormLabel>Facility Scope{facilityRequired ? " *" : " (optional)"}</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                          disabled={lockFacility}
+                        >
+                          <FormControl>
+                            <SelectTrigger><SelectValue placeholder={facilityRequired ? "Select facility" : "Select facility (optional)"} /></SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {facilitiesData?.data?.map((f) => (
+                              <SelectItem key={f.id} value={f.id!}>{f.facilityName}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {facilityRequired && !field.value && (
+                          <p className="text-xs text-destructive">Facility is required for this role.</p>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
                 />
               )}
               </div>
@@ -786,57 +914,52 @@ export default function Users() {
 
       {editUser && (
         <Dialog open={!!editUser} onOpenChange={(open) => { if (!open) closeEditUser(); }}>
-          <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+          <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
             <DialogHeader>
-              <DialogTitle>Edit User — {editUser.fullName}</DialogTitle>
+              <DialogTitle>User Profile — {editUser.fullName}</DialogTitle>
               <DialogDescription>
-                Update profile details, role, scope, or reset password.
+                Update user information, reset password, and manage system access.
               </DialogDescription>
             </DialogHeader>
+
             <Form {...editForm}>
               <form onSubmit={editForm.handleSubmit(onSubmitEdit)} className="flex-1 overflow-y-auto pr-1">
                 <div className="space-y-4 py-2">
-                  <div className="space-y-1">
-                    <Label>Email (login identity)</Label>
-                    <Input value={editUser.email ?? ""} readOnly disabled />
-                    <p className="text-xs text-muted-foreground">Email is the user's login and cannot be changed.</p>
-                  </div>
-
-                  <div className="space-y-2 pt-2">
-                    <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wider flex items-center gap-1">
-                      <ActivityIcon className="w-3 h-3" /> Recent Activity
-                    </p>
-                    <div className="rounded-md border bg-muted/30 max-h-56 overflow-y-auto">
-                      {isActivityLoading ? (
-                        <div className="p-3 text-xs text-muted-foreground">Loading activity…</div>
-                      ) : isActivityError ? (
-                        <div className="p-3 text-xs text-destructive">Couldn't load activity.</div>
-                      ) : !activityData || activityData.length === 0 ? (
-                        <div className="p-3 text-xs text-muted-foreground">No recent activity recorded for this user.</div>
-                      ) : (
-                        <ul className="divide-y">
-                          {activityData.map((entry) => (
-                            <li key={entry.id} className="p-2.5 text-xs">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <div className="font-medium text-foreground">
-                                    {formatActionType(entry.actionType)}
-                                    {entry.entityType && (
-                                      <span className="text-muted-foreground font-normal"> · {entry.entityType}</span>
+                  <div className="flex gap-4 items-start">
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wider mb-2">Recent Activity</p>
+                      <div className="rounded-md border bg-muted/30 max-h-56 overflow-y-auto">
+                        {isActivityLoading ? (
+                          <div className="p-3 text-xs text-muted-foreground">Loading activity…</div>
+                        ) : isActivityError ? (
+                          <div className="p-3 text-xs text-destructive">Couldn't load activity.</div>
+                        ) : !activityData || activityData.length === 0 ? (
+                          <div className="p-3 text-xs text-muted-foreground">No recent activity recorded for this user.</div>
+                        ) : (
+                          <ul className="divide-y">
+                            {activityData.map((entry) => (
+                              <li key={entry.id} className="p-2.5 text-xs">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="font-medium text-foreground">
+                                      {formatActionType(entry.actionType)}
+                                      {entry.entityType && (
+                                        <span className="text-muted-foreground font-normal"> · {entry.entityType}</span>
+                                      )}
+                                    </div>
+                                    {entry.description && (
+                                      <div className="text-muted-foreground truncate">{entry.description}</div>
                                     )}
                                   </div>
-                                  {entry.description && (
-                                    <div className="text-muted-foreground truncate">{entry.description}</div>
-                                  )}
+                                  <div className="text-muted-foreground whitespace-nowrap shrink-0">
+                                    {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}
+                                  </div>
                                 </div>
-                                <div className="text-muted-foreground whitespace-nowrap shrink-0">
-                                  {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}
-                                </div>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -1012,6 +1135,7 @@ export default function Users() {
                               setEditDistrictId("");
                             }}
                             value={field.value}
+                            disabled={!adminIsNational && !!adminProvinceId}
                           >
                             <FormControl>
                               <SelectTrigger><SelectValue placeholder="Select province" /></SelectTrigger>
@@ -1025,6 +1149,9 @@ export default function Users() {
                           {!field.value && (
                             <p className="text-xs text-destructive">Province is required for provincial roles.</p>
                           )}
+                          {editGeoError?.field === "province_id" && (
+                            <p className="text-xs text-destructive">{editGeoError.message}</p>
+                          )}
                           <FormMessage />
                         </FormItem>
                       )}
@@ -1036,7 +1163,7 @@ export default function Users() {
                       name="district_id"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>District Scope (optional)</FormLabel>
+                          <FormLabel>District Scope {(editRoleScope === "district" || editRoleScope === "facility") && <span className="text-destructive">*</span>}</FormLabel>
                           <Select
                             onValueChange={(val) => {
                               field.onChange(val);
@@ -1046,7 +1173,7 @@ export default function Users() {
                             value={field.value}
                           >
                             <FormControl>
-                              <SelectTrigger><SelectValue placeholder="Select district (optional)" /></SelectTrigger>
+                              <SelectTrigger><SelectValue placeholder={editRoleScope === "district" || editRoleScope === "facility" ? "Select district" : "Select district (optional)"} /></SelectTrigger>
                             </FormControl>
                             <SelectContent>
                               {editDistrictsData?.data?.map(d => (
@@ -1054,6 +1181,12 @@ export default function Users() {
                               ))}
                             </SelectContent>
                           </Select>
+                          {(editRoleScope === "district" || editRoleScope === "facility") && !field.value && (
+                            <p className="text-xs text-destructive">District is required for this role.</p>
+                          )}
+                          {editGeoError?.field === "district_id" && (
+                            <p className="text-xs text-destructive">{editGeoError.message}</p>
+                          )}
                           <FormMessage />
                         </FormItem>
                       )}
@@ -1065,10 +1198,13 @@ export default function Users() {
                       name="facility_id"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Facility Scope (optional)</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
+                          <FormLabel>Facility Scope {editRoleScope === "facility" && <span className="text-destructive">*</span>}</FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                          >
                             <FormControl>
-                              <SelectTrigger><SelectValue placeholder="Select facility (optional)" /></SelectTrigger>
+                              <SelectTrigger><SelectValue placeholder={editRoleScope === "facility" ? "Select facility" : "Select facility (optional)"} /></SelectTrigger>
                             </FormControl>
                             <SelectContent>
                               {editFacilitiesData?.data?.map(f => (
@@ -1076,6 +1212,12 @@ export default function Users() {
                               ))}
                             </SelectContent>
                           </Select>
+                          {editRoleScope === "facility" && !field.value && (
+                            <p className="text-xs text-destructive">Facility is required for this role.</p>
+                          )}
+                          {editGeoError?.field === "facility_id" && (
+                            <p className="text-xs text-destructive">{editGeoError.message}</p>
+                          )}
                           <FormMessage />
                         </FormItem>
                       )}
@@ -1103,7 +1245,16 @@ export default function Users() {
                   </div>
                   <div className="flex gap-2">
                     <Button type="button" variant="outline" onClick={closeEditUser}>Cancel</Button>
-                    <Button type="submit" disabled={isSavingEdit}>
+                    <Button
+                      type="submit"
+                      disabled={
+                        isSavingEdit ||
+                        !editForm.getValues("role_id") ||
+                        (!isEditNationalRole && !editForm.getValues("province_id")) ||
+                        ((editRoleScope === "district" || editRoleScope === "facility") && !editForm.getValues("district_id")) ||
+                        (editRoleScope === "facility" && !editForm.getValues("facility_id"))
+                      }
+                    >
                       {isSavingEdit ? "Saving..." : "Save Changes"}
                     </Button>
                   </div>

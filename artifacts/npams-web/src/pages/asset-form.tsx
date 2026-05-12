@@ -111,6 +111,20 @@ export default function AssetForm() {
   const { data: provincesData } = useGetProvinces({ query: { queryKey: getGetProvincesQueryKey() } });
   const { data: usersData } = useGetUsers({ query: { queryKey: getGetUsersQueryKey() } });
 
+  const handleApiError = (err: Error) => {
+    const m = err.message.toLowerCase();
+    let field: "facility_id" | "district_id" | "province_id" | null = null;
+    if (m.includes("facility")) field = "facility_id";
+    else if (m.includes("district")) field = "district_id";
+    else if (m.includes("province") && (m.includes("does not belong") || m.includes("not found"))) field = "province_id";
+    if (field) {
+      form.setError(field, { type: "server", message: err.message });
+      setStep(3);
+    } else {
+      toast({ variant: "destructive", title: "Error", description: err.message });
+    }
+  };
+
   // Mutations
   const createMutation = useCreateAsset({
     mutation: {
@@ -123,7 +137,7 @@ export default function AssetForm() {
           setLocation("/assets");
         }
       },
-      onError: (err: Error) => toast({ variant: "destructive", title: "Error", description: err.message })
+      onError: handleApiError,
     }
   });
 
@@ -133,7 +147,7 @@ export default function AssetForm() {
         toast({ title: "Asset updated successfully" });
         setLocation(`/assets/${id}`);
       },
-      onError: (err: Error) => toast({ variant: "destructive", title: "Error", description: err.message })
+      onError: handleApiError,
     }
   });
 
