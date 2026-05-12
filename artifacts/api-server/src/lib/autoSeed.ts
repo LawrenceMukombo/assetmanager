@@ -61,9 +61,11 @@ export async function autoSeedIfEmpty(): Promise<void> {
   await linkIcaAssetsToFacilities();
   await seedAdditionalIcaAssets();
   await seedAdditionalIcaUsers();
+  await recategorizeIcaAssetsForIcsaCatalog();
   await seedAgencyStock();
   await seedIcaPerLocationStockBalances();
   await seedAssetHistory();
+  await pruneLegacyCategories();
 
   if (usersExist && agenciesExist) {
     logger.info("Auto-seed: idempotent top-up complete");
@@ -114,12 +116,12 @@ async function seedAgencyAssets(): Promise<void> {
     // ICT Equipment
     { assetTag: "PNGICA-ICT-001", assetName: "Border Management System Server",            categoryName: "ICT Equipment", serialNumber: "DELL-PE-R750-001",   brand: "Dell",          model: "PowerEdge R750", purchaseDate: "2022-03-15", purchaseCost: "85000",  supplier: "Datec PNG Ltd",     usefulLifeYears: 7,  status: "active", condition: "good", salvageValue: "8500",  notes: "Primary BMS server — biometric & passport database" },
     { assetTag: "PNGICA-ICT-002", assetName: "Border Management System Server (Failover)", categoryName: "ICT Equipment", serialNumber: "DELL-PE-R750-002",   brand: "Dell",          model: "PowerEdge R750", purchaseDate: "2022-03-15", purchaseCost: "85000",  supplier: "Datec PNG Ltd",     usefulLifeYears: 7,  status: "active", condition: "good", salvageValue: "8500",  notes: "Failover BMS server" },
-    { assetTag: "PNGICA-ICT-003", assetName: "Passport Printing System",                   categoryName: "ICT Equipment", serialNumber: "MORPHO-PP-2021-001", brand: "IDEMIA",        model: "MorphoPass PP",  purchaseDate: "2021-10-10", purchaseCost: "180000", supplier: "IDEMIA Australia",  usefulLifeYears: 10, status: "active", condition: "good", salvageValue: "18000", notes: "ePassport printing & personalisation, Konedobu HQ" },
-    { assetTag: "PNGICA-ICT-004", assetName: "Biometric Capture Station",                  categoryName: "ICT Equipment", serialNumber: "MORPHO-BIO-2022-001",brand: "IDEMIA",        model: "MorphoWave",     purchaseDate: "2022-08-05", purchaseCost: "45000",  supplier: "IDEMIA Australia",  usefulLifeYears: 8,  status: "active", condition: "good", salvageValue: "4500",  notes: "Fingerprint & facial capture — passport applications" },
-    { assetTag: "PNGICA-ICT-005", assetName: "Biometric Capture Station",                  categoryName: "ICT Equipment", serialNumber: "MORPHO-BIO-2022-002",brand: "IDEMIA",        model: "MorphoWave",     purchaseDate: "2022-08-05", purchaseCost: "45000",  supplier: "IDEMIA Australia",  usefulLifeYears: 8,  status: "active", condition: "good", salvageValue: "4500",  notes: "Biometric station — Jacksons Airport" },
-    { assetTag: "PNGICA-ICT-006", assetName: "ePassport Reader",                           categoryName: "ICT Equipment", serialNumber: "3M-CR100-001",       brand: "3M",            model: "CR100M",         purchaseDate: "2020-12-01", purchaseCost: "8500",   supplier: "Datec PNG Ltd",     usefulLifeYears: 7,  status: "active",  condition: "fair", salvageValue: "850", notes: "Passport scanner — Jacksons immigration desk 1" },
-    { assetTag: "PNGICA-ICT-007", assetName: "ePassport Reader",                           categoryName: "ICT Equipment", serialNumber: "3M-CR100-002",       brand: "3M",            model: "CR100M",         purchaseDate: "2020-12-01", purchaseCost: "8500",   supplier: "Datec PNG Ltd",     usefulLifeYears: 7,  status: "active",  condition: "fair", salvageValue: "850", notes: "Passport scanner — Jacksons immigration desk 2" },
-    { assetTag: "PNGICA-ICT-008", assetName: "ePassport Reader",                           categoryName: "ICT Equipment", serialNumber: "3M-CR100-003",       brand: "3M",            model: "CR100M",         purchaseDate: "2020-12-01", purchaseCost: "8500",   supplier: "Datec PNG Ltd",     usefulLifeYears: 7,  status: "missing", condition: "poor", salvageValue: "850", notes: "Passport scanner — reported missing Vanimo, Mar 2024" },
+    { assetTag: "PNGICA-ICT-003", assetName: "Passport Printing System",                   categoryName: "Passport & Document Production", serialNumber: "MORPHO-PP-2021-001", brand: "IDEMIA",        model: "MorphoPass PP",  purchaseDate: "2021-10-10", purchaseCost: "180000", supplier: "IDEMIA Australia",  usefulLifeYears: 10, status: "active", condition: "good", salvageValue: "18000", notes: "ePassport printing & personalisation, Konedobu HQ" },
+    { assetTag: "PNGICA-ICT-004", assetName: "Biometric Capture Station",                  categoryName: "Biometric & Identity Capture",   serialNumber: "MORPHO-BIO-2022-001",brand: "IDEMIA",        model: "MorphoWave",     purchaseDate: "2022-08-05", purchaseCost: "45000",  supplier: "IDEMIA Australia",  usefulLifeYears: 8,  status: "active", condition: "good", salvageValue: "4500",  notes: "Fingerprint & facial capture — passport applications" },
+    { assetTag: "PNGICA-ICT-005", assetName: "Biometric Capture Station",                  categoryName: "Biometric & Identity Capture",   serialNumber: "MORPHO-BIO-2022-002",brand: "IDEMIA",        model: "MorphoWave",     purchaseDate: "2022-08-05", purchaseCost: "45000",  supplier: "IDEMIA Australia",  usefulLifeYears: 8,  status: "active", condition: "good", salvageValue: "4500",  notes: "Biometric station — Jacksons Airport" },
+    { assetTag: "PNGICA-ICT-006", assetName: "ePassport Reader",                           categoryName: "Border Control Equipment",       serialNumber: "3M-CR100-001",       brand: "3M",            model: "CR100M",         purchaseDate: "2020-12-01", purchaseCost: "8500",   supplier: "Datec PNG Ltd",     usefulLifeYears: 7,  status: "active",  condition: "fair", salvageValue: "850", notes: "Passport scanner — Jacksons immigration desk 1" },
+    { assetTag: "PNGICA-ICT-007", assetName: "ePassport Reader",                           categoryName: "Border Control Equipment",       serialNumber: "3M-CR100-002",       brand: "3M",            model: "CR100M",         purchaseDate: "2020-12-01", purchaseCost: "8500",   supplier: "Datec PNG Ltd",     usefulLifeYears: 7,  status: "active",  condition: "fair", salvageValue: "850", notes: "Passport scanner — Jacksons immigration desk 2" },
+    { assetTag: "PNGICA-ICT-008", assetName: "ePassport Reader",                           categoryName: "Border Control Equipment",       serialNumber: "3M-CR100-003",       brand: "3M",            model: "CR100M",         purchaseDate: "2020-12-01", purchaseCost: "8500",   supplier: "Datec PNG Ltd",     usefulLifeYears: 7,  status: "missing", condition: "poor", salvageValue: "850", notes: "Passport scanner — reported missing Vanimo, Mar 2024" },
     { assetTag: "PNGICA-ICT-009", assetName: "Cisco Catalyst 9300 Switch",                 categoryName: "ICT Equipment", serialNumber: "FCW2440L0A1",        brand: "Cisco",         model: "Catalyst 9300",  purchaseDate: "2021-05-20", purchaseCost: "22000",  supplier: "Daltron PNG",       usefulLifeYears: 8,  status: "active", condition: "good", salvageValue: "2200",  notes: "Core network switch, HQ data centre" },
     { assetTag: "PNGICA-ICT-010", assetName: "HP EliteBook 850 G9 Laptop",                 categoryName: "ICT Equipment", serialNumber: "5CG2123ABC",         brand: "HP",            model: "EliteBook 850",  purchaseDate: "2023-04-10", purchaseCost: "5800",   supplier: "Datec PNG Ltd",     usefulLifeYears: 5,  status: "active", condition: "excellent", salvageValue: "580", notes: "Director laptop — Operations Division" },
     { assetTag: "PNGICA-ICT-011", assetName: "HP EliteBook 850 G9 Laptop",                 categoryName: "ICT Equipment", serialNumber: "5CG2123ABD",         brand: "HP",            model: "EliteBook 850",  purchaseDate: "2023-04-10", purchaseCost: "5800",   supplier: "Datec PNG Ltd",     usefulLifeYears: 5,  status: "active", condition: "excellent", salvageValue: "580", notes: "Director laptop — Citizenship Division" },
@@ -477,14 +479,19 @@ async function seedInitialData(): Promise<void> {
   logger.info({ count: allFacilities.length }, "Auto-seed: facilities");
 
   // ── ASSET CATEGORIES ────────────────────────────────────────────────────────
+  // ICSA-focused catalog. Generic public-sector categories such as Medical
+  // Equipment and Heavy Machinery were removed in task #80 and are pruned
+  // by `pruneLegacyCategories()` below for any DB that pre-dates the change.
   const categorySeeds: { name: string; code: string }[] = [
-    { name: "ICT Equipment", code: "ICT" },
-    { name: "Vehicles & Transport", code: "VEH" },
-    { name: "Office Furniture", code: "OFF" },
-    { name: "Medical Equipment", code: "MED" },
-    { name: "Heavy Machinery", code: "MCH" },
-    { name: "Buildings & Infrastructure", code: "BLD" },
-    { name: "Communication Equipment", code: "COM" },
+    { name: "ICT Equipment",                  code: "ICT" },
+    { name: "Vehicles & Transport",           code: "VEH" },
+    { name: "Office Furniture",               code: "OFF" },
+    { name: "Buildings & Infrastructure",     code: "BLD" },
+    { name: "Communication Equipment",        code: "COM" },
+    { name: "Passport & Document Production", code: "PDP" },
+    { name: "Biometric & Identity Capture",   code: "BIO" },
+    { name: "Border Control Equipment",       code: "BRD" },
+    { name: "Uniforms & Accoutrements",       code: "UNI" },
   ];
   const categoryMap: Record<string, string> = {};
   for (const { name, code } of categorySeeds) {
@@ -574,27 +581,27 @@ async function seedInitialData(): Promise<void> {
     { assetTag: "MO-VEH-003", assetName: "Isuzu NPR Truck",                       categoryId: categoryMap["Vehicles & Transport"]!,  status: "under_maintenance" as const, condition: "fair" as const,      provinceId: provinceMap["MO"]!,  districtId: laeDistId, facilityId: lahq,    brand: "Isuzu",       model: "NPR 70",                purchaseCost: "95000",   supplier: "ASCO Motors"             },
     { assetTag: "MO-FUR-001", assetName: "Executive Office Desk Set",             categoryId: categoryMap["Office Furniture"]!,      status: "active" as const,            condition: "good" as const,      provinceId: provinceMap["MO"]!,  districtId: laeDistId, facilityId: lahq,                                            purchaseCost: "2800",    supplier: "Pacific Office Supplies" },
     { assetTag: "MO-FUR-002", assetName: "Conference Table (12-seater)",          categoryId: categoryMap["Office Furniture"]!,      status: "active" as const,            condition: "excellent" as const, provinceId: provinceMap["MO"]!,  districtId: laeDistId, facilityId: lahq,                                            purchaseCost: "4500"                                        },
-    { assetTag: "MO-MED-001", assetName: "Digital X-Ray Machine",                 categoryId: categoryMap["Medical Equipment"]!,     status: "active" as const,            condition: "good" as const,      provinceId: provinceMap["MO"]!,  districtId: laeDistId, facilityId: angau,   brand: "Siemens",     model: "MULTIX Select DR",      purchaseCost: "180000",  supplier: "Pacific Medical Supplies"},
-    { assetTag: "MO-MED-002", assetName: "ECG Monitor",                           categoryId: categoryMap["Medical Equipment"]!,     status: "active" as const,            condition: "excellent" as const, provinceId: provinceMap["MO"]!,  districtId: laeDistId, facilityId: angau,   brand: "Philips",                     purchaseCost: "12000"                                       },
-    { assetTag: "MO-MED-003", assetName: "Portable Ultrasound Machine",           categoryId: categoryMap["Medical Equipment"]!,     status: "missing" as const,           condition: "fair" as const,      provinceId: provinceMap["MO"]!,  districtId: laeDistId, facilityId: angau,                                           purchaseCost: "45000"                                       },
+    { assetTag: "MO-MED-001", assetName: "Passport Document Scanner (Lae)",       categoryId: categoryMap["Passport & Document Production"]!, status: "active" as const,            condition: "good" as const,      provinceId: provinceMap["MO"]!,  districtId: laeDistId, facilityId: angau,   brand: "3M",          model: "AT9000 Mk2",            purchaseCost: "18000",   supplier: "Datec PNG Ltd"           },
+    { assetTag: "MO-MED-002", assetName: "Biometric Fingerprint Reader (Lae)",    categoryId: categoryMap["Biometric & Identity Capture"]!,   status: "active" as const,            condition: "excellent" as const, provinceId: provinceMap["MO"]!,  districtId: laeDistId, facilityId: angau,   brand: "IDEMIA",      model: "MorphoSmart 1300",      purchaseCost: "12000",   supplier: "IDEMIA Australia"        },
+    { assetTag: "MO-MED-003", assetName: "Border Stamp Set — Entry/Exit (Lae)",   categoryId: categoryMap["Border Control Equipment"]!,        status: "missing" as const,           condition: "fair" as const,      provinceId: provinceMap["MO"]!,  districtId: laeDistId, facilityId: angau,                                           purchaseCost: "4500"                                        },
     { assetTag: "WHP-VEH-001",assetName: "Toyota Hilux Double Cab",               categoryId: categoryMap["Vehicles & Transport"]!,  status: "active" as const,            condition: "excellent" as const, provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthq,    brand: "Toyota",      model: "Hilux DC",              purchaseCost: "72000",   supplier: "Ela Motors PNG",         purchaseDate: "2024-03-01" },
     { assetTag: "WHP-VEH-002",assetName: "Ford Ranger 4WD",                       categoryId: categoryMap["Vehicles & Transport"]!,  status: "active" as const,            condition: "good" as const,      provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthq,    brand: "Ford",        model: "Ranger XLT",            purchaseCost: "68000"                                       },
     { assetTag: "WHP-ICT-001",assetName: "HP Desktop Computer Set",               categoryId: categoryMap["ICT Equipment"]!,         status: "active" as const,            condition: "good" as const,      provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthq,    brand: "HP",                          purchaseCost: "2800"                                        },
     { assetTag: "WHP-ICT-002",assetName: "Projector Epson EB-X51",                categoryId: categoryMap["ICT Equipment"]!,         status: "active" as const,            condition: "fair" as const,      provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthq,    brand: "Epson",       model: "EB-X51",                purchaseCost: "1500"                                        },
-    { assetTag: "WHP-MED-001",assetName: "Patient Monitoring System",             categoryId: categoryMap["Medical Equipment"]!,     status: "active" as const,            condition: "good" as const,      provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthHosp,                                         purchaseCost: "28000"                                       },
-    { assetTag: "WHP-MED-002",assetName: "Autoclave Sterilizer",                  categoryId: categoryMap["Medical Equipment"]!,     status: "active" as const,            condition: "excellent" as const, provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthHosp,                                         purchaseCost: "15000"                                       },
+    { assetTag: "WHP-MED-001",assetName: "Passport Document Scanner (Mt Hagen)",  categoryId: categoryMap["Passport & Document Production"]!, status: "active" as const,            condition: "good" as const,      provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthHosp, brand: "3M",          model: "AT9000 Mk2",            purchaseCost: "18000"                                       },
+    { assetTag: "WHP-MED-002",assetName: "Biometric Capture Workstation (Mt Hagen)",categoryId: categoryMap["Biometric & Identity Capture"]!, status: "active" as const,            condition: "excellent" as const, provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthHosp, brand: "IDEMIA",      model: "MorphoWave",            purchaseCost: "45000"                                       },
     { assetTag: "WHP-FUR-001",assetName: "Reception Desk Set",                    categoryId: categoryMap["Office Furniture"]!,      status: "active" as const,            condition: "good" as const,      provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthq,                                            purchaseCost: "3200"                                        },
-    { assetTag: "WHP-HM-001", assetName: "John Deere Tractor",                    categoryId: categoryMap["Heavy Machinery"]!,       status: "active" as const,            condition: "fair" as const,      provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthq,    brand: "John Deere",  model: "3038E",                 purchaseCost: "65000"                                       },
+    { assetTag: "WHP-HM-001", assetName: "Backup Diesel Generator (Mt Hagen)",    categoryId: categoryMap["Buildings & Infrastructure"]!, status: "active" as const,           condition: "fair" as const,      provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthq,    brand: "Caterpillar", model: "DE110E0",               purchaseCost: "65000"                                       },
     { assetTag: "NCD-VEH-001",assetName: "Toyota Prado TX",                       categoryId: categoryMap["Vehicles & Transport"]!,  status: "active" as const,            condition: "excellent" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNEId,   facilityId: waigani, brand: "Toyota",      model: "Land Cruiser Prado TX", purchaseCost: "92000",                                       purchaseDate: "2024-07-15" },
     { assetTag: "NCD-VEH-002",assetName: "Mazda BT-50 Pick-up",                   categoryId: categoryMap["Vehicles & Transport"]!,  status: "active" as const,            condition: "good" as const,      provinceId: provinceMap["NCD"]!, districtId: ncdNEId,   facilityId: waigani, brand: "Mazda",       model: "BT-50",                 purchaseCost: "62000"                                       },
     { assetTag: "NCD-ICT-001",assetName: "Apple MacBook Pro 14-inch",             categoryId: categoryMap["ICT Equipment"]!,         status: "active" as const,            condition: "excellent" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNEId,   facilityId: waigani, brand: "Apple",       model: "MacBook Pro M3",        purchaseCost: "5500"                                        },
     { assetTag: "NCD-ICT-002",assetName: "Samsung 27-inch Monitor x5",            categoryId: categoryMap["ICT Equipment"]!,         status: "active" as const,            condition: "good" as const,      provinceId: provinceMap["NCD"]!, districtId: ncdNEId,   facilityId: waigani, brand: "Samsung",                     purchaseCost: "3500"                                        },
     { assetTag: "NCD-COM-001",assetName: "Motorola Walkie-Talkie Set (10 units)", categoryId: categoryMap["Communication Equipment"]!,status: "active" as const,            condition: "good" as const,      provinceId: provinceMap["NCD"]!, districtId: ncdNEId,   facilityId: waigani, brand: "Motorola",                    purchaseCost: "8500"                                        },
-    { assetTag: "NCD-MED-001",assetName: "MRI Scanner",                           categoryId: categoryMap["Medical Equipment"]!,     status: "active" as const,            condition: "good" as const,      provinceId: provinceMap["NCD"]!, districtId: ncdNEId,   facilityId: pmgh,    brand: "GE Healthcare",              purchaseCost: "2500000",                                     purchaseDate: "2023-01-01" },
-    { assetTag: "NCD-MED-002",assetName: "Ventilator ICU Pro",                    categoryId: categoryMap["Medical Equipment"]!,     status: "active" as const,            condition: "excellent" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNEId,   facilityId: pmgh,    brand: "Medtronic",                  purchaseCost: "95000"                                       },
-    { assetTag: "NCD-MED-003",assetName: "Portable Defibrillator",                categoryId: categoryMap["Medical Equipment"]!,     status: "missing" as const,           condition: "good" as const,      provinceId: provinceMap["NCD"]!, districtId: ncdNEId,   facilityId: pmgh,                                            purchaseCost: "12000"                                       },
+    { assetTag: "NCD-MED-001",assetName: "Passport Personalisation Press (NCD)",  categoryId: categoryMap["Passport & Document Production"]!, status: "active" as const,            condition: "good" as const,      provinceId: provinceMap["NCD"]!, districtId: ncdNEId,   facilityId: pmgh,    brand: "IDEMIA",      model: "MorphoPass PP",         purchaseCost: "180000",                                      purchaseDate: "2023-01-01" },
+    { assetTag: "NCD-MED-002",assetName: "Biometric Capture Workstation (NCD)",   categoryId: categoryMap["Biometric & Identity Capture"]!,   status: "active" as const,            condition: "excellent" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNEId,   facilityId: pmgh,    brand: "IDEMIA",      model: "MorphoWave",            purchaseCost: "45000"                                       },
+    { assetTag: "NCD-MED-003",assetName: "Border Stamp Set — Entry/Exit (NCD)",   categoryId: categoryMap["Border Control Equipment"]!,        status: "missing" as const,           condition: "good" as const,      provinceId: provinceMap["NCD"]!, districtId: ncdNEId,   facilityId: pmgh,                                            purchaseCost: "4500"                                        },
     { assetTag: "NCD-FUR-001",assetName: "Boardroom Furniture Set",               categoryId: categoryMap["Office Furniture"]!,      status: "active" as const,            condition: "excellent" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNEId,   facilityId: waigani,                                         purchaseCost: "18000"                                       },
-    { assetTag: "NCD-HM-001", assetName: "Caterpillar Generator 250KVA",          categoryId: categoryMap["Heavy Machinery"]!,       status: "active" as const,            condition: "good" as const,      provinceId: provinceMap["NCD"]!, districtId: ncdNEId,   facilityId: waigani, brand: "Caterpillar", model: "C9.3B",                 purchaseCost: "285000"                                      },
+    { assetTag: "NCD-HM-001", assetName: "Caterpillar Generator 250KVA",          categoryId: categoryMap["Buildings & Infrastructure"]!, status: "active" as const,           condition: "good" as const,      provinceId: provinceMap["NCD"]!, districtId: ncdNEId,   facilityId: waigani, brand: "Caterpillar", model: "C9.3B",                 purchaseCost: "285000"                                      },
     { assetTag: "NCD-COM-002",assetName: "Satellite Communication System",        categoryId: categoryMap["Communication Equipment"]!,status: "active" as const,            condition: "good" as const,      provinceId: provinceMap["NCD"]!, districtId: ncdNEId,   facilityId: waigani,                                         purchaseCost: "45000"                                       },
     { assetTag: "NCD-BLD-001",assetName: "Waigani Secretariat Building",          categoryId: categoryMap["Buildings & Infrastructure"]!, status: "active" as const,       condition: "good" as const,      provinceId: provinceMap["NCD"]!, districtId: ncdNEId,   facilityId: waigani,                                         purchaseCost: "12000000",                                    purchaseDate: "2010-01-01" },
   ];
@@ -609,7 +616,7 @@ async function seedInitialData(): Promise<void> {
   // ── NOTIFICATIONS ────────────────────────────────────────────────────────────
   await db.insert(notifications).values([
     { userId: morobeAdminId,                    title: "Welcome to NPAMS",                message: "Your Morobe Provincial Asset Registry is now active. Start registering assets today.", readStatus: false },
-    { userId: morobeAdminId,                    title: "Asset MO-MED-003 Reported Missing",message: "Portable Ultrasound Machine assigned to ICSA Lae Regional Office has been flagged as missing. Please investigate.", readStatus: false },
+    { userId: morobeAdminId,                    title: "Asset MO-MED-003 Reported Missing",message: "Border Stamp Set — Entry/Exit assigned to ICSA Lae Regional Office has been flagged as missing. Please investigate.", readStatus: false },
     { userId: userMap["whp.admin@npams.gov.pg"],title: "Welcome to NPAMS",                message: "Your Western Highlands Provincial Asset Registry is now active.", readStatus: false },
     { userId: userMap["ncd.admin@npams.gov.pg"],title: "Welcome to NPAMS",                message: "Your National Capital District Asset Registry is now active.", readStatus: false },
   ]).onConflictDoNothing();
@@ -981,23 +988,23 @@ async function seedAdditionalIcaAssets(): Promise<void> {
     // Mt Hagen Regional Office
     { assetTag: "PNGICA-BLD-006", assetName: "Mt Hagen Regional Office Building", categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-MTH-2017", purchaseDate: "2017-04-18", purchaseCost: "1400000", supplier: "Hebou Constructions Ltd", usefulLifeYears: 40, status: "active", condition: "good", salvageValue: "140000", notes: "Mt Hagen regional immigration office", siteName: "ICSA Mt Hagen Regional Office" },
     { assetTag: "PNGICA-VEH-008", assetName: "Toyota Hilux Dual Cab",             categoryName: "Vehicles & Transport",       serialNumber: "MR0FZ29G801234570", brand: "Toyota", model: "Hilux SR5", purchaseDate: "2022-05-12", purchaseCost: "138000", supplier: "Ela Motors PNG",  usefulLifeYears: 8, status: "active", condition: "good", salvageValue: "13800", notes: "Mt Hagen field operations vehicle", siteName: "ICSA Mt Hagen Regional Office" },
-    { assetTag: "PNGICA-ICT-015", assetName: "ePassport Reader",                  categoryName: "ICT Equipment",              serialNumber: "3M-CR100-MTH-001", brand: "3M",     model: "CR100M",   purchaseDate: "2022-09-01", purchaseCost: "8500",   supplier: "Datec PNG Ltd",   usefulLifeYears: 7, status: "active", condition: "good", salvageValue: "850", notes: "Mt Hagen enrolment desk", siteName: "ICSA Mt Hagen Regional Office" },
+    { assetTag: "PNGICA-ICT-015", assetName: "ePassport Reader",                  categoryName: "Border Control Equipment",   serialNumber: "3M-CR100-MTH-001", brand: "3M",     model: "CR100M",   purchaseDate: "2022-09-01", purchaseCost: "8500",   supplier: "Datec PNG Ltd",   usefulLifeYears: 7, status: "active", condition: "good", salvageValue: "850", notes: "Mt Hagen enrolment desk", siteName: "ICSA Mt Hagen Regional Office" },
     // Kokopo Regional Office
     { assetTag: "PNGICA-BLD-007", assetName: "Kokopo Regional Office",            categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-KOK-2019", purchaseDate: "2019-08-05", purchaseCost: "1300000", supplier: "Curtain Bros",          usefulLifeYears: 40, status: "active", condition: "good", salvageValue: "130000", notes: "Kokopo regional immigration office, ENB", siteName: "ICSA Kokopo Regional Office" },
-    { assetTag: "PNGICA-ICT-016", assetName: "Biometric Capture Station",         categoryName: "ICT Equipment",              serialNumber: "MORPHO-BIO-KOK-001", brand: "IDEMIA", model: "MorphoWave", purchaseDate: "2023-01-20", purchaseCost: "45000", supplier: "IDEMIA Australia", usefulLifeYears: 8, status: "active", condition: "excellent", salvageValue: "4500", notes: "Kokopo passport biometric station", siteName: "ICSA Kokopo Regional Office" },
+    { assetTag: "PNGICA-ICT-016", assetName: "Biometric Capture Station",         categoryName: "Biometric & Identity Capture", serialNumber: "MORPHO-BIO-KOK-001", brand: "IDEMIA", model: "MorphoWave", purchaseDate: "2023-01-20", purchaseCost: "45000", supplier: "IDEMIA Australia", usefulLifeYears: 8, status: "active", condition: "excellent", salvageValue: "4500", notes: "Kokopo passport biometric station", siteName: "ICSA Kokopo Regional Office" },
     { assetTag: "PNGICA-VEH-009", assetName: "Toyota Hilux Single Cab",           categoryName: "Vehicles & Transport",       serialNumber: "MR0CZ29G601234571", brand: "Toyota", model: "Hilux Workmate", purchaseDate: "2021-03-15", purchaseCost: "82000", supplier: "Ela Motors PNG", usefulLifeYears: 8, status: "active", condition: "good", salvageValue: "8200", notes: "Kokopo logistics vehicle", siteName: "ICSA Kokopo Regional Office" },
     // Madang Regional Office
     { assetTag: "PNGICA-BLD-008", assetName: "Madang Regional Office",            categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-MAD-2020", purchaseDate: "2020-02-10", purchaseCost: "1250000", supplier: "Hornibrook NGI",        usefulLifeYears: 40, status: "active", condition: "good", salvageValue: "125000", notes: "Madang regional immigration office", siteName: "ICSA Madang Regional Office" },
-    { assetTag: "PNGICA-ICT-017", assetName: "ePassport Reader",                  categoryName: "ICT Equipment",              serialNumber: "3M-CR100-MAD-001", brand: "3M",     model: "CR100M",   purchaseDate: "2021-12-05", purchaseCost: "8500",  supplier: "Datec PNG Ltd",   usefulLifeYears: 7, status: "active", condition: "fair", salvageValue: "850", notes: "Madang enrolment desk", siteName: "ICSA Madang Regional Office" },
+    { assetTag: "PNGICA-ICT-017", assetName: "ePassport Reader",                  categoryName: "Border Control Equipment",   serialNumber: "3M-CR100-MAD-001", brand: "3M",     model: "CR100M",   purchaseDate: "2021-12-05", purchaseCost: "8500",  supplier: "Datec PNG Ltd",   usefulLifeYears: 7, status: "active", condition: "fair", salvageValue: "850", notes: "Madang enrolment desk", siteName: "ICSA Madang Regional Office" },
     // Kiunga Border Office
     { assetTag: "PNGICA-BLD-009", assetName: "Kiunga Border Office",              categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-KIU-2018", purchaseDate: "2018-11-30", purchaseCost: "950000",  supplier: "Curtain Bros",          usefulLifeYears: 40, status: "active", condition: "fair", salvageValue: "95000",  notes: "Kiunga land border office (PNG–Indonesia)", siteName: "ICSA Kiunga Border Office" },
     { assetTag: "PNGICA-COM-004", assetName: "Iridium Satellite Phone",           categoryName: "Communication Equipment",    serialNumber: "IRID-9555-003",   brand: "Iridium", model: "Extreme 9575", purchaseDate: "2022-04-10", purchaseCost: "3500", supplier: "Daltron PNG",     usefulLifeYears: 7, status: "active", condition: "good", salvageValue: "350", notes: "Kiunga emergency comms", siteName: "ICSA Kiunga Border Office" },
     // Daru Sea Port
     { assetTag: "PNGICA-BLD-010", assetName: "Daru Sea Port Office",              categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-DAR-2019", purchaseDate: "2019-05-22", purchaseCost: "850000",  supplier: "Hornibrook NGI",        usefulLifeYears: 40, status: "active", condition: "good", salvageValue: "85000",  notes: "Daru sea port office", siteName: "ICSA Daru Sea Port Office" },
-    { assetTag: "PNGICA-ICT-018", assetName: "ePassport Reader",                  categoryName: "ICT Equipment",              serialNumber: "3M-CR100-DAR-001", brand: "3M",     model: "CR100M",   purchaseDate: "2022-06-18", purchaseCost: "8500",  supplier: "Datec PNG Ltd",   usefulLifeYears: 7, status: "active", condition: "good", salvageValue: "850", notes: "Daru sea port immigration desk", siteName: "ICSA Daru Sea Port Office" },
+    { assetTag: "PNGICA-ICT-018", assetName: "ePassport Reader",                  categoryName: "Border Control Equipment",   serialNumber: "3M-CR100-DAR-001", brand: "3M",     model: "CR100M",   purchaseDate: "2022-06-18", purchaseCost: "8500",  supplier: "Datec PNG Ltd",   usefulLifeYears: 7, status: "active", condition: "good", salvageValue: "850", notes: "Daru sea port immigration desk", siteName: "ICSA Daru Sea Port Office" },
     // Lae Sea Port
     { assetTag: "PNGICA-BLD-011", assetName: "Lae Sea Port Office",               categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-LAS-2018", purchaseDate: "2018-07-15", purchaseCost: "1100000", supplier: "Hebou Constructions Ltd",usefulLifeYears: 40, status: "active", condition: "good", salvageValue: "110000", notes: "Lae main wharf immigration office", siteName: "ICSA Lae Sea Port Office" },
-    { assetTag: "PNGICA-ICT-019", assetName: "Biometric Capture Station",         categoryName: "ICT Equipment",              serialNumber: "MORPHO-BIO-LAS-001", brand: "IDEMIA", model: "MorphoWave", purchaseDate: "2023-03-08", purchaseCost: "45000", supplier: "IDEMIA Australia", usefulLifeYears: 8, status: "active", condition: "excellent", salvageValue: "4500", notes: "Lae sea port crew documentation station", siteName: "ICSA Lae Sea Port Office" },
+    { assetTag: "PNGICA-ICT-019", assetName: "Biometric Capture Station",         categoryName: "Biometric & Identity Capture", serialNumber: "MORPHO-BIO-LAS-001", brand: "IDEMIA", model: "MorphoWave", purchaseDate: "2023-03-08", purchaseCost: "45000", supplier: "IDEMIA Australia", usefulLifeYears: 8, status: "active", condition: "excellent", salvageValue: "4500", notes: "Lae sea port crew documentation station", siteName: "ICSA Lae Sea Port Office" },
     // Rabaul Sea Port
     { assetTag: "PNGICA-BLD-012", assetName: "Rabaul Sea Port Office",            categoryName: "Buildings & Infrastructure", serialNumber: "PNGICA-RAB-2020", purchaseDate: "2020-10-12", purchaseCost: "950000",  supplier: "Curtain Bros",          usefulLifeYears: 40, status: "active", condition: "good", salvageValue: "95000",  notes: "Rabaul sea port immigration office", siteName: "ICSA Rabaul Sea Port Office" },
     // Alotau Sea Port
@@ -1223,13 +1230,20 @@ function isDemoAssetTag(tag: string | null | undefined): boolean {
 }
 
 const CATEGORY_DEFAULTS: Record<string, { life: number; salvagePct: number }> = {
-  "ICT Equipment":               { life: 5,  salvagePct: 0.10 },
-  "Vehicles & Transport":        { life: 8,  salvagePct: 0.10 },
-  "Office Furniture":            { life: 12, salvagePct: 0.10 },
-  "Medical Equipment":           { life: 10, salvagePct: 0.05 },
-  "Heavy Machinery":             { life: 15, salvagePct: 0.10 },
-  "Buildings & Infrastructure":  { life: 40, salvagePct: 0.10 },
-  "Communication Equipment":     { life: 8,  salvagePct: 0.10 },
+  "ICT Equipment":                  { life: 5,  salvagePct: 0.10 },
+  "Vehicles & Transport":           { life: 8,  salvagePct: 0.10 },
+  "Office Furniture":               { life: 12, salvagePct: 0.10 },
+  "Buildings & Infrastructure":     { life: 40, salvagePct: 0.10 },
+  "Communication Equipment":        { life: 8,  salvagePct: 0.10 },
+  "Passport & Document Production": { life: 8,  salvagePct: 0.10 },
+  "Biometric & Identity Capture":   { life: 7,  salvagePct: 0.10 },
+  "Border Control Equipment":       { life: 6,  salvagePct: 0.05 },
+  "Uniforms & Accoutrements":       { life: 4,  salvagePct: 0.05 },
+  // Legacy — kept here so any pre-task-#80 assets that still carry these
+  // categories receive sensible depreciation defaults until the prune step
+  // re-homes them.
+  "Medical Equipment":              { life: 10, salvagePct: 0.05 },
+  "Heavy Machinery":                { life: 15, salvagePct: 0.10 },
 };
 
 function ymd(d: Date): string {
@@ -1648,6 +1662,125 @@ async function seedPerAssetHistory(): Promise<void> {
     logger.info(
       { transfers: transfersInserted, activity: activityInserted, assets: assetRows.length, skippedNonDemo },
       "Auto-seed: asset history (demo assets only)",
+    );
+  }
+}
+
+/**
+ * Idempotent re-categorisation of pre-existing PNGICA assets that were seeded
+ * before the ICSA-specific catalog (task #80) existed. Maps known asset tags
+ * to their correct ICSA category by name. Safe to run repeatedly: it only
+ * updates rows where the assetTag matches and the new category exists.
+ */
+async function recategorizeIcaAssetsForIcsaCatalog(): Promise<void> {
+  const tagToCategory: Record<string, string> = {
+    "PNGICA-ICT-003": "Passport & Document Production",
+    "PNGICA-ICT-004": "Biometric & Identity Capture",
+    "PNGICA-ICT-005": "Biometric & Identity Capture",
+    "PNGICA-ICT-006": "Border Control Equipment",
+    "PNGICA-ICT-007": "Border Control Equipment",
+    "PNGICA-ICT-008": "Border Control Equipment",
+    "PNGICA-ICT-015": "Border Control Equipment",
+    "PNGICA-ICT-016": "Biometric & Identity Capture",
+    "PNGICA-ICT-017": "Border Control Equipment",
+    "PNGICA-ICT-018": "Border Control Equipment",
+    "PNGICA-ICT-019": "Biometric & Identity Capture",
+  };
+
+  const cats = await db
+    .select({ id: assetCategories.id, name: assetCategories.categoryName })
+    .from(assetCategories);
+  const catId: Record<string, string> = {};
+  for (const c of cats) catId[c.name] = c.id;
+
+  let updated = 0;
+  for (const [tag, catName] of Object.entries(tagToCategory)) {
+    const targetCatId = catId[catName];
+    if (!targetCatId) continue;
+    const r = await db
+      .update(assets)
+      .set({ categoryId: targetCatId })
+      .where(eq(assets.assetTag, tag))
+      .returning({ id: assets.id });
+    updated += r.length;
+  }
+  if (updated > 0) {
+    logger.info({ updated }, "Auto-seed: recategorized ICSA assets to new ICSA-specific catalog");
+  }
+}
+
+/**
+ * Idempotent prune of legacy generic categories ("Medical Equipment",
+ * "Heavy Machinery") that were dropped in task #80 in favour of the
+ * ICSA-specific catalog. Any pre-existing assets in those categories are
+ * re-homed (legacy MO/WHP/NCD demo tags use a curated mapping; anything
+ * else falls back to "Buildings & Infrastructure"), then the empty
+ * categories are deleted. Safe to run on each startup.
+ */
+async function pruneLegacyCategories(): Promise<void> {
+  const LEGACY_CATEGORY_NAMES = ["Medical Equipment", "Heavy Machinery"];
+
+  // Curated re-homing for the legacy demo tags from seedInitialData. Keeps
+  // existing demo dashboards / notifications meaningful.
+  const LEGACY_TAG_REMAP: Record<string, { name: string; category: string }> = {
+    "MO-MED-001":  { name: "Passport Document Scanner (Lae)",            category: "Passport & Document Production" },
+    "MO-MED-002":  { name: "Biometric Fingerprint Reader (Lae)",         category: "Biometric & Identity Capture"   },
+    "MO-MED-003":  { name: "Border Stamp Set — Entry/Exit (Lae)",        category: "Border Control Equipment"       },
+    "WHP-MED-001": { name: "Passport Document Scanner (Mt Hagen)",       category: "Passport & Document Production" },
+    "WHP-MED-002": { name: "Biometric Capture Workstation (Mt Hagen)",   category: "Biometric & Identity Capture"   },
+    "WHP-HM-001":  { name: "Backup Diesel Generator (Mt Hagen)",         category: "Buildings & Infrastructure"     },
+    "NCD-MED-001": { name: "Passport Personalisation Press (NCD)",       category: "Passport & Document Production" },
+    "NCD-MED-002": { name: "Biometric Capture Workstation (NCD)",        category: "Biometric & Identity Capture"   },
+    "NCD-MED-003": { name: "Border Stamp Set — Entry/Exit (NCD)",        category: "Border Control Equipment"       },
+    "NCD-HM-001":  { name: "Caterpillar Generator 250KVA",               category: "Buildings & Infrastructure"     },
+  };
+
+  const cats = await db
+    .select({ id: assetCategories.id, name: assetCategories.categoryName })
+    .from(assetCategories);
+  const catIdByName: Record<string, string> = {};
+  for (const c of cats) catIdByName[c.name] = c.id;
+
+  const legacyIds = cats.filter((c) => LEGACY_CATEGORY_NAMES.includes(c.name)).map((c) => c.id);
+  if (legacyIds.length === 0) return;
+
+  const fallbackId = catIdByName["Buildings & Infrastructure"];
+
+  // Step 1: rename + recategorise the curated legacy demo tags.
+  let demoUpdated = 0;
+  for (const [tag, target] of Object.entries(LEGACY_TAG_REMAP)) {
+    const targetCatId = catIdByName[target.category];
+    if (!targetCatId) continue;
+    const r = await db
+      .update(assets)
+      .set({ assetName: target.name, categoryId: targetCatId })
+      .where(eq(assets.assetTag, tag))
+      .returning({ id: assets.id });
+    demoUpdated += r.length;
+  }
+
+  // Step 2: any remaining assets in legacy categories → fallback (so we can
+  // safely delete the categories).
+  let othersMoved = 0;
+  if (fallbackId) {
+    const r = await db
+      .update(assets)
+      .set({ categoryId: fallbackId })
+      .where(inArray(assets.categoryId, legacyIds))
+      .returning({ id: assets.id });
+    othersMoved = r.length;
+  }
+
+  // Step 3: delete the now-empty legacy categories.
+  const deleted = await db
+    .delete(assetCategories)
+    .where(inArray(assetCategories.id, legacyIds))
+    .returning({ id: assetCategories.id });
+
+  if (demoUpdated > 0 || othersMoved > 0 || deleted.length > 0) {
+    logger.info(
+      { demoUpdated, othersMoved, deletedCategories: deleted.length },
+      "Auto-seed: pruned legacy generic categories (Medical Equipment / Heavy Machinery)",
     );
   }
 }

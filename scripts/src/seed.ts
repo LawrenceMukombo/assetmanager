@@ -176,14 +176,19 @@ async function main() {
   console.log("Facilities seeded:", Object.keys(facilityMap).length);
 
   // --- ASSET CATEGORIES ---
+  // ICSA-focused catalog (task #80). The legacy Medical Equipment and Heavy
+  // Machinery categories were dropped; the auto-seeder prunes them from any
+  // pre-existing dev DB.
   const categorySeeds: { name: string; code: string }[] = [
-    { name: "ICT Equipment", code: "ICT" },
-    { name: "Vehicles & Transport", code: "VEH" },
-    { name: "Office Furniture", code: "OFF" },
-    { name: "Medical Equipment", code: "MED" },
-    { name: "Heavy Machinery", code: "MCH" },
-    { name: "Buildings & Infrastructure", code: "BLD" },
-    { name: "Communication Equipment", code: "COM" },
+    { name: "ICT Equipment",                  code: "ICT" },
+    { name: "Vehicles & Transport",           code: "VEH" },
+    { name: "Office Furniture",               code: "OFF" },
+    { name: "Buildings & Infrastructure",     code: "BLD" },
+    { name: "Communication Equipment",        code: "COM" },
+    { name: "Passport & Document Production", code: "PDP" },
+    { name: "Biometric & Identity Capture",   code: "BIO" },
+    { name: "Border Control Equipment",       code: "BRD" },
+    { name: "Uniforms & Accoutrements",       code: "UNI" },
   ];
 
   const categoryMap: Record<string, string> = {};
@@ -284,9 +289,9 @@ async function main() {
     { assetTag: "MO-VEH-003", assetName: "Isuzu NPR Truck", categoryId: categoryMap["Vehicles & Transport"]!, status: "under_maintenance" as const, condition: "fair" as const, provinceId: provinceMap["MO"]!, districtId: laeDistId, facilityId: lahq, brand: "Isuzu", model: "NPR 70", purchaseCost: "95000", supplier: "ASCO Motors" },
     { assetTag: "MO-FUR-001", assetName: "Executive Office Desk Set", categoryId: categoryMap["Office Furniture"]!, status: "active" as const, condition: "good" as const, provinceId: provinceMap["MO"]!, districtId: laeDistId, facilityId: lahq, purchaseCost: "2800", supplier: "Pacific Office Supplies" },
     { assetTag: "MO-FUR-002", assetName: "Conference Table (12-seater)", categoryId: categoryMap["Office Furniture"]!, status: "active" as const, condition: "excellent" as const, provinceId: provinceMap["MO"]!, districtId: laeDistId, facilityId: lahq, purchaseCost: "4500" },
-    { assetTag: "MO-MED-001", assetName: "Digital X-Ray Machine", categoryId: categoryMap["Medical Equipment"]!, status: "active" as const, condition: "good" as const, provinceId: provinceMap["MO"]!, districtId: laeDistId, facilityId: angau, brand: "Siemens", model: "MULTIX Select DR", purchaseCost: "180000", supplier: "Pacific Medical Supplies" },
-    { assetTag: "MO-MED-002", assetName: "ECG Monitor", categoryId: categoryMap["Medical Equipment"]!, status: "active" as const, condition: "excellent" as const, provinceId: provinceMap["MO"]!, districtId: laeDistId, facilityId: angau, brand: "Philips", purchaseCost: "12000" },
-    { assetTag: "MO-MED-003", assetName: "Portable Ultrasound Machine", categoryId: categoryMap["Medical Equipment"]!, status: "missing" as const, condition: "fair" as const, provinceId: provinceMap["MO"]!, districtId: laeDistId, facilityId: angau, purchaseCost: "45000" },
+    { assetTag: "MO-MED-001", assetName: "Passport Document Scanner (Lae)", categoryId: categoryMap["Passport & Document Production"]!, status: "active" as const, condition: "good" as const, provinceId: provinceMap["MO"]!, districtId: laeDistId, facilityId: angau, brand: "3M", model: "AT9000 Mk2", purchaseCost: "18000", supplier: "Datec PNG Ltd" },
+    { assetTag: "MO-MED-002", assetName: "Biometric Fingerprint Reader (Lae)", categoryId: categoryMap["Biometric & Identity Capture"]!, status: "active" as const, condition: "excellent" as const, provinceId: provinceMap["MO"]!, districtId: laeDistId, facilityId: angau, brand: "IDEMIA", model: "MorphoSmart 1300", purchaseCost: "12000" },
+    { assetTag: "MO-MED-003", assetName: "Border Stamp Set — Entry/Exit (Lae)", categoryId: categoryMap["Border Control Equipment"]!, status: "missing" as const, condition: "fair" as const, provinceId: provinceMap["MO"]!, districtId: laeDistId, facilityId: angau, purchaseCost: "4500" },
     { assetTag: "MO-ICT-003", assetName: "Cisco Network Switch 24-Port", categoryId: categoryMap["ICT Equipment"]!, status: "active" as const, condition: "good" as const, provinceId: provinceMap["MO"]!, districtId: laeDistId, facilityId: lahq, brand: "Cisco", purchaseCost: "3200" },
 
     // WHP assets
@@ -294,10 +299,10 @@ async function main() {
     { assetTag: "WHP-VEH-002", assetName: "Ford Ranger 4WD", categoryId: categoryMap["Vehicles & Transport"]!, status: "active" as const, condition: "good" as const, provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthq, brand: "Ford", model: "Ranger XLT", purchaseCost: "68000" },
     { assetTag: "WHP-ICT-001", assetName: "HP Desktop Computer Set", categoryId: categoryMap["ICT Equipment"]!, status: "active" as const, condition: "good" as const, provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthq, brand: "HP", purchaseCost: "2800" },
     { assetTag: "WHP-ICT-002", assetName: "Projector Epson EB-X51", categoryId: categoryMap["ICT Equipment"]!, status: "active" as const, condition: "fair" as const, provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthq, brand: "Epson", model: "EB-X51", purchaseCost: "1500" },
-    { assetTag: "WHP-MED-001", assetName: "Patient Monitoring System", categoryId: categoryMap["Medical Equipment"]!, status: "active" as const, condition: "good" as const, provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthGenHosp, purchaseCost: "28000" },
-    { assetTag: "WHP-MED-002", assetName: "Autoclave Sterilizer", categoryId: categoryMap["Medical Equipment"]!, status: "active" as const, condition: "excellent" as const, provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthGenHosp, purchaseCost: "15000" },
+    { assetTag: "WHP-MED-001", assetName: "Passport Document Scanner (Mt Hagen)", categoryId: categoryMap["Passport & Document Production"]!, status: "active" as const, condition: "good" as const, provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthGenHosp, brand: "3M", model: "AT9000 Mk2", purchaseCost: "18000" },
+    { assetTag: "WHP-MED-002", assetName: "Biometric Capture Workstation (Mt Hagen)", categoryId: categoryMap["Biometric & Identity Capture"]!, status: "active" as const, condition: "excellent" as const, provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthGenHosp, brand: "IDEMIA", model: "MorphoWave", purchaseCost: "45000" },
     { assetTag: "WHP-FUR-001", assetName: "Reception Desk Set", categoryId: categoryMap["Office Furniture"]!, status: "active" as const, condition: "good" as const, provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthq, purchaseCost: "3200" },
-    { assetTag: "WHP-HM-001", assetName: "John Deere Tractor", categoryId: categoryMap["Heavy Machinery"]!, status: "active" as const, condition: "fair" as const, provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthq, brand: "John Deere", model: "3038E", purchaseCost: "65000" },
+    { assetTag: "WHP-HM-001", assetName: "Backup Diesel Generator (Mt Hagen)", categoryId: categoryMap["Buildings & Infrastructure"]!, status: "active" as const, condition: "fair" as const, provinceId: provinceMap["WHP"]!, districtId: mthDistId, facilityId: mthq, brand: "Caterpillar", model: "DE110E0", purchaseCost: "65000" },
 
     // NCD assets
     { assetTag: "NCD-VEH-001", assetName: "Toyota Prado TX", categoryId: categoryMap["Vehicles & Transport"]!, status: "active" as const, condition: "excellent" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNeDistId, facilityId: waigani, brand: "Toyota", model: "Land Cruiser Prado TX", purchaseCost: "92000", purchaseDate: "2024-07-15" },
@@ -305,11 +310,11 @@ async function main() {
     { assetTag: "NCD-ICT-001", assetName: "Apple MacBook Pro 14-inch", categoryId: categoryMap["ICT Equipment"]!, status: "active" as const, condition: "excellent" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNeDistId, facilityId: waigani, brand: "Apple", model: "MacBook Pro M3", purchaseCost: "5500" },
     { assetTag: "NCD-ICT-002", assetName: "Samsung 27-inch Monitor x5", categoryId: categoryMap["ICT Equipment"]!, status: "active" as const, condition: "good" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNeDistId, facilityId: waigani, brand: "Samsung", purchaseCost: "3500" },
     { assetTag: "NCD-COM-001", assetName: "Motorola Walkie-Talkie Set (10 units)", categoryId: categoryMap["Communication Equipment"]!, status: "active" as const, condition: "good" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNeDistId, facilityId: waigani, brand: "Motorola", purchaseCost: "8500" },
-    { assetTag: "NCD-MED-001", assetName: "MRI Scanner", categoryId: categoryMap["Medical Equipment"]!, status: "active" as const, condition: "good" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNeDistId, facilityId: pmgh, brand: "GE Healthcare", purchaseCost: "2500000", purchaseDate: "2023-01-01" },
-    { assetTag: "NCD-MED-002", assetName: "Ventilator ICU Pro", categoryId: categoryMap["Medical Equipment"]!, status: "active" as const, condition: "excellent" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNeDistId, facilityId: pmgh, brand: "Medtronic", purchaseCost: "95000" },
-    { assetTag: "NCD-MED-003", assetName: "Portable Defibrillator", categoryId: categoryMap["Medical Equipment"]!, status: "missing" as const, condition: "good" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNeDistId, facilityId: pmgh, purchaseCost: "12000" },
+    { assetTag: "NCD-MED-001", assetName: "Passport Personalisation Press (NCD)", categoryId: categoryMap["Passport & Document Production"]!, status: "active" as const, condition: "good" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNeDistId, facilityId: pmgh, brand: "IDEMIA", model: "MorphoPass PP", purchaseCost: "180000", purchaseDate: "2023-01-01" },
+    { assetTag: "NCD-MED-002", assetName: "Biometric Capture Workstation (NCD)", categoryId: categoryMap["Biometric & Identity Capture"]!, status: "active" as const, condition: "excellent" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNeDistId, facilityId: pmgh, brand: "IDEMIA", model: "MorphoWave", purchaseCost: "45000" },
+    { assetTag: "NCD-MED-003", assetName: "Border Stamp Set — Entry/Exit (NCD)", categoryId: categoryMap["Border Control Equipment"]!, status: "missing" as const, condition: "good" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNeDistId, facilityId: pmgh, purchaseCost: "4500" },
     { assetTag: "NCD-FUR-001", assetName: "Boardroom Furniture Set", categoryId: categoryMap["Office Furniture"]!, status: "active" as const, condition: "excellent" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNeDistId, facilityId: waigani, purchaseCost: "18000" },
-    { assetTag: "NCD-HM-001", assetName: "Caterpillar Generator 250KVA", categoryId: categoryMap["Heavy Machinery"]!, status: "active" as const, condition: "good" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNeDistId, facilityId: waigani, brand: "Caterpillar", model: "C9.3B", purchaseCost: "285000" },
+    { assetTag: "NCD-HM-001", assetName: "Caterpillar Generator 250KVA", categoryId: categoryMap["Buildings & Infrastructure"]!, status: "active" as const, condition: "good" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNeDistId, facilityId: waigani, brand: "Caterpillar", model: "C9.3B", purchaseCost: "285000" },
     { assetTag: "NCD-COM-002", assetName: "Satellite Communication System", categoryId: categoryMap["Communication Equipment"]!, status: "active" as const, condition: "good" as const, provinceId: provinceMap["NCD"]!, districtId: ncdNeDistId, facilityId: waigani, purchaseCost: "45000" },
   ];
 
@@ -327,7 +332,7 @@ async function main() {
   const morobeAdminUserId = userMap["morobe.admin@npams.gov.pg"];
   await db.insert(notifications).values([
     { userId: morobeAdminUserId, title: "Welcome to NPAMS", message: "Your Morobe Provincial Asset Registry is now active. Start registering assets today.", readStatus: false },
-    { userId: morobeAdminUserId, title: "Asset MO-MED-003 Reported Missing", message: "Portable Ultrasound Machine assigned to ICSA Lae Regional Office has been flagged as missing. Please investigate.", readStatus: false },
+    { userId: morobeAdminUserId, title: "Asset MO-MED-003 Reported Missing", message: "Border Stamp Set — Entry/Exit assigned to ICSA Lae Regional Office has been flagged as missing. Please investigate.", readStatus: false },
     { userId: userMap["whp.admin@npams.gov.pg"], title: "Welcome to NPAMS", message: "Your Western Highlands Provincial Asset Registry is now active.", readStatus: false },
     { userId: userMap["ncd.admin@npams.gov.pg"], title: "Welcome to NPAMS", message: "Your National Capital District Asset Registry is now active.", readStatus: false },
   ]).onConflictDoNothing();
