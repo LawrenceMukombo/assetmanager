@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ShieldCheck, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, ShieldCheck, CheckCircle2, AlertCircle, Check, X } from "lucide-react";
 
 interface ValidationState {
   loading: boolean;
@@ -31,6 +31,16 @@ export default function ResetPassword() {
   const [confirm, setConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+
+  const rules = [
+    { label: "At least 8 characters", ok: password.length >= 8 },
+    { label: "An uppercase letter (A–Z)", ok: /[A-Z]/.test(password) },
+    { label: "A lowercase letter (a–z)", ok: /[a-z]/.test(password) },
+    { label: "A number (0–9)", ok: /\d/.test(password) },
+    { label: "A symbol (e.g. !@#$%)", ok: /[^A-Za-z0-9]/.test(password) },
+    { label: "Matches the confirmation", ok: password.length > 0 && password === confirm },
+  ];
+  const allRulesPass = rules.every((r) => r.ok);
 
   useEffect(() => {
     if (!token) {
@@ -64,12 +74,8 @@ export default function ResetPassword() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 8) {
-      toast({ variant: "destructive", title: "Password too short", description: "Use at least 8 characters." });
-      return;
-    }
-    if (password !== confirm) {
-      toast({ variant: "destructive", title: "Passwords do not match" });
+    if (!allRulesPass) {
+      toast({ variant: "destructive", title: "Password does not meet the requirements" });
       return;
     }
     setSubmitting(true);
@@ -138,7 +144,7 @@ export default function ResetPassword() {
                   autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 8 characters"
+                  placeholder="Choose a strong password"
                   required
                 />
               </div>
@@ -153,7 +159,26 @@ export default function ResetPassword() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={submitting}>
+              <div className="rounded-md border bg-muted/30 px-3 py-2.5" data-testid="password-rules">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Password must include</div>
+                <ul className="space-y-1">
+                  {rules.map((rule) => (
+                    <li
+                      key={rule.label}
+                      className={`flex items-center gap-2 text-xs ${rule.ok ? "text-green-600 dark:text-green-500" : "text-muted-foreground"}`}
+                      data-testid={`rule-${rule.ok ? "pass" : "fail"}`}
+                    >
+                      {rule.ok ? (
+                        <Check className="w-3.5 h-3.5 shrink-0" aria-label="met" />
+                      ) : (
+                        <X className="w-3.5 h-3.5 shrink-0" aria-label="not met" />
+                      )}
+                      <span>{rule.label}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <Button type="submit" className="w-full" disabled={submitting || !allRulesPass}>
                 {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Updating…</> : "Set new password"}
               </Button>
             </form>
