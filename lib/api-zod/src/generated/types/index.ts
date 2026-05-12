@@ -93,6 +93,7 @@ export * from "./updateStockItemBody";
 export * from "./updateUserBody";
 export * from "./userScope";
 export * from "./userWithRole";
+export * from "./userWithRolePasswordResetAlert";
 export * from "./validatePasswordResetToken200";
 export * from "./validatePasswordResetToken200Data";
 export * from "./validatePasswordResetTokenParams";

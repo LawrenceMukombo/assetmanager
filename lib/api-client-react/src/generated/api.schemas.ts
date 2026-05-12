@@ -117,6 +117,12 @@ export interface RoleInfo {
   scopeLevel?: string;
 }
 
+export type UserWithRolePasswordResetAlert = {
+  count?: number;
+  threshold?: number;
+  windowMinutes?: number;
+} | null;
+
 export interface UserWithRole {
   id?: string;
   fullName?: string;
@@ -128,6 +134,7 @@ export interface UserWithRole {
   role?: RoleInfo;
   scope?: UserScope;
   provinceName?: string | null;
+  passwordResetAlert?: UserWithRolePasswordResetAlert;
 }
 
 export interface CreateUserRequest {

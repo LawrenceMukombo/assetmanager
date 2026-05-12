@@ -245,6 +245,13 @@ export const GetUsersResponse = zod.object({
           })
           .optional(),
         provinceName: zod.string().nullish(),
+        passwordResetAlert: zod
+          .object({
+            count: zod.number().optional(),
+            threshold: zod.number().optional(),
+            windowMinutes: zod.number().optional(),
+          })
+          .nullish(),
       }),
     )
     .optional(),
@@ -297,6 +304,13 @@ export const GetUserByIdResponse = zod.object({
         })
         .optional(),
       provinceName: zod.string().nullish(),
+      passwordResetAlert: zod
+        .object({
+          count: zod.number().optional(),
+          threshold: zod.number().optional(),
+          windowMinutes: zod.number().optional(),
+        })
+        .nullish(),
     })
     .optional(),
 });

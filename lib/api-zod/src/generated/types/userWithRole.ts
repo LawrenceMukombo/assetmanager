@@ -7,6 +7,7 @@
  */
 import type { RoleInfo } from "./roleInfo";
 import type { UserScope } from "./userScope";
+import type { UserWithRolePasswordResetAlert } from "./userWithRolePasswordResetAlert";
 
 export interface UserWithRole {
   id?: string;
@@ -19,4 +20,5 @@ export interface UserWithRole {
   role?: RoleInfo;
   scope?: UserScope;
   provinceName?: string | null;
+  passwordResetAlert?: UserWithRolePasswordResetAlert;
 }

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq, and, or, desc } from "drizzle-orm";
+import { eq, and, or, desc, gte, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import {
   db,
@@ -29,6 +29,34 @@ import { requireAuth, requireUserAdmin } from "../lib/auth";
 import { createPasswordResetToken, sendPasswordResetEmail } from "./auth";
 
 const router = Router();
+
+const PASSWORD_RESET_ALERT_THRESHOLD = Math.max(
+  1,
+  Number.parseInt(process.env.PASSWORD_RESET_ALERT_THRESHOLD ?? "5", 10) || 5,
+);
+const PASSWORD_RESET_ALERT_WINDOW_MINUTES = Math.max(
+  1,
+  Number.parseInt(process.env.PASSWORD_RESET_ALERT_WINDOW_MINUTES ?? "60", 10) || 60,
+);
+
+async function getPasswordResetAlertCounts(): Promise<Map<string, number>> {
+  const since = new Date(Date.now() - PASSWORD_RESET_ALERT_WINDOW_MINUTES * 60 * 1000);
+  const rows = await db
+    .select({
+      userId: passwordResetEmailLog.userId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(passwordResetEmailLog)
+    .where(gte(passwordResetEmailLog.createdAt, since))
+    .groupBy(passwordResetEmailLog.userId);
+  const map = new Map<string, number>();
+  for (const r of rows) {
+    if (r.count > PASSWORD_RESET_ALERT_THRESHOLD) {
+      map.set(r.userId, r.count);
+    }
+  }
+  return map;
+}
 
 async function validateGeoIntegrity(
   provinceId: string | null | undefined,
@@ -112,6 +140,8 @@ router.get("/v1/users", requireAuth, async (req, res) => {
       .leftJoin(provinces, eq(userScope.provinceId, provinces.id))
       .orderBy(users.fullName);
 
+    const alertCounts = await getPasswordResetAlertCounts();
+
     const user = req.user;
     const filtered =
       user.scopeLevel === "national"
@@ -132,7 +162,21 @@ router.get("/v1/users", requireAuth, async (req, res) => {
             return false;
           });
 
-    res.json({ success: true, message: "Users retrieved", data: filtered });
+    const enriched = filtered.map((u) => {
+      const count = u.id ? alertCounts.get(u.id) : undefined;
+      return {
+        ...u,
+        passwordResetAlert: count
+          ? {
+              count,
+              threshold: PASSWORD_RESET_ALERT_THRESHOLD,
+              windowMinutes: PASSWORD_RESET_ALERT_WINDOW_MINUTES,
+            }
+          : null,
+      };
+    });
+
+    res.json({ success: true, message: "Users retrieved", data: enriched });
   } catch (err) {
     req.log.error({ err }, "Get users error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });

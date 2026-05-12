@@ -45,7 +45,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, ShieldCheck, Users as UsersIcon, Trash2, Activity as ActivityIcon, Mail, Loader2, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Pencil, ShieldCheck, Users as UsersIcon, Trash2, Activity as ActivityIcon, Mail, Loader2, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageHeader } from "@/components/layout/page-header";
 import { Label } from "@/components/ui/label";
 
@@ -165,6 +166,7 @@ interface UserRow {
   role?: { id?: string | null; roleName?: string | null; scopeLevel?: string | null } | null;
   scope?: { provinceId?: string | null; districtId?: string | null; facilityId?: string | null } | null;
   provinceName?: string | null;
+  passwordResetAlert?: { count?: number; threshold?: number; windowMinutes?: number } | null;
 }
 
 const editUserSchema = z.object({
@@ -601,7 +603,30 @@ export default function Users() {
                     onClick={() => openEditUser(u)}
                   >
                     <TableCell>
-                      <div className="font-medium">{u.fullName}</div>
+                      <div className="font-medium flex items-center gap-1.5">
+                        {u.fullName}
+                        {u.passwordResetAlert && (
+                          <TooltipProvider delayDuration={150}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+                                  data-testid={`badge-reset-burst-${u.id}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <AlertTriangle className="w-3 h-3" />
+                                  {u.passwordResetAlert.count} resets
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-xs text-xs">
+                                {u.passwordResetAlert.count} password reset emails sent in the last{" "}
+                                {u.passwordResetAlert.windowMinutes} minutes (threshold: {u.passwordResetAlert.threshold}).
+                                Open the user to review the full reset history.
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                      </div>
                       {u.gender && <div className="text-xs text-muted-foreground capitalize">{u.gender}</div>}
                     </TableCell>
                     <TableCell className="text-sm">{u.email}</TableCell>
