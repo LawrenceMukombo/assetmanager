@@ -35,6 +35,27 @@ interface AssetReportRow {
   facility_name?: string;
 }
 
+let crestDataUrlCache: string | null = null;
+async function loadCrestDataUrl(): Promise<string | null> {
+  if (crestDataUrlCache) return crestDataUrlCache;
+  try {
+    const base = import.meta.env.BASE_URL ?? "/";
+    const res = await fetch(`${base}agencies/pngica.png`);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    crestDataUrlCache = dataUrl;
+    return dataUrl;
+  } catch {
+    return null;
+  }
+}
+
 interface SummaryRow {
   province?: string;
   total_assets?: number;
@@ -251,23 +272,16 @@ export default function Reports() {
       const items: AssetReportRow[] = body.data?.items ?? body.data ?? [];
       if (items.length === 0) { toast({ title: "No assets found" }); return; }
 
+      const crestDataUrl = await loadCrestDataUrl();
+
       const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
       const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
 
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(16);
-      doc.text("ICSA — Asset Register", pageWidth / 2, 40, { align: "center" });
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(100);
-      doc.text(
-        `Generated: ${new Date().toLocaleDateString("en-PG", { year: "numeric", month: "long", day: "numeric" })}${user?.full_name ? `   |   Prepared by: ${user.full_name}` : ""}`,
-        pageWidth / 2, 56, { align: "center" }
-      );
-      doc.setTextColor(0);
+      const generatedLine = `Generated: ${new Date().toLocaleDateString("en-PG", { year: "numeric", month: "long", day: "numeric" })}${user?.full_name ? `   |   Prepared by: ${user.full_name}` : ""}`;
 
       autoTable(doc, {
-        startY: 70,
+        startY: 90,
         head: [["Asset Name", "Tag", "Category", "Status", "Condition", "Province", "Facility", "Purchase Cost"]],
         body: items.map(row => [
           row.asset_name ?? "—",
@@ -282,8 +296,49 @@ export default function Reports() {
         styles: { fontSize: 7.5, cellPadding: 4 },
         headStyles: { fillColor: [15, 76, 129], textColor: 255, fontStyle: "bold" },
         alternateRowStyles: { fillColor: [240, 246, 252] },
-        margin: { left: 30, right: 30 },
+        margin: { left: 30, right: 30, top: 90, bottom: 50 },
+        didDrawPage: () => {
+          // Header: crest top-left, title centered
+          if (crestDataUrl) {
+            try { doc.addImage(crestDataUrl, "PNG", 30, 22, 48, 48); } catch { /* ignore */ }
+          }
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(16);
+          doc.setTextColor(15, 76, 129);
+          doc.text("ICSA — Asset Register", pageWidth / 2, 44, { align: "center" });
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          doc.setTextColor(100);
+          doc.text(generatedLine, pageWidth / 2, 62, { align: "center" });
+          doc.setTextColor(0);
+
+          // Footer: agency line + page numbers
+          const pageCount = doc.getNumberOfPages();
+          const pageNum = doc.getCurrentPageInfo().pageNumber;
+          doc.setDrawColor(15, 76, 129);
+          doc.setLineWidth(0.5);
+          doc.line(30, pageHeight - 30, pageWidth - 30, pageHeight - 30);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8);
+          doc.setTextColor(100);
+          doc.text("ICSA — Immigration & Citizenship Service Authority", 30, pageHeight - 18);
+          doc.text(`Page ${pageNum} of ${pageCount}`, pageWidth - 30, pageHeight - 18, { align: "right" });
+          doc.setTextColor(0);
+        },
       });
+
+      // Re-stamp page numbers now that totals are known
+      const totalPages = doc.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFillColor(255, 255, 255);
+        doc.rect(pageWidth - 110, pageHeight - 28, 80, 14, "F");
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(100);
+        doc.text(`Page ${i} of ${totalPages}`, pageWidth - 30, pageHeight - 18, { align: "right" });
+        doc.setTextColor(0);
+      }
 
       doc.save("ICSA_Asset_Register.pdf");
       toast({ title: "PDF exported", description: `${items.length} assets` });
