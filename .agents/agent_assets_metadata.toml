@@ -138,3 +138,15 @@ id = "NnUmuuxpXEOSAX6dcYCKW"
 uri = "file://proposals/assets/screens/21-public-asset.jpg"
 type = "image"
 title = "21 — Public asset verification"
+
+[[outputs]]
+id = "UGsRETMH80wETyC4pn8Qr"
+uri = "file://docs/NPAMS_User_Manual.pdf"
+type = "pdf"
+title = "NPAMS User Manual (PDF)"
+
+[[outputs]]
+id = "HamBMxK7ssKa4p4bPYSSN"
+uri = "file://docs/NPAMS_User_Manual.docx"
+type = "word_document"
+title = "NPAMS User Manual (Word)"
