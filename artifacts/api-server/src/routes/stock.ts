@@ -42,10 +42,17 @@ function scopeFilter(user: NonNullable<Express.Request["user"]>) {
 router.get("/v1/stock", requireAuth, async (req, res) => {
   if (!req.user) return;
   try {
-    const { search, low_stock } = req.query as { search?: string; low_stock?: string };
+    const { search, low_stock, category } = req.query as { search?: string; low_stock?: string; category?: string };
     const conditions = [isNull(stockItems.deletedAt), ...scopeFilter(req.user)];
     if (search) {
       conditions.push(or(ilike(stockItems.itemName, `%${search}%`), ilike(stockItems.itemCode, `%${search}%`))!);
+    }
+    if (category) {
+      if (category === "__uncategorised__") {
+        conditions.push(isNull(stockItems.category));
+      } else {
+        conditions.push(eq(stockItems.category, category));
+      }
     }
     if (low_stock === "true") {
       // An item is "low" if any per-location balance row sits at or below its
@@ -136,6 +143,77 @@ router.get("/v1/stock", requireAuth, async (req, res) => {
     res.json({ success: true, message: "Stock items retrieved", data: enriched });
   } catch (err) {
     req.log.error({ err }, "Get stock items error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
+// Per-category roll-up for the Stock dashboard breakdown cards. Returns one
+// row per category in the caller's scope with item count, total on-hand
+// quantity, total on-hand value (sum of per-location qty * item unit cost),
+// and a 30-day burn rate (sum of `issue` movement quantities in the last 30
+// days; transfers and adjustments are excluded so the figure reflects real
+// consumption). Items without a category are grouped under `__uncategorised__`.
+router.get("/v1/stock/category-summary", requireAuth, async (req, res) => {
+  if (!req.user) return;
+  try {
+    const scope = scopeFilter(req.user);
+    const baseWhere = and(isNull(stockItems.deletedAt), ...scope);
+
+    const valueRows = await db
+      .select({
+        category: sql<string | null>`${stockItems.category}`,
+        itemCount: sql<number>`COUNT(DISTINCT ${stockItems.id})::int`,
+        totalQuantity: sql<number>`COALESCE(SUM(
+          CASE WHEN ${stockBalances.id} IS NOT NULL THEN ${stockBalances.quantity}
+               ELSE ${stockItems.onHandQuantity} END
+        ), 0)::int`,
+        totalValue: sql<string>`COALESCE(SUM(
+          (CASE WHEN ${stockBalances.id} IS NOT NULL THEN ${stockBalances.quantity}
+                ELSE ${stockItems.onHandQuantity} END)
+          * COALESCE(NULLIF(${stockItems.unitCost}, '')::numeric, 0)
+        ), 0)::text`,
+      })
+      .from(stockItems)
+      .leftJoin(stockBalances, eq(stockBalances.stockItemId, stockItems.id))
+      .where(baseWhere)
+      .groupBy(stockItems.category);
+
+    const burnRows = await db
+      .select({
+        category: sql<string | null>`${stockItems.category}`,
+        burnRate30d: sql<number>`COALESCE(SUM(${stockMovements.quantity}), 0)::int`,
+      })
+      .from(stockMovements)
+      .innerJoin(stockItems, eq(stockMovements.stockItemId, stockItems.id))
+      .where(and(
+        baseWhere,
+        eq(stockMovements.movementType, "issue"),
+        sql`${stockMovements.createdAt} >= NOW() - INTERVAL '30 days'`,
+      ))
+      .groupBy(stockItems.category);
+
+    const burnByCat = new Map<string, number>();
+    for (const b of burnRows) {
+      burnByCat.set(b.category ?? "__uncategorised__", b.burnRate30d);
+    }
+
+    const data = valueRows
+      .map((r) => {
+        const key = r.category ?? "__uncategorised__";
+        return {
+          category: r.category,
+          categoryKey: key,
+          itemCount: r.itemCount,
+          totalQuantity: r.totalQuantity,
+          totalValue: r.totalValue,
+          burnRate30d: burnByCat.get(key) ?? 0,
+        };
+      })
+      .sort((a, b) => Number(b.totalValue) - Number(a.totalValue));
+
+    res.json({ success: true, message: "Category summary retrieved", data });
+  } catch (err) {
+    req.log.error({ err }, "Get stock category summary error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });

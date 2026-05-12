@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Boxes, Plus, AlertTriangle, ArrowRight, ShoppingCart } from "lucide-react";
+import { Boxes, Plus, AlertTriangle, ArrowRight, ShoppingCart, TrendingDown, X } from "lucide-react";
 import { ReorderDialog, type ReorderItem } from "@/components/reorder-dialog";
 import { PageHeader } from "@/components/layout/page-header";
 
@@ -72,11 +72,13 @@ export default function StockPage() {
 
   const [search, setSearch] = useState("");
   const [lowOnly, setLowOnly] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
 
   const openDetail = (stockId: string) => {
     const ctx: Record<string, string> = {};
     if (search) ctx.search = search;
     if (lowOnly) ctx.low_stock = "true";
+    if (categoryFilter) ctx.category = categoryFilter;
     const nonce = Math.random().toString(36).slice(2, 10);
     try {
       sessionStorage.setItem(`npams_stock_list_ctx_${nonce}`, JSON.stringify(ctx));
@@ -88,15 +90,38 @@ export default function StockPage() {
   const [reorderItem, setReorderItem] = useState<ReorderItem | null>(null);
 
   const { data: items, isLoading } = useQuery<StockItem[]>({
-    queryKey: ["stock", { search, lowOnly }],
+    queryKey: ["stock", { search, lowOnly, categoryFilter }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
       if (lowOnly) params.set("low_stock", "true");
+      if (categoryFilter) params.set("category", categoryFilter);
       const r = await apiFetchJson<StockItem[]>(`/api/v1/stock?${params.toString()}`);
       return r.data ?? [];
     },
   });
+
+  type CategorySummary = {
+    category: string | null;
+    categoryKey: string;
+    itemCount: number;
+    totalQuantity: number;
+    totalValue: string;
+    burnRate30d: number;
+  };
+  const { data: categorySummary } = useQuery<CategorySummary[]>({
+    queryKey: ["stock-category-summary"],
+    queryFn: async () => {
+      const r = await apiFetchJson<CategorySummary[]>(`/api/v1/stock/category-summary`);
+      return r.data ?? [];
+    },
+  });
+
+  const formatPGK = (v: string | number) => {
+    const n = typeof v === "string" ? Number(v) : v;
+    if (!Number.isFinite(n)) return "PGK 0";
+    return `PGK ${Math.round(n).toLocaleString()}`;
+  };
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -112,6 +137,7 @@ export default function StockPage() {
       setShowCreate(false);
       setForm({ ...EMPTY_FORM });
       qc.invalidateQueries({ queryKey: ["stock"] });
+      qc.invalidateQueries({ queryKey: ["stock-category-summary"] });
     },
     onError: (e) => toast({ variant: "destructive", title: "Create failed", description: (e as Error).message }),
   });
@@ -196,6 +222,46 @@ export default function StockPage() {
         </Card>
       </div>
 
+      {(categorySummary?.length ?? 0) > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Breakdown by category</CardTitle>
+            <CardDescription>
+              On-hand value (qty × unit cost) and 30-day burn rate (units issued out). Click a card to filter the list.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {categorySummary!.map((c) => {
+                const label = c.category ?? "Uncategorised";
+                const active = categoryFilter === c.categoryKey;
+                return (
+                  <button
+                    key={c.categoryKey}
+                    type="button"
+                    onClick={() => setCategoryFilter(active ? null : c.categoryKey)}
+                    className={`text-left rounded-md border p-3 transition hover:bg-muted/50 ${active ? "border-primary ring-1 ring-primary" : "border-border"}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="font-medium text-sm">{label}</div>
+                      <Badge variant="outline" className="shrink-0">{c.itemCount} item{c.itemCount === 1 ? "" : "s"}</Badge>
+                    </div>
+                    <div className="mt-2 text-xl font-semibold">{formatPGK(c.totalValue)}</div>
+                    <div className="text-xs text-muted-foreground">{c.totalQuantity.toLocaleString()} units on hand</div>
+                    <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+                      <TrendingDown className="w-3.5 h-3.5" />
+                      <span>
+                        Burn rate: <span className="font-medium text-foreground">{c.burnRate30d.toLocaleString()}</span> units / 30d
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex items-center gap-3 flex-wrap">
         <Input
           placeholder="Search by name or code…"
@@ -206,6 +272,19 @@ export default function StockPage() {
         <Button variant={lowOnly ? "default" : "outline"} size="sm" onClick={() => setLowOnly((v) => !v)}>
           {lowOnly ? "Showing low stock" : "Show low stock only"}
         </Button>
+        {categoryFilter && (
+          <Badge variant="secondary" className="gap-1">
+            Category: {categoryFilter === "__uncategorised__" ? "Uncategorised" : categoryFilter}
+            <button
+              type="button"
+              onClick={() => setCategoryFilter(null)}
+              className="ml-1 hover:text-foreground"
+              aria-label="Clear category filter"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </Badge>
+        )}
       </div>
 
       <Card>
