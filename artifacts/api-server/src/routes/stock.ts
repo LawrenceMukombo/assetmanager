@@ -156,6 +156,13 @@ router.get("/v1/stock", requireAuth, async (req, res) => {
 router.get("/v1/stock/category-summary", requireAuth, async (req, res) => {
   if (!req.user) return;
   try {
+    // Trend window in weeks. Controls both the sparkline length and the
+    // current/previous burn-rate comparison window. Defaults to 8 weeks; we
+    // accept 4, 8, or 12 today and clamp anything else to the default.
+    const rawWeeks = Number((req.query as { weeks?: string }).weeks);
+    const WEEKS = [4, 8, 12].includes(rawWeeks) ? rawWeeks : 8;
+    const days = WEEKS * 7;
+
     const scope = scopeFilter(req.user);
     const baseWhere = and(isNull(stockItems.deletedAt), ...scope);
 
@@ -178,53 +185,53 @@ router.get("/v1/stock/category-summary", requireAuth, async (req, res) => {
       .where(baseWhere)
       .groupBy(stockItems.category);
 
-    // Current 30-day burn rate (units issued out per category, last 30 days).
+    // Current burn rate (units issued out per category) over the selected
+    // window (`days` = WEEKS * 7).
     const burnRows = await db
       .select({
         category: sql<string | null>`${stockItems.category}`,
-        burnRate30d: sql<number>`COALESCE(SUM(${stockMovements.quantity}), 0)::int`,
+        burnRate: sql<number>`COALESCE(SUM(${stockMovements.quantity}), 0)::int`,
       })
       .from(stockMovements)
       .innerJoin(stockItems, eq(stockMovements.stockItemId, stockItems.id))
       .where(and(
         baseWhere,
         eq(stockMovements.movementType, "issue"),
-        sql`${stockMovements.createdAt} >= NOW() - INTERVAL '30 days'`,
+        sql`${stockMovements.createdAt} >= NOW() - INTERVAL '${sql.raw(String(days))} days'`,
       ))
       .groupBy(stockItems.category);
 
     const burnByCat = new Map<string, number>();
     for (const b of burnRows) {
-      burnByCat.set(b.category ?? "__uncategorised__", b.burnRate30d);
+      burnByCat.set(b.category ?? "__uncategorised__", b.burnRate);
     }
 
-    // Prior 30-day burn rate (30-60 days ago) for the trend delta shown on
-    // each category card (e.g. "+12% vs prev 30d").
+    // Prior-window burn rate (the equally-sized window immediately before the
+    // current one) used to compute the trend delta shown on each card.
     const prevBurnRows = await db
       .select({
         category: sql<string | null>`${stockItems.category}`,
-        burnRate30d: sql<number>`COALESCE(SUM(${stockMovements.quantity}), 0)::int`,
+        burnRate: sql<number>`COALESCE(SUM(${stockMovements.quantity}), 0)::int`,
       })
       .from(stockMovements)
       .innerJoin(stockItems, eq(stockMovements.stockItemId, stockItems.id))
       .where(and(
         baseWhere,
         eq(stockMovements.movementType, "issue"),
-        sql`${stockMovements.createdAt} >= NOW() - INTERVAL '60 days'`,
-        sql`${stockMovements.createdAt} <  NOW() - INTERVAL '30 days'`,
+        sql`${stockMovements.createdAt} >= NOW() - INTERVAL '${sql.raw(String(days * 2))} days'`,
+        sql`${stockMovements.createdAt} <  NOW() - INTERVAL '${sql.raw(String(days))} days'`,
       ))
       .groupBy(stockItems.category);
 
     const prevBurnByCat = new Map<string, number>();
     for (const b of prevBurnRows) {
-      prevBurnByCat.set(b.category ?? "__uncategorised__", b.burnRate30d);
+      prevBurnByCat.set(b.category ?? "__uncategorised__", b.burnRate);
     }
 
-    // Weekly issued-out volume for the last 8 weeks per category, used to
+    // Weekly issued-out volume per category over the selected window, used to
     // render a sparkline on each card. `weekIdx` 0 = the most recent 7-day
-    // window (today back 7 days), 7 = the oldest. We later flip the order so
-    // the array reads oldest -> newest for natural left-to-right plotting.
-    const WEEKS = 8;
+    // window, WEEKS-1 = the oldest. We later flip the order so the array reads
+    // oldest -> newest for natural left-to-right plotting.
     const weeklyRows = await db
       .select({
         category: sql<string | null>`${stockItems.category}`,
@@ -236,7 +243,7 @@ router.get("/v1/stock/category-summary", requireAuth, async (req, res) => {
       .where(and(
         baseWhere,
         eq(stockMovements.movementType, "issue"),
-        sql`${stockMovements.createdAt} >= NOW() - INTERVAL '${sql.raw(String(WEEKS * 7))} days'`,
+        sql`${stockMovements.createdAt} >= NOW() - INTERVAL '${sql.raw(String(days))} days'`,
       ))
       .groupBy(sql`1, 2`);
 

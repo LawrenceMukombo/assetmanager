@@ -112,10 +112,14 @@ export default function StockPage() {
     burnRate30dPrev: number;
     weeklyBurn: number[];
   };
+  // Trend window for the breakdown sparklines / delta. 8 weeks is the
+  // default; users can switch to a tighter (4w) or wider (12w) view via the
+  // toggle above the breakdown cards.
+  const [trendWeeks, setTrendWeeks] = useState<4 | 8 | 12>(8);
   const { data: categorySummary } = useQuery<CategorySummary[]>({
-    queryKey: ["stock-category-summary"],
+    queryKey: ["stock-category-summary", trendWeeks],
     queryFn: async () => {
-      const r = await apiFetchJson<CategorySummary[]>(`/api/v1/stock/category-summary`);
+      const r = await apiFetchJson<CategorySummary[]>(`/api/v1/stock/category-summary?weeks=${trendWeeks}`);
       return r.data ?? [];
     },
   });
@@ -267,23 +271,54 @@ export default function StockPage() {
       {(categorySummary?.length ?? 0) > 0 && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Breakdown by category</CardTitle>
-            <CardDescription>
-              On-hand value (qty × unit cost), 30-day burn rate (units issued out), and an 8-week trend. Click a card to filter the list.
-            </CardDescription>
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <CardTitle className="text-base">Breakdown by category</CardTitle>
+                <CardDescription>
+                  On-hand value (qty × unit cost), {trendWeeks * 7}-day burn rate (units issued out), and a {trendWeeks}-week trend. Click a card to filter the list.
+                </CardDescription>
+              </div>
+              <div
+                role="radiogroup"
+                aria-label="Trend window"
+                className="inline-flex rounded-md border border-border p-0.5 bg-muted/30 shrink-0"
+              >
+                {([4, 8, 12] as const).map((w) => {
+                  const active = trendWeeks === w;
+                  return (
+                    <button
+                      key={w}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setTrendWeeks(w)}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-sm transition ${
+                        active
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {w}w
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {categorySummary!.map((c) => {
                 const label = c.category ?? "Uncategorised";
                 const active = categoryFilter === c.categoryKey;
-                // Delta vs previous 30 days. When the prior window is zero
+                // Delta vs the equally-sized previous window. When the prior window is zero
                 // we cannot express a meaningful percentage, so we fall back
                 // to "new activity" / "no change" labels.
                 const cur = c.burnRate30d;
                 const prev = c.burnRate30dPrev;
                 let deltaLabel: string;
                 let deltaTone: "up" | "down" | "flat";
+                const windowDays = trendWeeks * 7;
+                const prevLabel = `vs prev ${windowDays}d`;
                 if (prev === 0 && cur === 0) {
                   deltaLabel = "no change";
                   deltaTone = "flat";
@@ -294,10 +329,10 @@ export default function StockPage() {
                   const pct = ((cur - prev) / prev) * 100;
                   const rounded = Math.round(pct);
                   if (rounded === 0) {
-                    deltaLabel = "0% vs prev 30d";
+                    deltaLabel = `0% ${prevLabel}`;
                     deltaTone = "flat";
                   } else {
-                    deltaLabel = `${rounded > 0 ? "+" : ""}${rounded}% vs prev 30d`;
+                    deltaLabel = `${rounded > 0 ? "+" : ""}${rounded}% ${prevLabel}`;
                     deltaTone = rounded > 0 ? "up" : "down";
                   }
                 }
@@ -306,7 +341,7 @@ export default function StockPage() {
                   : deltaTone === "down" ? "text-emerald-600"
                   : "text-muted-foreground";
                 const DeltaIcon = deltaTone === "up" ? TrendingUp : deltaTone === "down" ? TrendingDown : Minus;
-                const sparkAria = `Weekly issued-out units, last 8 weeks: ${c.weeklyBurn.join(", ")}`;
+                const sparkAria = `Weekly issued-out units, last ${trendWeeks} weeks: ${c.weeklyBurn.join(", ")}`;
                 return (
                   <button
                     key={c.categoryKey}
@@ -325,7 +360,7 @@ export default function StockPage() {
                         <div className="mt-3 flex items-center justify-between gap-2">
                           <div className="flex flex-col gap-0.5 min-w-0">
                             <div className="text-xs text-muted-foreground">
-                              Burn rate: <span className="font-medium text-foreground">{cur.toLocaleString()}</span> / 30d
+                              Burn rate: <span className="font-medium text-foreground">{cur.toLocaleString()}</span> / {windowDays}d
                             </div>
                             <div className={`text-xs flex items-center gap-1 ${deltaClass}`}>
                               <DeltaIcon className="w-3.5 h-3.5" />
@@ -339,16 +374,16 @@ export default function StockPage() {
                         <div className="text-xs space-y-1">
                           <div>
                             <span className="font-medium">Burn rate</span> = total units issued out of stock in this
-                            category over the last 30 days. Transfers and adjustments are excluded so the figure
-                            reflects real consumption.
+                            category over the last {windowDays} days. Transfers and adjustments are excluded so
+                            the figure reflects real consumption.
                           </div>
                           <div>
                             <span className="font-medium">Sparkline</span> shows weekly issued-out volume for the
-                            last 8 weeks (oldest on the left, most recent on the right).
+                            last {trendWeeks} weeks (oldest on the left, most recent on the right).
                           </div>
                           <div>
-                            <span className="font-medium">Delta</span> compares the last 30 days to the 30 days
-                            before that. Previous 30d total: {prev.toLocaleString()} units.
+                            <span className="font-medium">Delta</span> compares the last {windowDays} days to the {windowDays} days
+                            before that. Previous {windowDays}d total: {prev.toLocaleString()} units.
                           </div>
                         </div>
                       </TooltipContent>
