@@ -36,6 +36,7 @@ import type {
   GetLastPasswordResetEmail200,
   GetNationalDashboard200,
   GetNotifications200,
+  GetPasswordResetEmailHistory200,
   GetProvinceById200,
   GetProvinces200,
   GetProvincialDashboard200,
@@ -764,6 +765,98 @@ export function useGetLastPasswordResetEmail<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetLastPasswordResetEmailQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get the full password reset email history for a user (newest first, capped at 50)
+ */
+export const getGetPasswordResetEmailHistoryUrl = (id: string) => {
+  return `/api/v1/users/${id}/password-reset-emails`;
+};
+
+export const getPasswordResetEmailHistory = async (
+  id: string,
+  options?: RequestInit,
+): Promise<GetPasswordResetEmailHistory200> => {
+  return customFetch<GetPasswordResetEmailHistory200>(
+    getGetPasswordResetEmailHistoryUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetPasswordResetEmailHistoryQueryKey = (id: string) => {
+  return [`/api/v1/users/${id}/password-reset-emails`] as const;
+};
+
+export const getGetPasswordResetEmailHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPasswordResetEmailHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPasswordResetEmailHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetPasswordResetEmailHistoryQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getPasswordResetEmailHistory>>
+  > = ({ signal }) =>
+    getPasswordResetEmailHistory(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPasswordResetEmailHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPasswordResetEmailHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPasswordResetEmailHistory>>
+>;
+export type GetPasswordResetEmailHistoryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the full password reset email history for a user (newest first, capped at 50)
+ */
+
+export function useGetPasswordResetEmailHistory<
+  TData = Awaited<ReturnType<typeof getPasswordResetEmailHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPasswordResetEmailHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPasswordResetEmailHistoryQueryOptions(id, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

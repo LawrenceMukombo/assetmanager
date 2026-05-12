@@ -480,6 +480,26 @@ export type GetLastPasswordResetEmail200 = {
   data?: GetLastPasswordResetEmail200Data;
 };
 
+export type GetPasswordResetEmailHistory200DataItem = {
+  id?: string;
+  recipientEmail?: string;
+  requestedVia?: string;
+  requestedById?: string | null;
+  requestedByName?: string | null;
+  requestedByEmail?: string | null;
+  transport?: string;
+  delivered?: boolean;
+  messageId?: string | null;
+  errorMessage?: string | null;
+  createdAt?: string;
+};
+
+export type GetPasswordResetEmailHistory200 = {
+  success?: boolean;
+  message?: string;
+  data?: GetPasswordResetEmailHistory200DataItem[];
+};
+
 export type SendUserPasswordReset200Data = {
   email?: string;
   delivered?: boolean;

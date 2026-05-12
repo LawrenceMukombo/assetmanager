@@ -48,6 +48,8 @@ export * from "./getLastPasswordResetEmail200";
 export * from "./getLastPasswordResetEmail200Data";
 export * from "./getNationalDashboard200";
 export * from "./getNotifications200";
+export * from "./getPasswordResetEmailHistory200";
+export * from "./getPasswordResetEmailHistory200DataItem";
 export * from "./getProvinceById200";
 export * from "./getProvinces200";
 export * from "./getProvincialDashboard200";

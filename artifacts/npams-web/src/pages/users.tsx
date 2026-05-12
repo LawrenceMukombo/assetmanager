@@ -11,6 +11,8 @@ import {
   getGetFacilitiesByDistrictQueryKey,
   useGetLastPasswordResetEmail,
   getGetLastPasswordResetEmailQueryKey,
+  useGetPasswordResetEmailHistory,
+  getGetPasswordResetEmailHistoryQueryKey,
 } from "@workspace/api-client-react";
 import {
   AlertDialog,
@@ -43,7 +45,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, ShieldCheck, Users as UsersIcon, Trash2, Activity as ActivityIcon, Mail, Loader2 } from "lucide-react";
+import { Plus, Pencil, ShieldCheck, Users as UsersIcon, Trash2, Activity as ActivityIcon, Mail, Loader2, ChevronDown, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Label } from "@/components/ui/label";
 
@@ -245,6 +247,7 @@ export default function Users() {
       toast({ variant: "destructive", title: "Could not send reset link", description: result.message });
     }
     refetchLastResetEmail();
+    if (showResetHistory) refetchResetHistory();
   };
 
   const isNationalAdmin = (user as { scope_level?: string } | null)?.scope_level === "national";
@@ -370,6 +373,21 @@ export default function Users() {
   });
   const lastResetEmail = lastResetEmailResp?.data ?? null;
 
+  const [showResetHistory, setShowResetHistory] = useState(false);
+  const {
+    data: resetHistoryResp,
+    refetch: refetchResetHistory,
+    isLoading: isResetHistoryLoading,
+    isError: isResetHistoryError,
+    error: resetHistoryError,
+  } = useGetPasswordResetEmailHistory(editUserId, {
+    query: {
+      queryKey: getGetPasswordResetEmailHistoryQueryKey(editUserId),
+      enabled: !!editUserId && showResetHistory,
+    },
+  });
+  const resetHistory = resetHistoryResp?.data ?? [];
+
   if (!isAdmin) return <Redirect to="/dashboard" />;
 
   const onSubmit = (values: UserFormValues) => {
@@ -413,6 +431,7 @@ export default function Users() {
   const openEditUser = (u: UserRow) => {
     setEditUser(u);
     setEditError(null);
+    setShowResetHistory(false);
     const provinceId = u.scope?.provinceId ?? "";
     const districtId = u.scope?.districtId ?? "";
     const facilityId = u.scope?.facilityId ?? "";
@@ -441,6 +460,7 @@ export default function Users() {
   const closeEditUser = () => {
     setEditUser(null);
     setEditError(null);
+    setShowResetHistory(false);
     editForm.reset();
   };
 
@@ -1067,6 +1087,88 @@ export default function Users() {
                                 )}
                               </div>
                             )}
+                            <div className="mt-2 pt-2 border-t">
+                              <button
+                                type="button"
+                                onClick={() => setShowResetHistory((s) => !s)}
+                                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                              >
+                                {showResetHistory ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                Reset email history
+                              </button>
+                              {showResetHistory && (
+                                <div className="mt-2 space-y-2">
+                                  {isResetHistoryLoading ? (
+                                    <div className="text-xs text-muted-foreground">Loading history…</div>
+                                  ) : isResetHistoryError ? (
+                                    <div className="flex items-center gap-2 text-xs text-destructive">
+                                      <span>
+                                        Could not load history{resetHistoryError instanceof Error && resetHistoryError.message
+                                          ? `: ${resetHistoryError.message}`
+                                          : "."}
+                                      </span>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-6 px-2 text-[11px]"
+                                        onClick={() => refetchResetHistory()}
+                                      >
+                                        Retry
+                                      </Button>
+                                    </div>
+                                  ) : resetHistory.length === 0 ? (
+                                    <div className="text-xs text-muted-foreground">No reset emails on record.</div>
+                                  ) : (
+                                    <ul className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                                      {resetHistory.map((entry) => (
+                                        <li key={entry.id} className="rounded border bg-background px-2 py-1.5 text-xs">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-medium">
+                                              {new Date(entry.createdAt!).toLocaleString()}
+                                            </span>
+                                            <span className="text-muted-foreground">
+                                              ({formatDistanceToNow(new Date(entry.createdAt!), { addSuffix: true })})
+                                            </span>
+                                            {entry.delivered ? (
+                                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                                Delivered via {entry.transport}
+                                              </Badge>
+                                            ) : (
+                                              <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                                                Not delivered ({entry.transport})
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <div className="text-muted-foreground">
+                                            To {entry.recipientEmail}
+                                            {" · triggered "}
+                                            {entry.requestedVia === "self"
+                                              ? "by user (forgot password)"
+                                              : entry.requestedByName
+                                                ? `by ${entry.requestedByName}`
+                                                : "by an admin"}
+                                          </div>
+                                          {entry.messageId && (
+                                            <div className="text-muted-foreground truncate">
+                                              SMTP message ID: <span className="font-mono">{entry.messageId}</span>
+                                            </div>
+                                          )}
+                                          {!entry.delivered && entry.errorMessage && (
+                                            <div className="text-destructive">Error: {entry.errorMessage}</div>
+                                          )}
+                                        </li>
+                                      ))}
+                                      {resetHistory.length >= 50 && (
+                                        <li className="text-[11px] text-muted-foreground italic">
+                                          Showing the most recent 50 entries.
+                                        </li>
+                                      )}
+                                    </ul>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
                           <FormMessage />
                         </FormItem>
