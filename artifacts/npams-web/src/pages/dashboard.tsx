@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import { getCategoryMeta, getCategoryColor } from "@/lib/category";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DashboardMap from "@/components/dashboard/dashboard-map";
+import { StockCategoryTrends } from "@/components/dashboard/stock-category-trends";
 import { useAuth } from "@/hooks/use-auth";
 import { useProvinceBranding } from "@/hooks/use-province-branding";
 import { useQuery } from "@tanstack/react-query";
@@ -803,6 +804,11 @@ function NationalDashboard() {
         }}
       />
 
+      {/* Stock Category Trends — surfaces the same 8-week burn-rate signal
+          that the Stock page shows so directors landing on the dashboard
+          first can spot rising/falling consumption without drilling in. */}
+      <StockCategoryTrends />
+
       {/* Pivot + Charts Row */}
       <div className="flex items-center justify-between">
         <PivotControl value={pivot} onChange={setPivot} includeDistrict={false} />
@@ -1302,6 +1308,10 @@ function ProvincialDashboard() {
           onClick={d?.has_filters ? () => openDetail("Filtered Assets", drawerBaseParams, "Assets matching active filters") : undefined}
           accent={d?.has_filters ? "hsl(var(--primary))" : undefined} />
       </div>
+
+      {/* Stock Category Trends — same widget as the National dashboard,
+          scoped automatically by the API to the user's province/agency. */}
+      <StockCategoryTrends />
 
       {/* Pivot + Charts */}
       <div className="flex items-center justify-between">

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_ROLES } from "@/App";
@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Boxes, Plus, AlertTriangle, ArrowRight, ShoppingCart, TrendingDown, TrendingUp, Minus, X } from "lucide-react";
 import { ReorderDialog, type ReorderItem } from "@/components/reorder-dialog";
 import { PageHeader } from "@/components/layout/page-header";
+import { Sparkline } from "@/components/sparkline";
 
 type StockBalanceSummary = {
   facilityId: string | null;
@@ -71,9 +72,26 @@ export default function StockPage() {
 
   const isAdmin = user?.role ? ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]) : false;
 
+  const queryString = useSearch();
+  const initialCategory = useMemo(() => {
+    const p = new URLSearchParams(queryString);
+    return p.get("category");
+  }, [queryString]);
+
   const [search, setSearch] = useState("");
   const [lowOnly, setLowOnly] = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(initialCategory);
+
+  // Pick up cross-page navigation from the dashboard's stock trend cards
+  // (or any other entry point) when the `category` query string changes
+  // after mount. We only sync from URL → state, never the reverse, so the
+  // existing in-page filter UI remains the source of truth once loaded.
+  useEffect(() => {
+    if (initialCategory && initialCategory !== categoryFilter) {
+      setCategoryFilter(initialCategory);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCategory]);
 
   const openDetail = (stockId: string) => {
     const ctx: Record<string, string> = {};
@@ -123,45 +141,6 @@ export default function StockPage() {
       return r.data ?? [];
     },
   });
-
-  // Inline SVG sparkline of weekly issued-out volume. Renders a thin polyline
-  // with a faint baseline so a flat-zero series still has something to show.
-  // `points` reads oldest -> newest, left to right.
-  const Sparkline = ({ points, ariaLabel }: { points: number[]; ariaLabel: string }) => {
-    const w = 88;
-    const h = 24;
-    const n = points.length;
-    const max = Math.max(1, ...points);
-    const stepX = n > 1 ? w / (n - 1) : w;
-    const coords = points.map((v, i) => {
-      const x = i * stepX;
-      const y = h - (v / max) * (h - 2) - 1;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    });
-    const allZero = points.every((v) => v === 0);
-    return (
-      <svg
-        width={w}
-        height={h}
-        viewBox={`0 0 ${w} ${h}`}
-        role="img"
-        aria-label={ariaLabel}
-        className="overflow-visible"
-      >
-        <line x1={0} y1={h - 1} x2={w} y2={h - 1} className="stroke-border" strokeWidth={1} />
-        {!allZero && (
-          <polyline
-            points={coords.join(" ")}
-            fill="none"
-            className="stroke-primary"
-            strokeWidth={1.5}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-        )}
-      </svg>
-    );
-  };
 
   const formatPGK = (v: string | number) => {
     const n = typeof v === "string" ? Number(v) : v;
