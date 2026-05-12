@@ -86,7 +86,7 @@ export function Sidebar() {
             />
           ) : (
             <img
-              src="/agencies/pngica.png"
+              src="/agencies/pngica.svg"
               alt="ICSA — PNG Immigration & Citizenship Authority"
               className="w-10 h-10 object-contain rounded-sm bg-white p-0.5 ring-1 ring-border"
             />

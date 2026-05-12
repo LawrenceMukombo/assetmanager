@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" role="img" aria-label="ICSA — PNG Immigration &amp; Citizenship Authority">
+  <defs>
+    <path id="icsa-top-arc" d="M 95 300 A 205 205 0 0 1 505 300" fill="none"/>
+    <path id="icsa-bottom-arc" d="M 110 300 A 190 190 0 0 0 490 300" fill="none"/>
+  </defs>
+
+  <rect width="600" height="600" rx="60" fill="#0B0B0B"/>
+
+  <circle cx="300" cy="300" r="270" fill="#0B0B0B" stroke="#FFD400" stroke-width="6"/>
+  <circle cx="300" cy="300" r="225" fill="#0B0B0B" stroke="#C8102E" stroke-width="4"/>
+  <circle cx="300" cy="300" r="170" fill="#C8102E"/>
+
+  <text font-family="'Inter','Helvetica Neue',Arial,sans-serif" font-weight="800" fill="#FFFFFF"
+        font-size="34" letter-spacing="4">
+    <textPath href="#icsa-top-arc" startOffset="50%" text-anchor="middle">
+      IMMIGRATION &amp; CITIZENSHIP
+    </textPath>
+  </text>
+  <text font-family="'Inter','Helvetica Neue',Arial,sans-serif" font-weight="800" fill="#FFFFFF"
+        font-size="34" letter-spacing="6">
+    <textPath href="#icsa-bottom-arc" startOffset="50%" text-anchor="middle">
+      AUTHORITY
+    </textPath>
+  </text>
+
+  <g transform="translate(300 305)" fill="#FFFFFF">
+    <path d="M -110 5 L -70 -2 L -40 -8 L -15 -22 L 0 -32 L 15 -22 L 40 -8 L 70 -2 L 110 5
+             L 80 14 L 50 18 L 25 22 L 0 24 L -25 22 L -50 18 L -80 14 Z"/>
+    <ellipse cx="0" cy="-30" rx="14" ry="22"/>
+    <circle cx="-4" cy="-36" r="2.4" fill="#0B0B0B"/>
+    <path d="M 8 -28 L 22 -32 L 12 -24 Z"/>
+
+    <path d="M -2 -8 Q -34 -78 -22 -120 Q -10 -90 -4 -56 Z"/>
+    <path d="M 2 -8 Q 34 -78 22 -120 Q 10 -90 4 -56 Z"/>
+    <path d="M -10 -4 Q -56 -90 -54 -132 Q -32 -98 -16 -50 Z"/>
+    <path d="M 10 -4 Q 56 -90 54 -132 Q 32 -98 16 -50 Z"/>
+
+    <path d="M -8 22 Q -40 70 -70 100 Q -34 80 -10 50 Z"/>
+    <path d="M 8 22 Q 40 70 70 100 Q 34 80 10 50 Z"/>
+    <path d="M -4 24 Q -10 80 -34 130 Q -16 90 -2 60 Z"/>
+    <path d="M 4 24 Q 10 80 34 130 Q 16 90 2 60 Z"/>
+  </g>
+
+  <g stroke="#FFD400" stroke-width="6" stroke-linecap="round">
+    <line x1="80" y1="335" x2="520" y2="335"/>
+  </g>
+  <polygon points="520,335 545,322 555,335 545,348" fill="#FFD400"/>
+  <polygon points="80,335 60,326 52,335 60,344" fill="#FFD400"/>
+  <g fill="#FFD400">
+    <polygon points="492,322 508,316 508,354 492,348"/>
+    <polygon points="478,326 488,322 488,348 478,344"/>
+  </g>
+</svg>

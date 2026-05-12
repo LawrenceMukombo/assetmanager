@@ -95,7 +95,7 @@ export function Header() {
         <div className="flex items-center gap-3">
           {isNational ? (
             <img
-              src="/agencies/pngica.png"
+              src="/agencies/pngica.svg"
               alt="ICSA — PNG Immigration & Citizenship Authority"
               className="h-9 w-9 object-contain rounded-sm bg-white p-0.5 ring-1 ring-border hidden sm:block"
             />

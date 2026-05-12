@@ -40,14 +40,27 @@ async function loadCrestDataUrl(): Promise<string | null> {
   if (crestDataUrlCache) return crestDataUrlCache;
   try {
     const base = import.meta.env.BASE_URL ?? "/";
-    const res = await fetch(`${base}agencies/pngica.png`);
+    const res = await fetch(`${base}agencies/pngica.svg`);
     if (!res.ok) return null;
-    const blob = await res.blob();
+    const svgText = await res.text();
+    const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`;
     const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        const size = 256;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("no 2d context"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, size, size);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = reject;
+      img.src = svgUrl;
     });
     crestDataUrlCache = dataUrl;
     return dataUrl;

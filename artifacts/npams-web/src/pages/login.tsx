@@ -136,7 +136,7 @@ export default function Login() {
                 </div>
               ) : (
                 <img
-                  src="/agencies/pngica.png"
+                  src="/agencies/pngica.svg"
                   alt="PNG Immigration & Citizenship Authority"
                   className="w-full h-full object-contain"
                   onError={() => setLogoError(true)}

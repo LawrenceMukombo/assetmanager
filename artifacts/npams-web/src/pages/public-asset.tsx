@@ -133,7 +133,7 @@ export default function PublicAsset() {
       {/* Top banner */}
       <div className="border-b bg-white shadow-sm">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-          <img src="/agencies/pngica.png" alt="ICSA" className="w-9 h-9 rounded-sm object-contain bg-white p-0.5 border" />
+          <img src="/agencies/pngica.svg" alt="ICSA" className="w-9 h-9 rounded-sm object-contain bg-white p-0.5 border" />
           <div>
             <p className="text-xs text-muted-foreground font-medium">ICSA · Papua New Guinea</p>
             <p className="text-[10px] text-muted-foreground">PNG Immigration &amp; Citizenship Authority</p>
