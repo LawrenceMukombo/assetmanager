@@ -1,7 +1,18 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runWarrantyCheck } from "./routes/assets";
+import { runPasswordResetTokenCleanup } from "./routes/auth";
 import { autoSeedIfEmpty } from "./lib/autoSeed";
+
+const PASSWORD_RESET_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
+
+function cleanupPasswordResetTokens() {
+  runPasswordResetTokenCleanup()
+    .then((count) => {
+      if (count > 0) logger.info({ count }, "Password reset token cleanup: rows removed");
+    })
+    .catch((err) => logger.error({ err }, "Password reset token cleanup failed"));
+}
 
 const rawPort = process.env["PORT"];
 
@@ -33,4 +44,7 @@ app.listen(port, (err) => {
       if (count > 0) logger.info({ count }, "Warranty check: notifications created");
     })
     .catch((err) => logger.error({ err }, "Warranty check failed"));
+
+  cleanupPasswordResetTokens();
+  setInterval(cleanupPasswordResetTokens, PASSWORD_RESET_CLEANUP_INTERVAL_MS);
 });

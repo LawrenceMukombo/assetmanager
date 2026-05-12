@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
-import { and, gt, isNull } from "drizzle-orm";
+import { and, gt, isNull, or, isNotNull, lt } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { users, userRoles, roles, userScope, provinces, agencies, passwordResetTokens, refreshTokens } from "@workspace/db";
 import {
@@ -16,6 +16,21 @@ import {
 import { sendEmail, resolveAppBaseUrl } from "../lib/mailer";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+const RESET_TOKEN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+export async function runPasswordResetTokenCleanup(): Promise<number> {
+  const cutoff = new Date(Date.now() - RESET_TOKEN_RETENTION_MS);
+  const deleted = await db
+    .delete(passwordResetTokens)
+    .where(
+      or(
+        isNotNull(passwordResetTokens.usedAt),
+        lt(passwordResetTokens.expiresAt, cutoff),
+      ),
+    )
+    .returning({ id: passwordResetTokens.id });
+  return deleted.length;
+}
 
 export async function createPasswordResetToken(
   userId: string,
