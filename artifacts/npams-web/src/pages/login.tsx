@@ -36,6 +36,50 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [showForgotDialog, setShowForgotDialog] = useState(false);
   const [logoError, setLogoError] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSubmitting, setForgotSubmitting] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotError, setForgotError] = useState<string | null>(null);
+
+  const openForgotDialog = (open: boolean) => {
+    setShowForgotDialog(open);
+    if (!open) {
+      setForgotEmail("");
+      setForgotSent(false);
+      setForgotError(null);
+      setForgotSubmitting(false);
+    }
+  };
+
+  const onForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = forgotEmail.trim();
+    if (!email) {
+      setForgotError("Please enter your email address.");
+      return;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      setForgotError("Please enter a valid email address.");
+      return;
+    }
+    setForgotError(null);
+    setForgotSubmitting(true);
+    try {
+      const res = await fetch("/api/v1/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (!res.ok) {
+        throw new Error("generic");
+      }
+      setForgotSent(true);
+    } catch {
+      setForgotError("Could not submit your request right now. Please try again in a moment.");
+    } finally {
+      setForgotSubmitting(false);
+    }
+  };
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -185,23 +229,79 @@ export default function Login() {
         </p>
       </div>
 
-      <Dialog open={showForgotDialog} onOpenChange={setShowForgotDialog}>
+      <Dialog open={showForgotDialog} onOpenChange={openForgotDialog}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Password reset</DialogTitle>
+            <DialogTitle>Reset your password</DialogTitle>
             <DialogDescription asChild>
-              <div className="space-y-3 text-sm text-muted-foreground">
-                <p>Self-service password reset is not available for NPAMS accounts.</p>
-                <p>To reset your password, please contact your system administrator or provincial IT support officer.</p>
-                <p className="font-medium text-foreground">
-                  ICSA ICT Support Desk: <span className="font-normal">ict@ica.gov.pg</span>
-                </p>
-              </div>
+              {forgotSent ? (
+                <div className="space-y-3 text-sm text-muted-foreground">
+                  <p>
+                    If an account exists for that email address, a password reset link has been sent. Please check your
+                    inbox and follow the instructions to set a new password.
+                  </p>
+                  <p>The link will expire shortly for your security.</p>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  Enter the email address associated with your NPAMS account and we&rsquo;ll send you a link to reset
+                  your password.
+                </div>
+              )}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setShowForgotDialog(false)}>Close</Button>
-          </div>
+
+          {forgotSent ? (
+            <div className="flex justify-end">
+              <Button onClick={() => openForgotDialog(false)}>Close</Button>
+            </div>
+          ) : (
+            <form onSubmit={onForgotSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label htmlFor="forgot-email" className="text-sm font-medium">Email address</label>
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  autoComplete="username"
+                  placeholder="name@ica.gov.pg"
+                  value={forgotEmail}
+                  onChange={(e) => {
+                    setForgotEmail(e.target.value);
+                    if (forgotError) setForgotError(null);
+                  }}
+                  disabled={forgotSubmitting}
+                  data-testid="input-forgot-email"
+                />
+                {forgotError && (
+                  <p className="text-xs text-destructive" data-testid="text-forgot-error">{forgotError}</p>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Still need help? Contact ICSA ICT Support at{" "}
+                <span className="font-medium text-foreground">ict@ica.gov.pg</span>.
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => openForgotDialog(false)}
+                  disabled={forgotSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={forgotSubmitting} data-testid="button-forgot-submit">
+                  {forgotSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Sending…
+                    </>
+                  ) : (
+                    "Send reset link"
+                  )}
+                </Button>
+              </div>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>
