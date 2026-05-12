@@ -11,6 +11,7 @@ import {
   districts,
   facilities,
   refreshTokens,
+  passwordResetEmailLog,
   assets,
   assetTransfers,
   auditSessions,
@@ -618,9 +619,10 @@ router.post("/v1/users/:id/send-password-reset", requireAuth, requireUserAdmin, 
 
     const { rawToken, expiresAt } = await createPasswordResetToken(target.id, req.user.userId, "admin");
     const result = await sendPasswordResetEmail(
-      { email: target.email, fullName: target.fullName },
+      { id: target.id, email: target.email, fullName: target.fullName },
       rawToken,
       expiresAt,
+      { requestedBy: req.user.userId, requestedVia: "admin" },
     );
 
     res.json({
@@ -637,6 +639,54 @@ router.post("/v1/users/:id/send-password-reset", requireAuth, requireUserAdmin, 
     });
   } catch (err) {
     req.log.error({ err }, "Send password reset error");
+    res.status(500).json({ success: false, message: "Internal server error", data: null });
+  }
+});
+
+router.get("/v1/users/:id/last-password-reset-email", requireAuth, requireUserAdmin, async (req, res) => {
+  if (!req.user) return;
+  const targetId = String(req.params.id);
+
+  try {
+    const [targetScope] = await db.select().from(userScope).where(eq(userScope.userId, targetId)).limit(1);
+    if (req.user.scopeLevel !== "national" && targetScope?.provinceId !== req.user.provinceId) {
+      res.status(403).json({ success: false, message: "Cannot view audit data for users outside your province", data: null });
+      return;
+    }
+
+    const requestedByAlias = {
+      id: users.id,
+      fullName: users.fullName,
+      email: users.email,
+    };
+
+    const [row] = await db
+      .select({
+        id: passwordResetEmailLog.id,
+        recipientEmail: passwordResetEmailLog.recipientEmail,
+        requestedVia: passwordResetEmailLog.requestedVia,
+        requestedById: passwordResetEmailLog.requestedBy,
+        transport: passwordResetEmailLog.transport,
+        delivered: passwordResetEmailLog.delivered,
+        messageId: passwordResetEmailLog.messageId,
+        errorMessage: passwordResetEmailLog.errorMessage,
+        createdAt: passwordResetEmailLog.createdAt,
+        requestedByName: requestedByAlias.fullName,
+        requestedByEmail: requestedByAlias.email,
+      })
+      .from(passwordResetEmailLog)
+      .leftJoin(users, eq(users.id, passwordResetEmailLog.requestedBy))
+      .where(eq(passwordResetEmailLog.userId, targetId))
+      .orderBy(desc(passwordResetEmailLog.createdAt))
+      .limit(1);
+
+    res.json({
+      success: true,
+      message: "Last password reset email retrieved",
+      data: row ?? null,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Get last password reset email error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
 });

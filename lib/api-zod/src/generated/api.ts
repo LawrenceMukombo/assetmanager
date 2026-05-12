@@ -140,6 +140,33 @@ export const ResetPasswordResponse = zod
   .describe("Standard API response envelope");
 
 /**
+ * @summary Get the most recent password reset email attempt for a user
+ */
+export const GetLastPasswordResetEmailParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetLastPasswordResetEmailResponse = zod.object({
+  success: zod.boolean().optional(),
+  message: zod.string().optional(),
+  data: zod
+    .object({
+      id: zod.string().optional(),
+      recipientEmail: zod.string().optional(),
+      requestedVia: zod.string().optional(),
+      requestedById: zod.string().nullish(),
+      requestedByName: zod.string().nullish(),
+      requestedByEmail: zod.string().nullish(),
+      transport: zod.string().optional(),
+      delivered: zod.boolean().optional(),
+      messageId: zod.string().nullish(),
+      errorMessage: zod.string().nullish(),
+      createdAt: zod.coerce.date().optional(),
+    })
+    .nullish(),
+});
+
+/**
  * @summary Email a single-use password reset link to the user
  */
 export const SendUserPasswordResetParams = zod.object({

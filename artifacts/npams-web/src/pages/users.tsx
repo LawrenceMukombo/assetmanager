@@ -9,6 +9,8 @@ import {
   getGetProvincesQueryKey,
   getGetDistrictsByProvinceQueryKey,
   getGetFacilitiesByDistrictQueryKey,
+  useGetLastPasswordResetEmail,
+  getGetLastPasswordResetEmailQueryKey,
 } from "@workspace/api-client-react";
 import {
   AlertDialog,
@@ -242,6 +244,7 @@ export default function Users() {
     } else {
       toast({ variant: "destructive", title: "Could not send reset link", description: result.message });
     }
+    refetchLastResetEmail();
   };
 
   const isNationalAdmin = (user as { scope_level?: string } | null)?.scope_level === "national";
@@ -354,6 +357,18 @@ export default function Users() {
     },
     enabled: !!editUserId,
   });
+
+  const {
+    data: lastResetEmailResp,
+    refetch: refetchLastResetEmail,
+    isLoading: isLastResetLoading,
+  } = useGetLastPasswordResetEmail(editUserId, {
+    query: {
+      queryKey: getGetLastPasswordResetEmailQueryKey(editUserId),
+      enabled: !!editUserId,
+    },
+  });
+  const lastResetEmail = lastResetEmailResp?.data ?? null;
 
   if (!isAdmin) return <Redirect to="/dashboard" />;
 
@@ -1005,6 +1020,54 @@ export default function Users() {
                           <p className="text-xs text-muted-foreground">
                             Set a password directly for offline accounts, or send a reset link so the user can choose their own. The link is single-use and expires in 1 hour.
                           </p>
+                          <div className="mt-2 rounded-md border bg-muted/30 px-2.5 py-2 text-xs">
+                            {isLastResetLoading ? (
+                              <span className="text-muted-foreground">Loading last reset email…</span>
+                            ) : !lastResetEmail ? (
+                              <span className="text-muted-foreground">No reset email has been sent to this user yet.</span>
+                            ) : (
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium">Last reset email:</span>
+                                  <span className="text-muted-foreground">
+                                    {formatDistanceToNow(new Date(lastResetEmail.createdAt!), { addSuffix: true })}
+                                    {" · "}
+                                    {new Date(lastResetEmail.createdAt!).toLocaleString()}
+                                  </span>
+                                  {lastResetEmail.delivered ? (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                      Delivered via {lastResetEmail.transport}
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                                      Not delivered ({lastResetEmail.transport})
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="text-muted-foreground">
+                                  To {lastResetEmail.recipientEmail}
+                                  {" · triggered "}
+                                  {lastResetEmail.requestedVia === "self"
+                                    ? "by user (forgot password)"
+                                    : lastResetEmail.requestedByName
+                                      ? `by ${lastResetEmail.requestedByName}`
+                                      : "by an admin"}
+                                </div>
+                                {lastResetEmail.messageId && (
+                                  <div className="text-muted-foreground truncate">
+                                    SMTP message ID: <span className="font-mono">{lastResetEmail.messageId}</span>
+                                  </div>
+                                )}
+                                {!lastResetEmail.delivered && (
+                                  <div className="text-destructive">
+                                    {lastResetEmail.errorMessage
+                                      ? `Error: ${lastResetEmail.errorMessage}`
+                                      : "SMTP is not configured — the link was only logged on the server. Configure SMTP or use a direct password reset."}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                           <FormMessage />
                         </FormItem>
                       )}

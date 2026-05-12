@@ -4,7 +4,8 @@ import { eq } from "drizzle-orm";
 import crypto from "crypto";
 import { and, gt, isNull, or, isNotNull, lt } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { users, userRoles, roles, userScope, provinces, agencies, passwordResetTokens, refreshTokens } from "@workspace/db";
+import { users, userRoles, roles, userScope, provinces, agencies, passwordResetTokens, refreshTokens, passwordResetEmailLog } from "@workspace/db";
+import { logger } from "../lib/logger";
 import {
   signAccessToken,
   issueRefreshToken,
@@ -51,9 +52,10 @@ export async function createPasswordResetToken(
 }
 
 export async function sendPasswordResetEmail(
-  user: { email: string; fullName: string },
+  user: { id: string; email: string; fullName: string },
   rawToken: string,
   expiresAt: Date,
+  context: { requestedBy: string | null; requestedVia: "admin" | "self" },
 ) {
   const url = `${resolveAppBaseUrl()}/reset-password?token=${encodeURIComponent(rawToken)}`;
   const expiresIso = expiresAt.toISOString();
@@ -72,7 +74,36 @@ export async function sendPasswordResetEmail(
     `<p><a href="${url}">${url}</a></p>` +
     `<p>If you did not request this reset, you can safely ignore this email — your current password remains active until the link is used.</p>` +
     `<p>— NPAMS</p>`;
-  return sendEmail({ to: user.email, subject, text, html });
+
+  let result: Awaited<ReturnType<typeof sendEmail>>;
+  let thrownError: unknown = null;
+  let attemptedTransport: "smtp" | "log" = "log";
+  try {
+    // If SMTP_HOST is configured we attempted SMTP, even if the call later threw.
+    if (process.env.SMTP_HOST) attemptedTransport = "smtp";
+    result = await sendEmail({ to: user.email, subject, text, html });
+  } catch (err) {
+    thrownError = err;
+    result = { delivered: false, transport: attemptedTransport };
+  }
+
+  try {
+    await db.insert(passwordResetEmailLog).values({
+      userId: user.id,
+      requestedBy: context.requestedBy,
+      requestedVia: context.requestedVia,
+      recipientEmail: user.email,
+      transport: result.transport,
+      delivered: result.delivered,
+      messageId: result.messageId ?? null,
+      errorMessage: thrownError ? String((thrownError as Error)?.message ?? thrownError) : null,
+    });
+  } catch (logErr) {
+    logger.error({ err: logErr, userId: user.id }, "[mailer] Failed to write password reset audit log entry");
+  }
+
+  if (thrownError) throw thrownError;
+  return result;
 }
 
 const router = Router();
@@ -317,7 +348,12 @@ router.post("/v1/auth/forgot-password", async (req, res) => {
       return genericResponse();
     }
     const { rawToken, expiresAt } = await createPasswordResetToken(user.id, null, "self");
-    await sendPasswordResetEmail({ email: user.email, fullName: user.fullName }, rawToken, expiresAt);
+    await sendPasswordResetEmail(
+      { id: user.id, email: user.email, fullName: user.fullName },
+      rawToken,
+      expiresAt,
+      { requestedBy: null, requestedVia: "self" },
+    );
     return genericResponse();
   } catch (err) {
     req.log.error({ err }, "Forgot password error");

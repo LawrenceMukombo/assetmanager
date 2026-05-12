@@ -33,6 +33,7 @@ import type {
   GetDistrictsByProvince200,
   GetFacilitiesByDistrict200,
   GetFacilityById200,
+  GetLastPasswordResetEmail200,
   GetNationalDashboard200,
   GetNotifications200,
   GetProvinceById200,
@@ -678,6 +679,98 @@ export const useResetPassword = <
 > => {
   return useMutation(getResetPasswordMutationOptions(options));
 };
+
+/**
+ * @summary Get the most recent password reset email attempt for a user
+ */
+export const getGetLastPasswordResetEmailUrl = (id: string) => {
+  return `/api/v1/users/${id}/last-password-reset-email`;
+};
+
+export const getLastPasswordResetEmail = async (
+  id: string,
+  options?: RequestInit,
+): Promise<GetLastPasswordResetEmail200> => {
+  return customFetch<GetLastPasswordResetEmail200>(
+    getGetLastPasswordResetEmailUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetLastPasswordResetEmailQueryKey = (id: string) => {
+  return [`/api/v1/users/${id}/last-password-reset-email`] as const;
+};
+
+export const getGetLastPasswordResetEmailQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLastPasswordResetEmail>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLastPasswordResetEmail>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetLastPasswordResetEmailQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getLastPasswordResetEmail>>
+  > = ({ signal }) =>
+    getLastPasswordResetEmail(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLastPasswordResetEmail>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLastPasswordResetEmailQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLastPasswordResetEmail>>
+>;
+export type GetLastPasswordResetEmailQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the most recent password reset email attempt for a user
+ */
+
+export function useGetLastPasswordResetEmail<
+  TData = Awaited<ReturnType<typeof getLastPasswordResetEmail>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLastPasswordResetEmail>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLastPasswordResetEmailQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Email a single-use password reset link to the user

@@ -460,6 +460,26 @@ export type ResetPasswordBody = {
   new_password: string;
 };
 
+export type GetLastPasswordResetEmail200Data = {
+  id?: string;
+  recipientEmail?: string;
+  requestedVia?: string;
+  requestedById?: string | null;
+  requestedByName?: string | null;
+  requestedByEmail?: string | null;
+  transport?: string;
+  delivered?: boolean;
+  messageId?: string | null;
+  errorMessage?: string | null;
+  createdAt?: string;
+} | null;
+
+export type GetLastPasswordResetEmail200 = {
+  success?: boolean;
+  message?: string;
+  data?: GetLastPasswordResetEmail200Data;
+};
+
 export type SendUserPasswordReset200Data = {
   email?: string;
   delivered?: boolean;

@@ -193,6 +193,64 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /v1/users/{id}/last-password-reset-email:
+    get:
+      operationId: getLastPasswordResetEmail
+      tags: [users]
+      summary: Get the most recent password reset email attempt for a user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Latest reset email attempt (data is null if none)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    nullable: true
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      recipientEmail:
+                        type: string
+                      requestedVia:
+                        type: string
+                      requestedById:
+                        type: string
+                        nullable: true
+                      requestedByName:
+                        type: string
+                        nullable: true
+                      requestedByEmail:
+                        type: string
+                        nullable: true
+                      transport:
+                        type: string
+                      delivered:
+                        type: boolean
+                      messageId:
+                        type: string
+                        nullable: true
+                      errorMessage:
+                        type: string
+                        nullable: true
+                      createdAt:
+                        type: string
+                        format: date-time
+
   /v1/users/{id}/send-password-reset:
     post:
       operationId: sendUserPasswordReset

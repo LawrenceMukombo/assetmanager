@@ -44,6 +44,8 @@ export * from "./getCategories200";
 export * from "./getDistrictsByProvince200";
 export * from "./getFacilitiesByDistrict200";
 export * from "./getFacilityById200";
+export * from "./getLastPasswordResetEmail200";
+export * from "./getLastPasswordResetEmail200Data";
 export * from "./getNationalDashboard200";
 export * from "./getNotifications200";
 export * from "./getProvinceById200";

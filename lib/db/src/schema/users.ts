@@ -56,9 +56,23 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const passwordResetEmailLog = pgTable("password_reset_email_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  requestedBy: uuid("requested_by").references(() => users.id),
+  requestedVia: varchar("requested_via", { length: 32 }).notNull(),
+  recipientEmail: varchar("recipient_email", { length: 255 }).notNull(),
+  transport: varchar("transport", { length: 32 }).notNull(),
+  delivered: boolean("delivered").notNull().default(false),
+  messageId: text("message_id"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type UserRole = typeof userRoles.$inferSelect;
 export type UserScope = typeof userScope.$inferSelect;
 export type RefreshToken = typeof refreshTokens.$inferSelect;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type PasswordResetEmailLogEntry = typeof passwordResetEmailLog.$inferSelect;
