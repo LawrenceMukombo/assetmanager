@@ -618,7 +618,7 @@ export default function Assets() {
               <div className="flex flex-wrap gap-1.5">
                 {categoriesData?.data?.map((c) => {
                   const isSelected = categoryId === c.id;
-                  const meta = getCategoryMeta(c.categoryName, c.categoryCode);
+                  const meta = getCategoryMeta(c.categoryName, c.categoryCode, c.iconName, c.accentColor);
                   const Icon = meta.icon;
                   return (
                     <button

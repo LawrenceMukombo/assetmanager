@@ -21,13 +21,16 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Edit, Trash, Tags } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Plus, Edit, Trash, Tags, Check, ChevronDown } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { getCategoryMeta } from "@/lib/category";
+import { ICON_OPTIONS, COLOR_OPTIONS, getIconByName } from "@/lib/category-options";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_ROLES } from "@/App";
 import { Redirect } from "wouter";
+import { cn } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,7 +50,22 @@ const categorySchema = z.object({
     .toUpperCase()
     .regex(/^[A-Z]{2,5}$/u, "Code must be 2-5 letters"),
   description: z.string().optional(),
+  // Free-form so admin choices outside the curated palette (e.g. legacy
+  // values set via API) are preserved on edit; the picker UI still
+  // constrains new selections to the curated set.
+  icon_name: z.string().nullable().optional(),
+  accent_color: z.string().nullable().optional(),
 });
+
+type CategoryFormValues = z.infer<typeof categorySchema>;
+
+const DEFAULTS: CategoryFormValues = {
+  category_name: "",
+  category_code: "",
+  description: "",
+  icon_name: null,
+  accent_color: null,
+};
 
 export default function Categories() {
   const { user } = useAuth();
@@ -101,15 +119,15 @@ export default function Categories() {
     }
   });
 
-  const form = useForm<z.infer<typeof categorySchema>>({
+  const form = useForm<CategoryFormValues>({
     resolver: zodResolver(categorySchema),
-    defaultValues: { category_name: "", category_code: "", description: "" }
+    defaultValues: DEFAULTS,
   });
 
   if (!isAdmin) return <Redirect to="/dashboard" />;
 
   const openCreate = () => {
-    form.reset({ category_name: "", category_code: "", description: "" });
+    form.reset(DEFAULTS);
     setEditingId(null);
     setIsModalOpen(true);
   };
@@ -119,18 +137,33 @@ export default function Categories() {
       category_name: category.categoryName ?? "",
       category_code: category.categoryCode ?? "",
       description: category.description ?? "",
+      icon_name: category.iconName ?? null,
+      accent_color: category.accentColor ?? null,
     });
     setEditingId(category.id ?? null);
     setIsModalOpen(true);
   };
 
-  const onSubmit = (values: z.infer<typeof categorySchema>) => {
+  const onSubmit = (values: CategoryFormValues) => {
+    const payload = {
+      ...values,
+      icon_name: values.icon_name ?? null,
+      accent_color: values.accent_color ?? null,
+    };
     if (editingId) {
-      updateMutation.mutate({ id: editingId, data: values });
+      updateMutation.mutate({ id: editingId, data: payload });
     } else {
-      createMutation.mutate({ data: values });
+      createMutation.mutate({ data: payload });
     }
   };
+
+  const watchedName = form.watch("category_name");
+  const watchedCode = form.watch("category_code");
+  const watchedIcon = form.watch("icon_name");
+  const watchedColor = form.watch("accent_color");
+  const previewMeta = getCategoryMeta(watchedName, watchedCode, watchedIcon, watchedColor);
+  const PreviewIcon = previewMeta.icon;
+  const SelectedIcon = getIconByName(watchedIcon ?? undefined);
 
   return (
     <div className="space-y-6">
@@ -175,11 +208,15 @@ export default function Categories() {
               >
                 <TableCell className="font-medium">
                   {(() => {
-                    const meta = getCategoryMeta(cat.categoryName, cat.categoryCode);
+                    const meta = getCategoryMeta(cat.categoryName, cat.categoryCode, cat.iconName, cat.accentColor);
                     const Icon = meta.icon;
                     return (
                       <span className="inline-flex items-center gap-2">
-                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-md shrink-0 ${meta.chipClass}`} aria-hidden>
+                        <span
+                          className={`inline-flex items-center justify-center w-7 h-7 rounded-md shrink-0 ${meta.chipClass}`}
+                          style={meta.chipStyle}
+                          aria-hidden
+                        >
                           <Icon className="w-4 h-4" />
                         </span>
                         <span>{cat.categoryName}</span>
@@ -213,6 +250,20 @@ export default function Categories() {
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
+                <span
+                  className={`inline-flex items-center justify-center w-10 h-10 rounded-md shrink-0 ${previewMeta.chipClass}`}
+                  style={previewMeta.chipStyle}
+                  aria-hidden
+                >
+                  <PreviewIcon className="w-5 h-5" />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-sm font-medium truncate">{watchedName || "Preview"}</div>
+                  <div className="text-xs text-muted-foreground">How this category will appear.</div>
+                </div>
+              </div>
+
               <FormField
                 control={form.control}
                 name="category_name"
@@ -243,6 +294,157 @@ export default function Categories() {
                   </FormItem>
                 )}
               />
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="icon_name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Icon</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full justify-between font-normal"
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              {SelectedIcon ? (
+                                <SelectedIcon className="w-4 h-4" />
+                              ) : (
+                                <span className="text-muted-foreground text-sm">Default</span>
+                              )}
+                              {SelectedIcon && (
+                                <span className="text-sm">
+                                  {ICON_OPTIONS.find((o) => o.name === field.value)?.label}
+                                </span>
+                              )}
+                            </span>
+                            <ChevronDown className="w-4 h-4 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-72 p-2" align="start">
+                          <div className="flex items-center justify-between px-2 pb-2">
+                            <span className="text-xs font-medium text-muted-foreground">Pick an icon</span>
+                            {field.value && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => field.onChange(null)}
+                              >
+                                Clear
+                              </Button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-6 gap-1 max-h-64 overflow-y-auto">
+                            {ICON_OPTIONS.map((opt) => {
+                              const Icon = opt.icon;
+                              const selected = field.value === opt.name;
+                              return (
+                                <button
+                                  type="button"
+                                  key={opt.name}
+                                  title={opt.label}
+                                  aria-label={opt.label}
+                                  onClick={() => field.onChange(opt.name)}
+                                  className={cn(
+                                    "inline-flex items-center justify-center w-9 h-9 rounded-md border transition-colors",
+                                    selected
+                                      ? "border-primary bg-primary/10 text-primary"
+                                      : "border-transparent hover:bg-muted",
+                                  )}
+                                >
+                                  <Icon className="w-4 h-4" />
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="accent_color"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Accent color</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full justify-between font-normal"
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              {field.value ? (
+                                <>
+                                  <span
+                                    className="w-4 h-4 rounded-full border"
+                                    style={{ backgroundColor: field.value }}
+                                    aria-hidden
+                                  />
+                                  <span className="text-sm">
+                                    {COLOR_OPTIONS.find((o) => o.value === field.value)?.label}
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">Default</span>
+                              )}
+                            </span>
+                            <ChevronDown className="w-4 h-4 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64 p-2" align="start">
+                          <div className="flex items-center justify-between px-2 pb-2">
+                            <span className="text-xs font-medium text-muted-foreground">Pick a color</span>
+                            {field.value && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => field.onChange(null)}
+                              >
+                                Clear
+                              </Button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-6 gap-2">
+                            {COLOR_OPTIONS.map((opt) => {
+                              const selected = field.value === opt.value;
+                              return (
+                                <button
+                                  type="button"
+                                  key={opt.value}
+                                  title={opt.label}
+                                  aria-label={opt.label}
+                                  onClick={() => field.onChange(opt.value)}
+                                  className={cn(
+                                    "relative inline-flex items-center justify-center w-8 h-8 rounded-full border transition-transform",
+                                    selected ? "ring-2 ring-offset-2 ring-primary scale-105" : "hover:scale-105",
+                                  )}
+                                  style={{ backgroundColor: opt.value }}
+                                >
+                                  {selected && <Check className="w-4 h-4 text-white drop-shadow" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
               <FormField
                 control={form.control}
                 name="description"

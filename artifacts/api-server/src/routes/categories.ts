@@ -11,7 +11,7 @@ const router = Router();
 //   { provided: true, code: "" }        — caller cleared it (use derive)
 //   { provided: true, code: "BLD" }     — valid uppercase code
 //   { provided: true, code: null }      — invalid (reject)
-function normalizeCategoryCode(input: unknown): { provided: boolean; code: string | null } {
+function normalizeCategoryCode(input: unknown): { provided: boolean; code?: string | null } {
   if (input === undefined) return { provided: false };
   if (input === null) return { provided: true, code: "" };
   const s = String(input).trim().toUpperCase();
@@ -24,6 +24,33 @@ function deriveCategoryCode(name: string): string {
   return letters.slice(0, 3) || "GEN";
 }
 
+// Returns:
+//   { provided: false }                   — caller omitted icon_name
+//   { provided: true, value: null }       — caller cleared it (use null)
+//   { provided: true, value: "monitor" }  — valid icon name
+//   { provided: true, value: undefined }  — invalid (reject)
+function normalizeIconName(input: unknown): { provided: boolean; value?: string | null } {
+  if (input === undefined) return { provided: false };
+  if (input === null) return { provided: true, value: null };
+  const s = String(input).trim();
+  if (s === "") return { provided: true, value: null };
+  if (s.length > 50 || !/^[A-Za-z0-9_-]+$/.test(s)) {
+    return { provided: true, value: undefined };
+  }
+  return { provided: true, value: s };
+}
+
+function normalizeAccentColor(input: unknown): { provided: boolean; value?: string | null } {
+  if (input === undefined) return { provided: false };
+  if (input === null) return { provided: true, value: null };
+  const s = String(input).trim();
+  if (s === "") return { provided: true, value: null };
+  if (!/^#[0-9A-Fa-f]{6}$/.test(s)) {
+    return { provided: true, value: undefined };
+  }
+  return { provided: true, value: s.toLowerCase() };
+}
+
 router.get("/v1/categories", requireAuth, async (req, res) => {
   try {
     const rows = await db
@@ -32,6 +59,8 @@ router.get("/v1/categories", requireAuth, async (req, res) => {
         categoryName: assetCategories.categoryName,
         categoryCode: assetCategories.categoryCode,
         description: assetCategories.description,
+        iconName: assetCategories.iconName,
+        accentColor: assetCategories.accentColor,
         createdAt: assetCategories.createdAt,
         assetCount: count(assets.id),
       })
@@ -47,7 +76,7 @@ router.get("/v1/categories", requireAuth, async (req, res) => {
 });
 
 router.post("/v1/categories", requireAuth, requireAssetAdmin, async (req, res) => {
-  const { category_name, category_code, description } = req.body;
+  const { category_name, category_code, description, icon_name, accent_color } = req.body;
   if (!category_name) {
     res.status(400).json({ success: false, message: "category_name is required", data: null });
     return;
@@ -55,6 +84,16 @@ router.post("/v1/categories", requireAuth, requireAssetAdmin, async (req, res) =
   const normalized = normalizeCategoryCode(category_code);
   if (normalized.provided && normalized.code === null) {
     res.status(400).json({ success: false, message: "category_code must be 2-5 letters", data: null });
+    return;
+  }
+  const normalizedIcon = normalizeIconName(icon_name);
+  if (normalizedIcon.provided && normalizedIcon.value === undefined) {
+    res.status(400).json({ success: false, message: "icon_name is invalid", data: null });
+    return;
+  }
+  const normalizedColor = normalizeAccentColor(accent_color);
+  if (normalizedColor.provided && normalizedColor.value === undefined) {
+    res.status(400).json({ success: false, message: "accent_color must be a hex color like #3b82f6", data: null });
     return;
   }
   // If omitted or cleared, derive from the name so we never persist an empty code.
@@ -77,7 +116,13 @@ router.post("/v1/categories", requireAuth, requireAssetAdmin, async (req, res) =
     }
     const [row] = await db
       .insert(assetCategories)
-      .values({ categoryName: category_name, categoryCode: finalCode, description })
+      .values({
+        categoryName: category_name,
+        categoryCode: finalCode,
+        description,
+        iconName: normalizedIcon.provided ? normalizedIcon.value ?? null : null,
+        accentColor: normalizedColor.provided ? normalizedColor.value ?? null : null,
+      })
       .returning();
     res.status(201).json({ success: true, message: "Category created", data: row });
   } catch (err: unknown) {
@@ -95,10 +140,20 @@ router.post("/v1/categories", requireAuth, requireAssetAdmin, async (req, res) =
 });
 
 router.put("/v1/categories/:id", requireAuth, requireAssetAdmin, async (req, res) => {
-  const { category_name, category_code, description } = req.body;
+  const { category_name, category_code, description, icon_name, accent_color } = req.body;
   const normalized = normalizeCategoryCode(category_code);
   if (normalized.provided && normalized.code === null) {
     res.status(400).json({ success: false, message: "category_code must be 2-5 letters", data: null });
+    return;
+  }
+  const normalizedIcon = normalizeIconName(icon_name);
+  if (normalizedIcon.provided && normalizedIcon.value === undefined) {
+    res.status(400).json({ success: false, message: "icon_name is invalid", data: null });
+    return;
+  }
+  const normalizedColor = normalizeAccentColor(accent_color);
+  if (normalizedColor.provided && normalizedColor.value === undefined) {
+    res.status(400).json({ success: false, message: "accent_color must be a hex color like #3b82f6", data: null });
     return;
   }
   try {
@@ -106,6 +161,8 @@ router.put("/v1/categories/:id", requireAuth, requireAssetAdmin, async (req, res
       categoryName: category_name,
       description,
     };
+    if (normalizedIcon.provided) updates.iconName = normalizedIcon.value;
+    if (normalizedColor.provided) updates.accentColor = normalizedColor.value;
     let nextCode: string | undefined;
     if (normalized.provided) {
       // Caller explicitly sent a code: use it, or derive from name when cleared.

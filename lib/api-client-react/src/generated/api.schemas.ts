@@ -153,6 +153,8 @@ export interface AssetCategory {
   categoryName?: string;
   categoryCode?: string;
   description?: string | null;
+  iconName?: string | null;
+  accentColor?: string | null;
   assetCount?: number;
   createdAt?: string;
 }
@@ -571,12 +573,16 @@ export type CreateCategoryBody = {
   category_name: string;
   category_code?: string;
   description?: string;
+  icon_name?: string | null;
+  accent_color?: string | null;
 };
 
 export type UpdateCategoryBody = {
   category_name?: string;
   category_code?: string;
   description?: string;
+  icon_name?: string | null;
+  accent_color?: string | null;
 };
 
 export type GetAssetsParams = {

@@ -10,4 +10,6 @@ export type UpdateCategoryBody = {
   category_name?: string;
   category_code?: string;
   description?: string;
+  icon_name?: string | null;
+  accent_color?: string | null;
 };

@@ -476,6 +476,8 @@ export const GetCategoriesResponse = zod.object({
         categoryName: zod.string().optional(),
         categoryCode: zod.string().optional(),
         description: zod.string().nullish(),
+        iconName: zod.string().nullish(),
+        accentColor: zod.string().nullish(),
         assetCount: zod.number().optional(),
         createdAt: zod.coerce.date().optional(),
       }),
@@ -490,6 +492,8 @@ export const CreateCategoryBody = zod.object({
   category_name: zod.string(),
   category_code: zod.string().optional(),
   description: zod.string().optional(),
+  icon_name: zod.string().nullish(),
+  accent_color: zod.string().nullish(),
 });
 
 /**
@@ -503,6 +507,8 @@ export const UpdateCategoryBody = zod.object({
   category_name: zod.string().optional(),
   category_code: zod.string().optional(),
   description: zod.string().optional(),
+  icon_name: zod.string().nullish(),
+  accent_color: zod.string().nullish(),
 });
 
 export const UpdateCategoryResponse = zod

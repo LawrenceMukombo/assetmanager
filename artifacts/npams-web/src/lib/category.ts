@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import {
   Tag,
   Monitor,
@@ -11,6 +12,7 @@ import {
   Shirt,
   type LucideIcon,
 } from "lucide-react";
+import { getIconByName } from "./category-options";
 
 export type CategoryMeta = {
   icon: LucideIcon;
@@ -18,6 +20,8 @@ export type CategoryMeta = {
   color: string;
   /** Tailwind classes for a tinted icon chip (background + foreground) */
   chipClass: string;
+  /** Optional inline style for the chip when an arbitrary hex color is in use */
+  chipStyle?: CSSProperties;
 };
 
 const FALLBACK_META: CategoryMeta = {
@@ -106,26 +110,54 @@ function hashString(s: string): number {
   return Math.abs(h);
 }
 
+function metaFromCustom(
+  iconName: string | null | undefined,
+  accentColor: string | null | undefined,
+  base: CategoryMeta,
+): CategoryMeta {
+  const customIcon = getIconByName(iconName ?? undefined);
+  if (!customIcon && !accentColor) return base;
+  if (accentColor) {
+    return {
+      icon: customIcon ?? base.icon,
+      color: accentColor,
+      // Inline-style chip so any hex value works; tailwind classes can't see runtime values.
+      chipClass: "",
+      chipStyle: { backgroundColor: `${accentColor}26`, color: accentColor },
+    };
+  }
+  return { ...base, icon: customIcon ?? base.icon };
+}
+
 export function getCategoryMeta(
   name?: string | null,
   code?: string | null,
+  iconName?: string | null,
+  accentColor?: string | null,
 ): CategoryMeta {
+  let base: CategoryMeta = FALLBACK_META;
   if (code) {
     const m = META_BY_KEY[code.toUpperCase()];
-    if (m) return m;
+    if (m) base = m;
   }
-  if (name) {
+  if (base === FALLBACK_META && name) {
     const norm = name.trim().toLowerCase();
     const mapped = NAME_TO_CODE[norm];
-    if (mapped && META_BY_KEY[mapped]) return META_BY_KEY[mapped];
-    return FALLBACK_PALETTE[hashString(norm) % FALLBACK_PALETTE.length];
+    if (mapped && META_BY_KEY[mapped]) {
+      base = META_BY_KEY[mapped];
+    } else {
+      base = FALLBACK_PALETTE[hashString(norm) % FALLBACK_PALETTE.length];
+    }
   }
-  return FALLBACK_META;
+  if (iconName || accentColor) return metaFromCustom(iconName, accentColor, base);
+  return base;
 }
 
 export function getCategoryColor(
   name?: string | null,
   code?: string | null,
+  iconName?: string | null,
+  accentColor?: string | null,
 ): string {
-  return getCategoryMeta(name, code).color;
+  return getCategoryMeta(name, code, iconName, accentColor).color;
 }

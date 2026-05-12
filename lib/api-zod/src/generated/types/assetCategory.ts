@@ -11,6 +11,8 @@ export interface AssetCategory {
   categoryName?: string;
   categoryCode?: string;
   description?: string | null;
+  iconName?: string | null;
+  accentColor?: string | null;
   assetCount?: number;
   createdAt?: Date;
 }

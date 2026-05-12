@@ -636,6 +636,12 @@ paths:
                   type: string
                 description:
                   type: string
+                icon_name:
+                  type: string
+                  nullable: true
+                accent_color:
+                  type: string
+                  nullable: true
               required: [category_name]
       responses:
         "201":
@@ -671,6 +677,12 @@ paths:
                   type: string
                 description:
                   type: string
+                icon_name:
+                  type: string
+                  nullable: true
+                accent_color:
+                  type: string
+                  nullable: true
       responses:
         "200":
           description: Category updated
@@ -1533,6 +1545,12 @@ components:
         categoryCode:
           type: string
         description:
+          type: string
+          nullable: true
+        iconName:
+          type: string
+          nullable: true
+        accentColor:
           type: string
           nullable: true
         assetCount:

@@ -32,6 +32,8 @@ export const assetCategories = pgTable(
     categoryName: varchar("category_name", { length: 255 }).notNull().unique(),
     categoryCode: varchar("category_code", { length: 10 }).notNull().default(""),
     description: text("description"),
+    iconName: varchar("icon_name", { length: 50 }),
+    accentColor: varchar("accent_color", { length: 32 }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [
