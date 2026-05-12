@@ -178,6 +178,7 @@ router.get("/v1/stock/category-summary", requireAuth, async (req, res) => {
       .where(baseWhere)
       .groupBy(stockItems.category);
 
+    // Current 30-day burn rate (units issued out per category, last 30 days).
     const burnRows = await db
       .select({
         category: sql<string | null>`${stockItems.category}`,
@@ -197,16 +198,73 @@ router.get("/v1/stock/category-summary", requireAuth, async (req, res) => {
       burnByCat.set(b.category ?? "__uncategorised__", b.burnRate30d);
     }
 
+    // Prior 30-day burn rate (30-60 days ago) for the trend delta shown on
+    // each category card (e.g. "+12% vs prev 30d").
+    const prevBurnRows = await db
+      .select({
+        category: sql<string | null>`${stockItems.category}`,
+        burnRate30d: sql<number>`COALESCE(SUM(${stockMovements.quantity}), 0)::int`,
+      })
+      .from(stockMovements)
+      .innerJoin(stockItems, eq(stockMovements.stockItemId, stockItems.id))
+      .where(and(
+        baseWhere,
+        eq(stockMovements.movementType, "issue"),
+        sql`${stockMovements.createdAt} >= NOW() - INTERVAL '60 days'`,
+        sql`${stockMovements.createdAt} <  NOW() - INTERVAL '30 days'`,
+      ))
+      .groupBy(stockItems.category);
+
+    const prevBurnByCat = new Map<string, number>();
+    for (const b of prevBurnRows) {
+      prevBurnByCat.set(b.category ?? "__uncategorised__", b.burnRate30d);
+    }
+
+    // Weekly issued-out volume for the last 8 weeks per category, used to
+    // render a sparkline on each card. `weekIdx` 0 = the most recent 7-day
+    // window (today back 7 days), 7 = the oldest. We later flip the order so
+    // the array reads oldest -> newest for natural left-to-right plotting.
+    const WEEKS = 8;
+    const weeklyRows = await db
+      .select({
+        category: sql<string | null>`${stockItems.category}`,
+        weekIdx: sql<number>`FLOOR(EXTRACT(EPOCH FROM (NOW() - ${stockMovements.createdAt})) / (7 * 86400))::int`,
+        qty: sql<number>`COALESCE(SUM(${stockMovements.quantity}), 0)::int`,
+      })
+      .from(stockMovements)
+      .innerJoin(stockItems, eq(stockMovements.stockItemId, stockItems.id))
+      .where(and(
+        baseWhere,
+        eq(stockMovements.movementType, "issue"),
+        sql`${stockMovements.createdAt} >= NOW() - INTERVAL '${sql.raw(String(WEEKS * 7))} days'`,
+      ))
+      .groupBy(sql`1, 2`);
+
+    const weeklyByCat = new Map<string, number[]>();
+    for (const w of weeklyRows) {
+      const key = w.category ?? "__uncategorised__";
+      const arr = weeklyByCat.get(key) ?? new Array<number>(WEEKS).fill(0);
+      const idx = Number(w.weekIdx);
+      if (idx >= 0 && idx < WEEKS) arr[idx] = w.qty;
+      weeklyByCat.set(key, arr);
+    }
+
     const data = valueRows
       .map((r) => {
         const key = r.category ?? "__uncategorised__";
+        const cur = burnByCat.get(key) ?? 0;
+        const prev = prevBurnByCat.get(key) ?? 0;
+        // weeks come back newest-first; flip for left-to-right oldest->newest.
+        const weeklyBurn = (weeklyByCat.get(key) ?? new Array<number>(WEEKS).fill(0)).slice().reverse();
         return {
           category: r.category,
           categoryKey: key,
           itemCount: r.itemCount,
           totalQuantity: r.totalQuantity,
           totalValue: r.totalValue,
-          burnRate30d: burnByCat.get(key) ?? 0,
+          burnRate30d: cur,
+          burnRate30dPrev: prev,
+          weeklyBurn,
         };
       })
       .sort((a, b) => Number(b.totalValue) - Number(a.totalValue));
