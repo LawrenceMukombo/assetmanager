@@ -193,6 +193,15 @@ async function seedAgencyStock(): Promise<void> {
     { itemCode: "PNGICA-STK-011", itemName: "High-Visibility Safety Vest",                 category: "Uniform & PPE",         unitOfMeasure: "each",    onHandQuantity: 40,   reorderLevel: 25,   unitCost: "28.00",  supplier: "Brian Bell Hardware",      notes: "Apron/Tarmac duty — Jacksons" },
     { itemCode: "PNGICA-STK-012", itemName: "Toyota Hilux Engine Oil 10W-40 (4L)",         category: "Vehicle Spares",        unitOfMeasure: "bottle",  onHandQuantity: 22,   reorderLevel: 10,   unitCost: "85.00",  supplier: "Ela Motors PNG",           notes: "Fleet servicing supplies" },
     { itemCode: "PNGICA-STK-013", itemName: "Vehicle Air Filter — Hilux/Land Cruiser",     category: "Vehicle Spares",        unitOfMeasure: "each",    onHandQuantity: 8,    reorderLevel: 6,    unitCost: "55.00",  supplier: "Ela Motors PNG",           notes: "Routine maintenance stock" },
+    // Biometric & border-control consumables (task #86) — day-to-day burn at
+    // immigration desks and border posts. Sensible reorder levels keep the
+    // low-stock dashboard meaningful without being alarmist.
+    { itemCode: "PNGICA-STK-014", itemName: "MorphoWave Scanner Cleaning Kit",             category: "Biometric Consumables",     unitOfMeasure: "kit",      onHandQuantity: 45,  reorderLevel: 15, unitCost: "65.00",  supplier: "IDEMIA Australia",   notes: "Wipes + solution for biometric capture stations — issued monthly per site" },
+    { itemCode: "PNGICA-STK-015", itemName: "Fingerprint Sensor Replacement Pad",          category: "Biometric Consumables",     unitOfMeasure: "pad",      onHandQuantity: 120, reorderLevel: 40, unitCost: "12.00",  supplier: "IDEMIA Australia",   notes: "Silicone platen pad for MorphoSmart 1300 readers" },
+    { itemCode: "PNGICA-STK-016", itemName: "Biometric Card Printer Ribbon (YMCKO)",       category: "Biometric Consumables",     unitOfMeasure: "ribbon",   onHandQuantity: 18,  reorderLevel: 8,  unitCost: "240.00", supplier: "Datec PNG Ltd",      notes: "ID card / temporary permit printer — colour ribbon" },
+    { itemCode: "PNGICA-STK-017", itemName: "ePassport Reader Rubber Roller",              category: "Border Control Consumables",unitOfMeasure: "roller",   onHandQuantity: 24,  reorderLevel: 10, unitCost: "38.00",  supplier: "Datec PNG Ltd",      notes: "Replacement feed roller for 3M CR100M ePassport readers" },
+    { itemCode: "PNGICA-STK-018", itemName: "Border Stamp Die — Entry (replacement head)", category: "Border Control Consumables",unitOfMeasure: "die",      onHandQuantity: 14,  reorderLevel: 6,  unitCost: "85.00",  supplier: "Office National PNG",notes: "Dated rubber die for entry-stamp handles — per port" },
+    { itemCode: "PNGICA-STK-019", itemName: "Border Stamp Die — Exit (replacement head)",  category: "Border Control Consumables",unitOfMeasure: "die",      onHandQuantity: 14,  reorderLevel: 6,  unitCost: "85.00",  supplier: "Office National PNG",notes: "Dated rubber die for exit-stamp handles — per port" },
   ];
 
   let inserted = 0;
