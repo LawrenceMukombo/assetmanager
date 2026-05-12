@@ -53,11 +53,21 @@ interface Facility {
   assetCount?: number;
 }
 
+// NPAMS for ICSA is an immigration asset register — facility types are
+// limited to ICSA-relevant categories. Hospital / Health Centre / School /
+// etc. were removed in task #76. The underlying column remains free-form
+// (varchar) so other agencies could re-introduce their own types in future.
 const FACILITY_TYPES = [
-  "Government Office", "Hospital", "Health Centre", "School", "University",
-  "Police Station", "Court House", "Jail / Correctional", "Road / Infrastructure",
-  "Port / Jetty", "Airport", "Power Station", "Water Treatment",
-  "Community Hall", "Market", "Warehouse", "Other",
+  "Headquarters",
+  "Government Office",
+  "Regional Office",
+  "District Office",
+  "Border Post",
+  "Airport Immigration",
+  "Land Border Crossing",
+  "Sea Port Office",
+  "Warehouse",
+  "Other",
 ];
 
 const PNG_REGIONS = ["Highlands", "Momase", "Islands", "Southern", "National Capital District"];
@@ -843,7 +853,7 @@ function FacilityForm({ form, setForm }: { form: FacilityFormState; setForm: Rea
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2 space-y-1">
           <Label>Facility Name <span className="text-destructive">*</span></Label>
-          <Input value={form.facilityName} onChange={e => setForm(f => ({ ...f, facilityName: e.target.value }))} placeholder="e.g. Lae General Hospital" />
+          <Input value={form.facilityName} onChange={e => setForm(f => ({ ...f, facilityName: e.target.value }))} placeholder="e.g. Daru Sea Port Office" />
         </div>
         <div className="space-y-1">
           <Label><Building2 className="inline w-3 h-3 mr-1" />Facility Type</Label>

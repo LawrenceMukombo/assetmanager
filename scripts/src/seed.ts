@@ -108,6 +108,17 @@ async function main() {
     { provinceCode: "CP", districtName: "Kairuku District", districtCode: "CP-KA" },
     { provinceCode: "CP", districtName: "Hiri District",    districtCode: "CP-HI" },
     { provinceCode: "CP", districtName: "Rigo District",    districtCode: "CP-RI" },
+    // Districts required by ICSA presence sites (task #76)
+    { provinceCode: "SA",  districtName: "Vanimo-Green River District", districtCode: "SA-VG" },
+    { provinceCode: "ENB", districtName: "Kokopo District",             districtCode: "ENB-KO" },
+    { provinceCode: "ENB", districtName: "Rabaul District",             districtCode: "ENB-RA" },
+    // ICA_PRESENCE_SITES uses MA-MA for Madang Regional Office; we mirror
+    // that mapping here so the seeded district id matches the auto-seeder.
+    { provinceCode: "MD",  districtName: "Madang District",             districtCode: "MA-MA" },
+    { provinceCode: "WS",  districtName: "North Fly District",          districtCode: "WP-NF" },
+    { provinceCode: "WS",  districtName: "South Fly District",          districtCode: "WP-SF" },
+    { provinceCode: "MB",  districtName: "Alotau District",             districtCode: "MB-AL" },
+    { provinceCode: "NI",  districtName: "Kavieng District",            districtCode: "NI-KA" },
   ];
 
   const districtMap: Record<string, string> = {};
@@ -127,17 +138,27 @@ async function main() {
   console.log("Districts seeded:", Object.keys(districtMap).length);
 
   // --- FACILITIES ---
+  // ICSA presence facilities only — NPAMS is an immigration asset register.
+  // Hospitals / health centres / schools / city-authority offices were
+  // dropped in task #76; they are not ICSA-relevant. This list MUST stay
+  // in sync with ICA_PRESENCE_SITES in
+  // artifacts/api-server/src/lib/icaPresence.ts so that `pnpm seed` and the
+  // server's auto-seeder produce the same curated facility set.
   const facilityData = [
-    { districtCode: "MO-LAE", facilityName: "Lae Provincial Headquarters", facilityType: "Government Office" },
-    { districtCode: "MO-LAE", facilityName: "Angau Memorial Hospital", facilityType: "Hospital" },
-    { districtCode: "MO-LAE", facilityName: "Lae City Authority Office", facilityType: "Government Office" },
-    { districtCode: "MO-HG", facilityName: "Huon Gulf District Office", facilityType: "Government Office" },
-    { districtCode: "WHP-MTH", facilityName: "Mt Hagen Provincial Headquarters", facilityType: "Government Office" },
-    { districtCode: "WHP-MTH", facilityName: "Mt Hagen General Hospital", facilityType: "Hospital" },
-    { districtCode: "WHP-DEI", facilityName: "Dei District Administration", facilityType: "Government Office" },
-    { districtCode: "NCD-NE", facilityName: "Waigani Government Precinct", facilityType: "Government Office" },
-    { districtCode: "NCD-NE", facilityName: "Port Moresby General Hospital", facilityType: "Hospital" },
-    { districtCode: "NCD-SO", facilityName: "NCD City Hall", facilityType: "Government Office" },
+    { districtCode: "NCD-NW",  facilityName: "ICSA Konedobu Headquarters",        facilityType: "Headquarters" },
+    { districtCode: "NCD-NE",  facilityName: "ICSA Jacksons Airport Immigration", facilityType: "Airport Immigration" },
+    { districtCode: "SA-VG",   facilityName: "ICSA Vanimo Border Post",           facilityType: "Border Post" },
+    { districtCode: "SA-VG",   facilityName: "ICSA Wutung Border Crossing",       facilityType: "Land Border Crossing" },
+    { districtCode: "MO-LAE",  facilityName: "ICSA Lae Regional Office",          facilityType: "Regional Office" },
+    { districtCode: "WHP-MTH", facilityName: "ICSA Mt Hagen Regional Office",     facilityType: "Regional Office" },
+    { districtCode: "ENB-KO",  facilityName: "ICSA Kokopo Regional Office",       facilityType: "Regional Office" },
+    { districtCode: "MA-MA",   facilityName: "ICSA Madang Regional Office",       facilityType: "Regional Office" },
+    { districtCode: "WP-NF",   facilityName: "ICSA Kiunga Border Office",         facilityType: "Border Post" },
+    { districtCode: "WP-SF",   facilityName: "ICSA Daru Sea Port Office",         facilityType: "Sea Port Office" },
+    { districtCode: "MO-LAE",  facilityName: "ICSA Lae Sea Port Office",          facilityType: "Sea Port Office" },
+    { districtCode: "ENB-RA",  facilityName: "ICSA Rabaul Sea Port Office",       facilityType: "Sea Port Office" },
+    { districtCode: "MB-AL",   facilityName: "ICSA Alotau Sea Port Office",       facilityType: "Sea Port Office" },
+    { districtCode: "NI-KA",   facilityName: "ICSA Kavieng Sea Port Office",      facilityType: "Sea Port Office" },
   ];
 
   const facilityMap: Record<string, string> = {};
@@ -241,12 +262,14 @@ async function main() {
 
   // --- ASSETS (30+ across provinces) ---
   const morobeAdminId = userMap["morobe.admin@npams.gov.pg"];
-  const lahq = facilityMap["Lae Provincial Headquarters"];
-  const mthq = facilityMap["Mt Hagen Provincial Headquarters"];
-  const waigani = facilityMap["Waigani Government Precinct"];
-  const angau = facilityMap["Angau Memorial Hospital"];
-  const pmgh = facilityMap["Port Moresby General Hospital"];
-  const mthGenHosp = facilityMap["Mt Hagen General Hospital"];
+  // Legacy demo asset rows now anchor to ICSA presence facilities (the
+  // hospital / provincial-HQ stand-ins were removed in task #76).
+  const lahq = facilityMap["ICSA Lae Regional Office"];
+  const mthq = facilityMap["ICSA Mt Hagen Regional Office"];
+  const waigani = facilityMap["ICSA Jacksons Airport Immigration"];
+  const angau = facilityMap["ICSA Lae Regional Office"];
+  const pmgh = facilityMap["ICSA Jacksons Airport Immigration"];
+  const mthGenHosp = facilityMap["ICSA Mt Hagen Regional Office"];
 
   const laeDistId = districtMap["MO-LAE"];
   const mthDistId = districtMap["WHP-MTH"];
@@ -304,7 +327,7 @@ async function main() {
   const morobeAdminUserId = userMap["morobe.admin@npams.gov.pg"];
   await db.insert(notifications).values([
     { userId: morobeAdminUserId, title: "Welcome to NPAMS", message: "Your Morobe Provincial Asset Registry is now active. Start registering assets today.", readStatus: false },
-    { userId: morobeAdminUserId, title: "Asset MO-MED-003 Reported Missing", message: "Portable Ultrasound Machine at Angau Hospital has been flagged as missing. Please investigate.", readStatus: false },
+    { userId: morobeAdminUserId, title: "Asset MO-MED-003 Reported Missing", message: "Portable Ultrasound Machine assigned to ICSA Lae Regional Office has been flagged as missing. Please investigate.", readStatus: false },
     { userId: userMap["whp.admin@npams.gov.pg"], title: "Welcome to NPAMS", message: "Your Western Highlands Provincial Asset Registry is now active.", readStatus: false },
     { userId: userMap["ncd.admin@npams.gov.pg"], title: "Welcome to NPAMS", message: "Your National Capital District Asset Registry is now active.", readStatus: false },
   ]).onConflictDoNothing();

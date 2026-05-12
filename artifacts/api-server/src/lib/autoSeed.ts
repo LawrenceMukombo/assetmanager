@@ -22,9 +22,11 @@ import {
   notifications,
   stockItems,
   stockBalances,
+  stockMovements,
+  purchaseRequests,
 } from "@workspace/db";
 import { logger } from "./logger";
-import { ICA_PRESENCE_SITES } from "./icaPresence";
+import { ICA_PRESENCE_SITES, ICA_PRESENCE_NAMES } from "./icaPresence";
 
 const HASH_ROUNDS = 10;
 const DEFAULT_PASSWORD = "Admin1234!";
@@ -54,6 +56,7 @@ export async function autoSeedIfEmpty(): Promise<void> {
 
   // Idempotent — these check for existing rows themselves
   await seedIcaPresenceFacilities();
+  await pruneNonImmigrationFacilities();
   await seedAgencyAssets();
   await linkIcaAssetsToFacilities();
   await seedAdditionalIcaAssets();
@@ -162,9 +165,9 @@ async function seedAgencyStock(): Promise<void> {
 
   // Resolve a couple of real facility IDs to demonstrate per-location stock.
   // Falls back to null (agency reserve) if a facility isn't present yet.
-  const [hq] = await db.select({ id: facilities.id }).from(facilities).where(eq(facilities.facilityName, "Waigani Government Precinct")).limit(1);
-  const [lae] = await db.select({ id: facilities.id }).from(facilities).where(eq(facilities.facilityName, "Lae Provincial Headquarters")).limit(1);
-  const [mth] = await db.select({ id: facilities.id }).from(facilities).where(eq(facilities.facilityName, "Mt Hagen Provincial Headquarters")).limit(1);
+  const [hq] = await db.select({ id: facilities.id }).from(facilities).where(eq(facilities.facilityName, "ICSA Konedobu Headquarters")).limit(1);
+  const [lae] = await db.select({ id: facilities.id }).from(facilities).where(eq(facilities.facilityName, "ICSA Lae Regional Office")).limit(1);
+  const [mth] = await db.select({ id: facilities.id }).from(facilities).where(eq(facilities.facilityName, "ICSA Mt Hagen Regional Office")).limit(1);
   const hqId = hq?.id ?? null;
   const laeId = lae?.id ?? null;
   const mthId = mth?.id ?? null;
@@ -438,43 +441,35 @@ async function seedInitialData(): Promise<void> {
   for (const d of districtData) {
     const dId = districtMap[d.districtCode];
     if (!dId) continue;
-    const pfx = facilityPrefix(d.districtName);
-    const standard = [
-      { facilityName: `${d.districtName} Office`, facilityType: "Government Office" },
-      { facilityName: `${pfx} General Hospital`,  facilityType: "Hospital"          },
-      { facilityName: `${pfx} Health Centre`,     facilityType: "Health Centre"     },
-      { facilityName: `${pfx} Secondary School`,  facilityType: "School"            },
-    ];
-    for (const f of standard) {
-      const [row] = await db.insert(facilities)
-        .values({ districtId: dId, facilityName: f.facilityName, facilityType: f.facilityType })
-        .onConflictDoNothing()
-        .returning();
-      if (row) facilityMap[f.facilityName] = row.id;
-    }
-  }
-
-  // Special named facilities referenced by assets / users
-  const specialFacilities = [
-    { districtCode: "MO-LAE",  facilityName: "Lae Provincial Headquarters",    facilityType: "Government Office" },
-    { districtCode: "MO-LAE",  facilityName: "Angau Memorial Hospital",         facilityType: "Hospital"          },
-    { districtCode: "MO-LAE",  facilityName: "Lae City Authority Office",       facilityType: "Government Office" },
-    { districtCode: "MO-HG",   facilityName: "Huon Gulf District Office",       facilityType: "Government Office" },
-    { districtCode: "WHP-MTH", facilityName: "Mt Hagen Provincial Headquarters",facilityType: "Government Office" },
-    { districtCode: "WHP-MTH", facilityName: "Mt Hagen General Hospital",       facilityType: "Hospital"          },
-    { districtCode: "WHP-DEI", facilityName: "Dei District Administration",     facilityType: "Government Office" },
-    { districtCode: "NCD-NE",  facilityName: "Waigani Government Precinct",     facilityType: "Government Office" },
-    { districtCode: "NCD-NE",  facilityName: "Port Moresby General Hospital",   facilityType: "Hospital"          },
-    { districtCode: "NCD-SO",  facilityName: "NCD City Hall",                   facilityType: "Government Office" },
-  ];
-  for (const f of specialFacilities) {
-    const dId = districtMap[f.districtCode];
-    if (!dId) continue;
+    // Generic district office only — legacy demo data (hospitals, health
+    // centres, schools) is no longer auto-generated. NPAMS for ICSA is an
+    // immigration asset register; non-immigration facility types do not
+    // belong in the location pickers. See task #76.
     const [row] = await db.insert(facilities)
-      .values({ districtId: dId, facilityName: f.facilityName, facilityType: f.facilityType })
+      .values({ districtId: dId, facilityName: `${d.districtName} Office`, facilityType: "Government Office" })
       .onConflictDoNothing()
       .returning();
-    if (row) facilityMap[f.facilityName] = row.id;
+    if (row) facilityMap[`${d.districtName} Office`] = row.id;
+  }
+
+  // Seed the curated ICSA presence sites inline (so legacy demo asset rows
+  // below can resolve their facilityId). The dedicated seedIcaPresenceFacilities
+  // pass later will idempotently backfill GPS / type / address.
+  for (const site of ICA_PRESENCE_SITES) {
+    const dId = districtMap[site.districtCode];
+    if (!dId) continue;
+    const [row] = await db.insert(facilities)
+      .values({
+        districtId: dId,
+        facilityName: site.facilityName,
+        facilityType: site.facilityType,
+        address: site.address,
+        gpsLatitude: site.lat,
+        gpsLongitude: site.lng,
+      })
+      .onConflictDoNothing()
+      .returning();
+    if (row) facilityMap[site.facilityName] = row.id;
   }
   // Re-fetch all facilities to ensure the map is populated
   const allFacilities = await db.select().from(facilities);
@@ -558,12 +553,14 @@ async function seedInitialData(): Promise<void> {
 
   // ── ASSETS ───────────────────────────────────────────────────────────────────
   const morobeAdminId = userMap["morobe.admin@npams.gov.pg"];
-  const lahq      = facilityMap["Lae Provincial Headquarters"];
-  const mthq      = facilityMap["Mt Hagen Provincial Headquarters"];
-  const waigani   = facilityMap["Waigani Government Precinct"];
-  const angau     = facilityMap["Angau Memorial Hospital"];
-  const pmgh      = facilityMap["Port Moresby General Hospital"];
-  const mthHosp   = facilityMap["Mt Hagen General Hospital"];
+  // Legacy demo assets are now anchored to ICSA presence facilities (the
+  // hospital / provincial-HQ stand-ins were removed in task #76).
+  const lahq      = facilityMap["ICSA Lae Regional Office"];
+  const mthq      = facilityMap["ICSA Mt Hagen Regional Office"];
+  const waigani   = facilityMap["ICSA Jacksons Airport Immigration"];
+  const angau     = facilityMap["ICSA Lae Regional Office"];
+  const pmgh      = facilityMap["ICSA Jacksons Airport Immigration"];
+  const mthHosp   = facilityMap["ICSA Mt Hagen Regional Office"];
   const laeDistId = districtMap["MO-LAE"];
   const mthDistId = districtMap["WHP-MTH"];
   const ncdNEId   = districtMap["NCD-NE"];
@@ -612,12 +609,12 @@ async function seedInitialData(): Promise<void> {
   // ── NOTIFICATIONS ────────────────────────────────────────────────────────────
   await db.insert(notifications).values([
     { userId: morobeAdminId,                    title: "Welcome to NPAMS",                message: "Your Morobe Provincial Asset Registry is now active. Start registering assets today.", readStatus: false },
-    { userId: morobeAdminId,                    title: "Asset MO-MED-003 Reported Missing",message: "Portable Ultrasound Machine at Angau Hospital has been flagged as missing. Please investigate.", readStatus: false },
+    { userId: morobeAdminId,                    title: "Asset MO-MED-003 Reported Missing",message: "Portable Ultrasound Machine assigned to ICSA Lae Regional Office has been flagged as missing. Please investigate.", readStatus: false },
     { userId: userMap["whp.admin@npams.gov.pg"],title: "Welcome to NPAMS",                message: "Your Western Highlands Provincial Asset Registry is now active.", readStatus: false },
     { userId: userMap["ncd.admin@npams.gov.pg"],title: "Welcome to NPAMS",                message: "Your National Capital District Asset Registry is now active.", readStatus: false },
   ]).onConflictDoNothing();
 
-  logger.info("Auto-seed: initial data complete — 27 users, 95 districts, 385 facilities, 31 assets.");
+  logger.info("Auto-seed: initial data complete — base demo users, all PNG districts, one office per district, and demo assets seeded; non-immigration facilities (hospitals/schools/health centres) are no longer generated and are pruned on startup if present.");
 }
 
 async function seedAgencies(): Promise<void> {
@@ -749,6 +746,144 @@ async function seedIcaPresenceFacilities(): Promise<void> {
     }
   }
   logger.info({ inserted: upserted, total: ICA_PRESENCE_SITES.length }, "Auto-seed: ICSA presence facilities");
+}
+
+// ── Prune non-immigration facilities ───────────────────────────────────────
+// NPAMS for ICSA is an immigration asset register. Sweep out hospitals,
+// health centres, schools and other non-immigration legacy demo facilities
+// that may have been seeded by older builds. If a stray facility still has
+// records attached (assets, users, stock, purchase requests, audit
+// assignments) reassign them to the nearest ICSA presence facility in the
+// same district, then same province, then ICSA Konedobu HQ — and only then
+// delete the empty facility. Idempotent: a fully-clean DB is a no-op.
+const NON_IMMIGRATION_FACILITY_TYPES = [
+  "Hospital",
+  "Health Centre",
+  "School",
+  "University",
+  "Police Station",
+  "Court House",
+  "Jail / Correctional",
+  "Power Station",
+  "Water Treatment",
+];
+// Legacy demo facilities (Government Office type) that pre-date the ICSA
+// pivot and should also be removed if they linger in dev databases.
+const DEPRECATED_LEGACY_FACILITY_NAMES = [
+  "Lae Provincial Headquarters",
+  "Mt Hagen Provincial Headquarters",
+  "Waigani Government Precinct",
+  "Lae City Authority Office",
+  // NOTE: do NOT add "Huon Gulf District Office" here — it now collides
+  // with the generic `${districtName} Office` fallback rows we still seed
+  // per district. Removing it would wipe a legitimate district fallback.
+  "Dei District Administration",
+  "NCD City Hall",
+];
+const NON_IMMIGRATION_NAME_REGEX = /(General Hospital|Health Centre|Secondary School)$/;
+
+async function pruneNonImmigrationFacilities(): Promise<void> {
+  // Build a province → district → ICSA-presence facility lookup so we can
+  // re-home orphaned records efficiently.
+  const allDistricts = await db
+    .select({ id: districts.id, code: districts.districtCode, provinceId: districts.provinceId })
+    .from(districts);
+  const districtById: Record<string, { code: string | null; provinceId: string }> = {};
+  for (const d of allDistricts) districtById[d.id] = { code: d.code, provinceId: d.provinceId };
+
+  const icaRows = await db
+    .select({ id: facilities.id, name: facilities.facilityName, districtId: facilities.districtId })
+    .from(facilities)
+    .where(inArray(facilities.facilityName, ICA_PRESENCE_NAMES));
+  if (icaRows.length === 0) {
+    // No ICSA facilities in this DB — nothing to re-home to. Bail safely.
+    return;
+  }
+  const icaByDistrict: Record<string, string> = {};
+  const icaByProvince: Record<string, string> = {};
+  let icaKonedobuId: string | null = null;
+  for (const r of icaRows) {
+    if (!icaByDistrict[r.districtId]) icaByDistrict[r.districtId] = r.id;
+    const meta = districtById[r.districtId];
+    if (meta && !icaByProvince[meta.provinceId]) icaByProvince[meta.provinceId] = r.id;
+    if (r.name === "ICSA Konedobu Headquarters") icaKonedobuId = r.id;
+  }
+  const fallbackId = icaKonedobuId ?? icaRows[0]!.id;
+
+  // Find candidate facilities to remove (excluding the ICSA presence list).
+  const candidates = await db
+    .select({
+      id: facilities.id,
+      name: facilities.facilityName,
+      type: facilities.facilityType,
+      districtId: facilities.districtId,
+    })
+    .from(facilities)
+    .where(notInArray(facilities.facilityName, ICA_PRESENCE_NAMES));
+
+  const toRemove = candidates.filter((f) => {
+    if (f.type && NON_IMMIGRATION_FACILITY_TYPES.includes(f.type)) return true;
+    if (NON_IMMIGRATION_NAME_REGEX.test(f.name)) return true;
+    if (DEPRECATED_LEGACY_FACILITY_NAMES.includes(f.name)) return true;
+    return false;
+  });
+
+  if (toRemove.length === 0) return;
+
+  let reassigned = 0;
+  let deleted = 0;
+  for (const f of toRemove) {
+    const meta = districtById[f.districtId];
+    const target =
+      icaByDistrict[f.districtId] ??
+      (meta ? icaByProvince[meta.provinceId] : undefined) ??
+      fallbackId;
+
+    // Re-point any attached records to the target ICSA facility before delete.
+    // (Note: users → facility is via userScope, not users directly.)
+    const r1 = await db.update(assets).set({ facilityId: target }).where(eq(assets.facilityId, f.id)).returning({ id: assets.id });
+    const r2 = await db.update(userScope).set({ facilityId: target }).where(eq(userScope.facilityId, f.id)).returning({ id: userScope.id });
+    const r3 = await db.update(stockItems).set({ facilityId: target }).where(eq(stockItems.facilityId, f.id)).returning({ id: stockItems.id });
+    // stock_balances has a unique (stock_item_id, facility_id). A naive update
+    // can collide with an existing target row for the same item — so first
+    // merge the source quantity into any existing target row, delete the
+    // source rows that collided, then re-point the remainder.
+    await db.execute(sql`
+      UPDATE stock_balances tgt
+      SET quantity = tgt.quantity + src.quantity, updated_at = NOW()
+      FROM stock_balances src
+      WHERE src.facility_id = ${f.id}
+        AND tgt.facility_id = ${target}
+        AND tgt.stock_item_id = src.stock_item_id
+    `);
+    await db.execute(sql`
+      DELETE FROM stock_balances
+      WHERE facility_id = ${f.id}
+        AND stock_item_id IN (
+          SELECT stock_item_id FROM stock_balances WHERE facility_id = ${target}
+        )
+    `);
+    const r4 = await db.update(stockBalances).set({ facilityId: target }).where(eq(stockBalances.facilityId, f.id)).returning({ id: stockBalances.id });
+    const r5 = await db.update(purchaseRequests).set({ facilityId: target }).where(eq(purchaseRequests.facilityId, f.id)).returning({ id: purchaseRequests.id });
+    const r6 = await db.update(auditAssignments).set({ facilityId: target }).where(eq(auditAssignments.facilityId, f.id)).returning({ id: auditAssignments.id });
+    const r7a = await db.update(assetTransfers).set({ fromFacilityId: target }).where(eq(assetTransfers.fromFacilityId, f.id)).returning({ id: assetTransfers.id });
+    const r7b = await db.update(assetTransfers).set({ toFacilityId: target }).where(eq(assetTransfers.toFacilityId, f.id)).returning({ id: assetTransfers.id });
+    const r8a = await db.update(stockMovements).set({ fromFacilityId: target }).where(eq(stockMovements.fromFacilityId, f.id)).returning({ id: stockMovements.id });
+    const r8b = await db.update(stockMovements).set({ toFacilityId: target }).where(eq(stockMovements.toFacilityId, f.id)).returning({ id: stockMovements.id });
+    const moved = r1.length + r2.length + r3.length + r4.length + r5.length + r6.length + r7a.length + r7b.length + r8a.length + r8b.length;
+    if (moved > 0) {
+      reassigned += moved;
+      logger.info({ from: f.name, toFacilityId: target, moved }, "Auto-seed cleanup: reassigned records off non-immigration facility");
+    }
+
+    try {
+      await db.delete(facilities).where(eq(facilities.id, f.id));
+      deleted++;
+    } catch (err) {
+      logger.warn({ facility: f.name, err: (err as Error).message }, "Auto-seed cleanup: could not delete facility (likely still referenced)");
+    }
+  }
+  logger.info({ deleted, reassigned }, "Auto-seed: pruned non-immigration facilities");
 }
 
 // Maps existing PNGICA-* asset_tag → preferred ICSA presence facility name.
