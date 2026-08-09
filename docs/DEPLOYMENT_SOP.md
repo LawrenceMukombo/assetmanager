@@ -75,9 +75,21 @@ PORT=5003
 DATABASE_URL=postgresql://assetmanager:${DB_PASSWORD}@127.0.0.1:5432/assetmanager
 JWT_SECRET=${JWT_SECRET}
 APP_BASE_URL=https://assetmanager.lamtoninvestments.com
+LOCAL_OBJECT_DIR=/var/lib/assetmanager/objects
 EOF
 chmod 600 /etc/assetmanager.env
 ```
+
+Create the persistent upload directory separately from the Git checkout so
+deployments cannot disturb uploaded files:
+
+```bash
+install -d -o www-data -g www-data -m 750 /var/lib/assetmanager/objects
+```
+
+Include `/var/lib/assetmanager/objects` in the VPS backup plan. Local
+development defaults to `data/objects` under the repository when neither
+`LOCAL_OBJECT_DIR` nor `PRIVATE_OBJECT_DIR` is configured.
 
 ## 4. Install, migrate, and build
 

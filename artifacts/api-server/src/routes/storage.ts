@@ -1,7 +1,13 @@
-import { Router, type IRouter, type Request, type Response } from "express";
+import express, { Router, type IRouter, type Request, type Response } from "express";
 import { Readable } from "stream";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { ObjectPermission } from "../lib/objectAcl";
+import {
+  createLocalUploadTarget,
+  openLocalObject,
+  saveLocalUpload,
+  usesLocalObjectStorage,
+} from "../lib/localObjectStorage";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
@@ -21,6 +27,12 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
   }
 
   try {
+    if (usesLocalObjectStorage()) {
+      const target = await createLocalUploadTarget();
+      res.json({ ...target, metadata: { name, size, contentType } });
+      return;
+    }
+
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
 
@@ -34,6 +46,37 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
     res.status(500).json({ error: "Failed to generate upload URL" });
   }
 });
+
+router.put(
+  "/storage/uploads/:objectId",
+  express.raw({ type: () => true, limit: process.env.MAX_UPLOAD_SIZE || "50mb" }),
+  async (req: Request, res: Response) => {
+    if (!usesLocalObjectStorage()) {
+      res.status(404).json({ error: "Local uploads are disabled" });
+      return;
+    }
+
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      res.status(400).json({ error: "Upload body is empty" });
+      return;
+    }
+
+    try {
+      const rawObjectId = req.params.objectId;
+      const objectId = Array.isArray(rawObjectId) ? rawObjectId[0] : rawObjectId;
+      await saveLocalUpload({
+        objectId,
+        body: req.body,
+        contentType: req.get("content-type") || undefined,
+        originalName: req.get("x-file-name") || undefined,
+      });
+      res.status(201).end();
+    } catch (error) {
+      req.log.error({ err: error }, "Error saving local upload");
+      res.status(500).json({ error: "Failed to save upload" });
+    }
+  },
+);
 
 /**
  * GET /storage/public-objects/*
@@ -80,6 +123,16 @@ router.get("/storage/objects/*path", async (req: Request, res: Response) => {
   try {
     const raw = req.params.path;
     const wildcardPath = Array.isArray(raw) ? raw.join("/") : raw;
+
+    if (usesLocalObjectStorage()) {
+      const localObject = await openLocalObject(wildcardPath);
+      res.setHeader("Content-Type", localObject.contentType);
+      res.setHeader("Content-Length", String(localObject.size));
+      res.setHeader("Cache-Control", "private, max-age=3600");
+      localObject.stream.pipe(res);
+      return;
+    }
+
     const objectPath = `/objects/${wildcardPath}`;
     const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
 

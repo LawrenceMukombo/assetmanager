@@ -85,11 +85,12 @@ export default function AssetForm() {
         body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
       });
       if (!res.ok || !res.data) throw new Error(res.message || "Failed to get upload URL");
-      await fetch(res.data.uploadURL, {
+      const uploadResponse = await fetch(res.data.uploadURL, {
         method: "PUT",
         headers: { "Content-Type": file.type },
         body: file,
       });
+      if (!uploadResponse.ok) throw new Error("Failed to upload photo");
       form.setValue("photo_url", `/api/storage${res.data.objectPath}`, { shouldValidate: true, shouldDirty: true });
       toast({ title: "Photo uploaded successfully" });
     } catch {

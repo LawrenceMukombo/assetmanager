@@ -176,6 +176,7 @@ boot when missing.
 | `NODE_ENV`                     |          | `development` / `production`. Controls log level, error verbosity and the `JWT_SECRET` enforcement.                  |
 | `PUBLIC_OBJECT_SEARCH_PATHS`   |          | Comma‑separated paths in the object store served as public assets (e.g. agency logos).                              |
 | `PRIVATE_OBJECT_DIR`           |          | Object‑store directory for private uploads (asset photos, signed documents).                                        |
+| `LOCAL_OBJECT_DIR`             |          | Persistent local-filesystem directory for uploads. If neither local nor cloud storage is configured, development defaults to `data/objects`. |
 | `LOG_LEVEL`                    |          | Pino log level — `debug`, `info`, `warn`, `error`.                                                                  |
 
 Token lifetimes are **hard‑coded** today: access tokens 8 h, refresh
