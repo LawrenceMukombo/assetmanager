@@ -88,7 +88,5 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 export function resolveAppBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
   if (explicit) return explicit.replace(/\/+$/, "");
-  const replitDomain = process.env.REPLIT_DOMAINS?.split(",")[0]?.trim();
-  if (replitDomain) return `https://${replitDomain}`;
   return "http://localhost:5000";
 }

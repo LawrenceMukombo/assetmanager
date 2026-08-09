@@ -4,9 +4,9 @@
 
 The installed Windows desktop app and the Android app both ship the NPAMS UI but **do not bundle the API server or database**. They need to know where to find a backend. This document lists the three realistic deployment shapes and their trade-offs so customers (ICSA and others) can pick one per site.
 
-## Option A — Hosted Cloud Backend (Replit Deployment or other)
+## Option A — Hosted Cloud Backend
 
-A single `api-server` instance runs on Replit (or any cloud) at, e.g., `https://npams.example.gov.lk/api`. All installed clients point at it.
+A single `api-server` instance runs on your cloud provider at, e.g., `https://npams.example.gov.lk/api`. All installed clients point at it.
 
 **Pros**
 

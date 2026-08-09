@@ -385,7 +385,7 @@ const implemented = [
   ["4.12 Public QR verification page",
    "A printable QR code on every asset links to a /public/asset/:id page open to the world (no login). Auditors and field officers verify name, agency and condition on a phone in seconds."],
   ["4.13 Asset photos and documents in object storage",
-   "Browser uploads via short-lived signed URLs to Replit Object Storage / Google Cloud Storage. Public objects (logos) and private objects (asset photographs, signed documents) are served through scope-aware proxy routes."],
+   "Browser uploads via short-lived signed URLs to Google Cloud Storage. Public objects (logos) and private objects (asset photographs, signed documents) are served through scope-aware proxy routes."],
   ["4.14 Stock and inventory",
    "On-hand quantity, unit of measure, reorder level, supplier and unit cost per stock item; auto-suggested item codes of the form PNGICA-STK-014; per-facility stock balances; movement ledger (receipt / issue / transfer / adjustment) with full audit trail."],
   ["4.15 Track stock by storage location",
