@@ -43,6 +43,7 @@ command -v node
 command -v pnpm
 command -v psql
 command -v nginx
+corepack enable
 node --version
 pnpm --version
 nginx -t
