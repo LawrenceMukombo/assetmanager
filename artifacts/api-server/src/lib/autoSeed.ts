@@ -801,11 +801,8 @@ const DEPRECATED_LEGACY_FACILITY_NAMES = [
 const NON_IMMIGRATION_NAME_REGEX = /(General Hospital|Health Centre|Secondary School)$/;
 
 async function pruneNonImmigrationFacilities(): Promise<void> {
-  // Build a province → district → ICSA-presence facility lookup so we can
-  // re-home orphaned records efficiently.
-  const allDistricts = await db
-    .select({ id: districts.id, code: districts.districtCode, provinceId: districts.provinceId })
-    .from(districts);
+  // Facility pruning disabled to preserve custom facilities and support generic business/agency organizations.
+  return;
   const districtById: Record<string, { code: string | null; provinceId: string }> = {};
   for (const d of allDistricts) districtById[d.id] = { code: d.code, provinceId: d.provinceId };
 

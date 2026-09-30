@@ -22,6 +22,7 @@ import {
   PencilLine, CheckCircle2, XCircle, Truck, Package, CircleDashed,
 } from "lucide-react";
 import { SignaturePad } from "./purchase-requests";
+import { useOrganization } from "@/context/organization-context";
 
 interface PurchaseRequest {
   id: string;
@@ -80,6 +81,7 @@ export default function PurchaseRequestDetailPage() {
   const id = params.id ?? "";
   const [, navigate] = useLocation();
   const { user } = useAuth();
+  const { organization, hierarchy } = useOrganization();
 
   const { data: neighbors, loading: neighborsLoading, ctxNonce } = useNeighbors(
     id ? `/api/v1/purchase-requests/${id}/neighbors` : null,
@@ -242,11 +244,11 @@ export default function PurchaseRequestDetailPage() {
           <Field label="Quantity ordered" value={`${req.quantity.toLocaleString()} ${req.stockItem.unitOfMeasure}`} />
           <Field label="Quantity received" value={`${req.receivedQuantity.toLocaleString()} ${req.stockItem.unitOfMeasure}`} />
           <Field label="Supplier" value={req.supplier ?? "—"} />
-          <Field label="Unit cost (PGK)" value={req.unitCost ?? "—"} />
+          <Field label={`Unit cost (${organization.currencyCode})`} value={req.unitCost ?? "—"} />
           <Field label="Required by" value={req.requiredByDate ? format(new Date(req.requiredByDate), "dd MMM yyyy") : "—"} />
-          <Field label="Agency" value={req.agency?.agencyName ?? "—"} />
-          <Field label="Province" value={req.province?.provinceName ?? "—"} />
-          <Field label="Facility" value={req.facility?.facilityName ?? "—"} />
+          <Field label="Organization" value={req.agency?.agencyName ?? organization.organizationName} />
+          <Field label={hierarchy.level1} value={req.province?.provinceName ?? "—"} />
+          <Field label={hierarchy.level3} value={req.facility?.facilityName ?? "—"} />
           {req.notes && <Field className="md:col-span-2" label="Notes" value={req.notes} />}
           {req.rejectedReason && <Field className="md:col-span-2" label="Rejection reason" value={req.rejectedReason} />}
         </CardContent>

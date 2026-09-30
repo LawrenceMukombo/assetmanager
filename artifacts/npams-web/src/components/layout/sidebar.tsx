@@ -1,6 +1,8 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useProvinceBranding } from "@/hooks/use-province-branding";
+import { useOrganization } from "@/context/organization-context";
+import { Building2 } from "lucide-react";
 import { ADMIN_ROLES, OFFICER_ROLES } from "@/App";
 import { useGetNotifications, getGetNotificationsQueryKey } from "@workspace/api-client-react";
 import {
@@ -51,21 +53,23 @@ export function Sidebar() {
   });
   const unreadCount = notifications?.data?.filter((n) => !n.readStatus).length ?? 0;
 
+  const { organization, hierarchy } = useOrganization();
+
   const isNational = user?.scope_level === "national";
   const isAgency = user?.scope_level === "agency";
   const isAdmin = user?.role ? ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]) : false;
   const isOfficer = user?.role ? OFFICER_ROLES.includes(user.role as typeof OFFICER_ROLES[number]) : false;
 
   const scopeLabel = isNational
-    ? "National · ICSA"
+    ? "Headquarters"
     : isAgency
-    ? "Agency"
-    : "Provincial";
+    ? "Branch / Agency"
+    : hierarchy.level1;
 
   const userAgencyName = (user?.scope as { agency_name?: string } | undefined)?.agency_name ?? null;
   const orgName = isNational
-    ? "ICSA"
-    : branding.provinceName ?? (isAgency ? userAgencyName ?? "ICSA" : "ICSA");
+    ? organization.organizationName
+    : branding.provinceName ?? (isAgency ? userAgencyName ?? organization.organizationName : organization.organizationName);
 
   return (
     <SidebarComponent>
@@ -74,22 +78,29 @@ export function Sidebar() {
         style={{
           borderTopWidth: 4,
           borderTopStyle: "solid",
-          borderTopColor: isNational ? "#0F4C81" : "var(--province-accent, hsl(var(--primary)))",
+          borderTopColor: isNational ? (organization.primaryColor || "#0F4C81") : "var(--province-accent, hsl(var(--primary)))",
         }}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {!isNational && branding.flagUrl ? (
             <img
               src={branding.flagUrl}
               alt={`${branding.provinceName ?? scopeLabel} ${isAgency ? "logo" : "flag"}`}
               className={isAgency ? "w-10 h-10 object-contain rounded-sm bg-white p-0.5" : "w-10 h-6 object-contain rounded-sm border bg-muted"}
             />
-          ) : (
+          ) : organization.logoUrl ? (
             <img
-              src="/agencies/pngica.svg"
-              alt="ICSA — PNG Immigration & Citizenship Authority"
+              src={organization.logoUrl}
+              alt={organization.organizationName}
               className="w-10 h-10 object-contain rounded-sm bg-white p-0.5 ring-1 ring-border"
             />
+          ) : (
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-white text-xs shrink-0 shadow-sm"
+              style={{ background: organization.primaryColor || "#0F4C81" }}
+            >
+              {organization.shortCode || "AM"}
+            </div>
           )}
           <div className="flex flex-col min-w-0">
             <span className="font-semibold text-sm truncate" title={orgName}>{orgName}</span>

@@ -10,3 +10,4 @@ export * from "./activity";
 export * from "./audit";
 export * from "./maintenance";
 export * from "./stock";
+export * from "./organizationSettings";

@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { useOrganization } from "@/context/organization-context";
 import {
   ClipboardList, Check, X, PackageCheck, Plus, ShieldCheck, ChevronRight, Inbox, FileSpreadsheet, ListChecks, ShoppingCart,
 } from "lucide-react";
@@ -434,6 +435,7 @@ function NewPurchaseRequestDialog({
   open, onOpenChange, onSubmitted,
 }: { open: boolean; onOpenChange: (o: boolean) => void; onSubmitted: () => void }) {
   const { user } = useAuth();
+  const { organization } = useOrganization();
   const { toast } = useToast();
   const [stockItemId, setStockItemId] = useState<string>("");
   const [quantity, setQuantity] = useState("");
@@ -562,7 +564,7 @@ function NewPurchaseRequestDialog({
               <Input type="number" min="1" step="1" value={quantity} onChange={(e) => setQuantity(e.target.value.replace(/[^0-9]/g, ""))} />
             </div>
             <div>
-              <Label>Unit cost (PGK)</Label>
+              <Label>Unit cost ({organization.currencyCode})</Label>
               <Input value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />
             </div>
             <div className="col-span-2">

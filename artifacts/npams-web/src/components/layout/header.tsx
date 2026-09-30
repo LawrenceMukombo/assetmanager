@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProvinceBranding } from "@/hooks/use-province-branding";
+import { useOrganization } from "@/context/organization-context";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Bell, Check, CheckCheck } from "lucide-react";
 import { Link, useLocation } from "wouter";
@@ -56,17 +57,19 @@ export function Header() {
     }
   };
 
+  const { organization } = useOrganization();
+
   const headerTitle = isNational
-    ? "ICSA — Asset Management System"
+    ? `${organization.organizationName} — ${organization.systemTitle}`
     : isAgency
     ? agencyDisplayName
-      ? `${agencyDisplayName} — Asset Management System`
-      : "ICSA — Asset Management System"
+      ? `${agencyDisplayName} — ${organization.systemTitle}`
+      : `${organization.organizationName} — ${organization.systemTitle}`
     : branding.provinceName
-    ? `${branding.provinceName} — Asset Management System`
-    : "ICSA — Asset Management System";
+    ? `${branding.provinceName} — ${organization.systemTitle}`
+    : `${organization.organizationName} — ${organization.systemTitle}`;
 
-  const nationalColors = ["#0F4C81", "#FCD116", "#CE1126"];
+  const defaultColors = [organization.primaryColor || "#0F4C81", organization.accentColor || "#3B82F6"];
 
   const provinceColors = branding.flagColors?.length
     ? branding.flagColors
@@ -74,7 +77,7 @@ export function Header() {
     ? [branding.themeAccentColor]
     : [];
 
-  const accentColors = isNational ? nationalColors : provinceColors;
+  const accentColors = isNational ? defaultColors : (provinceColors.length ? provinceColors : defaultColors);
 
   const accentBarStyle =
     accentColors.length > 1

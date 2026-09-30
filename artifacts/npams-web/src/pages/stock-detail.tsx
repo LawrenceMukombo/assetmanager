@@ -28,6 +28,7 @@ import { ArrowLeft, ArrowDown, ArrowUp, ArrowLeftRight, Plus, Boxes, Pencil, Sho
 import { format } from "date-fns";
 import { ReorderDialog } from "@/components/reorder-dialog";
 import { Link as WLink } from "wouter";
+import { useOrganization } from "@/context/organization-context";
 
 type Movement = {
   id: string;
@@ -88,6 +89,7 @@ export default function StockDetailPage() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { organization, formatCurrency } = useOrganization();
   const qc = useQueryClient();
 
   const { data: neighbors, loading: neighborsLoading, ctxNonce } = useNeighbors(
@@ -344,7 +346,7 @@ export default function StockDetailPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Unit cost</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-semibold">{data.unitCost ? `K ${data.unitCost}` : "—"}</div></CardContent>
+          <CardContent><div className="text-3xl font-semibold">{data.unitCost ? formatCurrency(data.unitCost) : "—"}</div></CardContent>
         </Card>
       </div>
 
@@ -685,7 +687,7 @@ export default function StockDetailPage() {
               <Input type="number" min="0" value={editForm.reorder_level} onChange={(e) => setEditForm({ ...editForm, reorder_level: e.target.value })} />
             </div>
             <div className="col-span-1">
-              <Label>Unit cost (PGK)</Label>
+              <Label>Unit cost ({organization.currencyCode})</Label>
               <Input value={editForm.unit_cost} onChange={(e) => setEditForm({ ...editForm, unit_cost: e.target.value })} />
             </div>
             <div className="col-span-2">

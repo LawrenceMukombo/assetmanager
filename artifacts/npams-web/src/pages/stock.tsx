@@ -27,6 +27,7 @@ import { ReorderDialog, type ReorderItem } from "@/components/reorder-dialog";
 import { PageHeader } from "@/components/layout/page-header";
 import { Sparkline } from "@/components/sparkline";
 import { isCategorySpiking } from "@/lib/category-spike";
+import { useOrganization } from "@/context/organization-context";
 
 type StockBalanceSummary = {
   facilityId: string | null;
@@ -68,6 +69,7 @@ const EMPTY_FORM = {
 
 export default function StockPage() {
   const { user } = useAuth();
+  const { organization, formatCurrency } = useOrganization();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
@@ -147,9 +149,7 @@ export default function StockPage() {
   });
 
   const formatPGK = (v: string | number) => {
-    const n = typeof v === "string" ? Number(v) : v;
-    if (!Number.isFinite(n)) return "PGK 0";
-    return `PGK ${Math.round(n).toLocaleString()}`;
+    return formatCurrency(v);
   };
 
   const createMutation = useMutation({
@@ -545,7 +545,7 @@ export default function StockPage() {
               <Input type="number" value={form.reorder_level} onChange={(e) => setForm({ ...form, reorder_level: e.target.value })} />
             </div>
             <div className="col-span-1">
-              <Label>Unit cost (PGK)</Label>
+              <Label>Unit cost ({organization.currencyCode})</Label>
               <Input value={form.unit_cost} onChange={(e) => setForm({ ...form, unit_cost: e.target.value })} />
             </div>
             <div className="col-span-1">

@@ -23,6 +23,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetchJson } from "@/lib/api-fetch";
 import { FlagColorPicker } from "@/components/flag-color-picker";
+import { useOrganization } from "@/context/organization-context";
 
 interface District {
   id?: string;
@@ -53,20 +54,20 @@ interface Facility {
   assetCount?: number;
 }
 
-// NPAMS for ICSA is an immigration asset register — facility types are
-// limited to ICSA-relevant categories. Hospital / Health Centre / School /
-// etc. were removed in task #76. The underlying column remains free-form
-// (varchar) so other agencies could re-introduce their own types in future.
 const FACILITY_TYPES = [
   "Headquarters",
+  "Corporate Office",
+  "Regional Office / Hub",
+  "Branch Office",
+  "Store / Retail Outlet",
+  "Warehouse / Storage",
+  "Manufacturing / Plant",
+  "Hospital / Clinic",
+  "School / Campus",
+  "Data Center / Server Room",
   "Government Office",
-  "Regional Office",
-  "District Office",
-  "Border Post",
-  "Airport Immigration",
-  "Land Border Crossing",
-  "Sea Port Office",
-  "Warehouse",
+  "District / Field Office",
+  "Border Post / Station",
   "Other",
 ];
 
@@ -83,6 +84,7 @@ function fmtArea(a: string | null | undefined): string {
 }
 
 export default function Locations() {
+  const { hierarchy, organization } = useOrganization();
   const [selectedProvince, setSelectedProvince] = useState<string>("");
   const [selectedDistrict, setSelectedDistrict] = useState<string>("");
   const [saving, setSaving] = useState(false);
@@ -379,31 +381,31 @@ export default function Locations() {
     <div className="space-y-6">
       <PageHeader
         icon={<MapPin className="w-5 h-5" />}
-        title="Locations"
-        subtitle={<>Manage provinces, districts, and facilities across Papua New Guinea.{isSuperAdmin ? " As Super Admin you can create, edit, and delete records." : ""}</>}
+        title="Locations &amp; Hierarchy"
+        subtitle={<>Manage {hierarchy.level1Plural.toLowerCase()}, {hierarchy.level2Plural.toLowerCase()}, and {hierarchy.level3Plural.toLowerCase()} for {organization.organizationName}.{isSuperAdmin ? " As Administrator you can create, edit, and delete records." : ""}</>}
         breadcrumbs={[{ label: "Locations" }]}
       />
 
       <Tabs defaultValue="provinces" className="w-full">
         <TabsList>
-          <TabsTrigger value="provinces">Provinces</TabsTrigger>
-          <TabsTrigger value="districts">Districts</TabsTrigger>
-          <TabsTrigger value="facilities">Facilities</TabsTrigger>
+          <TabsTrigger value="provinces">{hierarchy.level1Plural}</TabsTrigger>
+          <TabsTrigger value="districts">{hierarchy.level2Plural}</TabsTrigger>
+          <TabsTrigger value="facilities">{hierarchy.level3Plural}</TabsTrigger>
         </TabsList>
 
         {/* ── PROVINCES TAB ── */}
         <TabsContent value="provinces" className="mt-6">
           <Card>
-            <CardHeader><CardTitle>All Provinces ({provincesData?.data?.length ?? 0})</CardTitle></CardHeader>
+            <CardHeader><CardTitle>All {hierarchy.level1Plural} ({provincesData?.data?.length ?? 0})</CardTitle></CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Flag</TableHead>
-                      <TableHead>Province</TableHead>
-                      <TableHead>Region</TableHead>
-                      <TableHead>Capital</TableHead>
+                      <TableHead>Flag / Icon</TableHead>
+                      <TableHead>{hierarchy.level1}</TableHead>
+                      <TableHead>Region / Group</TableHead>
+                      <TableHead>Capital / Hub</TableHead>
                       <TableHead className="text-right">Population</TableHead>
                       <TableHead className="text-right">Area</TableHead>
                       <TableHead>Colors</TableHead>
@@ -464,12 +466,12 @@ export default function Locations() {
         <TabsContent value="districts" className="mt-6 space-y-4">
           <div className="flex flex-wrap items-center gap-3 justify-between">
             <Select onValueChange={val => { setSelectedProvince(val); setSelectedDistrict(""); }} value={selectedProvince}>
-              <SelectTrigger className="w-full sm:w-[300px]"><SelectValue placeholder="Select Province" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[300px]"><SelectValue placeholder={`Select ${hierarchy.level1}`} /></SelectTrigger>
               <SelectContent>{provincesData?.data?.map(p => <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>)}</SelectContent>
             </Select>
             {isSuperAdmin && selectedProvince && (
               <Button onClick={() => { setAddDistrictForm({ districtName: "", districtCode: "", population: "", areaKm2: "", description: "" }); setShowAddDistrict(true); }}>
-                <Plus className="w-4 h-4 mr-2" /> Add District
+                <Plus className="w-4 h-4 mr-2" /> Add {hierarchy.level2}
               </Button>
             )}
           </div>
@@ -480,24 +482,24 @@ export default function Locations() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>District</TableHead>
+                      <TableHead>{hierarchy.level2}</TableHead>
                       <TableHead>Code</TableHead>
                       <TableHead className="text-right">Population</TableHead>
                       <TableHead className="text-right">Area</TableHead>
-                      <TableHead className="text-right">Facilities</TableHead>
+                      <TableHead className="text-right">{hierarchy.level3Plural}</TableHead>
                       <TableHead className="text-right">Assets</TableHead>
                       {isSuperAdmin && <TableHead />}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {!selectedProvince ? (
-                      <TableRow><TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-10 text-muted-foreground">Select a province to view its districts.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-10 text-muted-foreground">Select a {hierarchy.level1.toLowerCase()} to view {hierarchy.level2Plural.toLowerCase()}.</TableCell></TableRow>
                     ) : dLoading ? (
                       Array.from({ length: 4 }).map((_, i) => (
                         <TableRow key={i}><TableCell colSpan={isSuperAdmin ? 7 : 6}><Skeleton className="h-4 w-full" /></TableCell></TableRow>
                       ))
                     ) : districtsData?.data?.length === 0 ? (
-                      <TableRow><TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-10 text-muted-foreground">No districts found.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-10 text-muted-foreground">No {hierarchy.level2Plural.toLowerCase()} found.</TableCell></TableRow>
                     ) : districtsData?.data?.map(d => {
                       const dExt = d as unknown as District;
                       return (
@@ -538,17 +540,17 @@ export default function Locations() {
           <div className="flex flex-wrap items-center gap-3 justify-between">
             <div className="flex flex-wrap gap-3">
               <Select onValueChange={val => { setSelectedProvince(val); setSelectedDistrict(""); }} value={selectedProvince}>
-                <SelectTrigger className="w-full sm:w-[260px]"><SelectValue placeholder="Select Province" /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-[260px]"><SelectValue placeholder={`Select ${hierarchy.level1}`} /></SelectTrigger>
                 <SelectContent>{provincesData?.data?.map(p => <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>)}</SelectContent>
               </Select>
               <Select onValueChange={setSelectedDistrict} value={selectedDistrict} disabled={!selectedProvince}>
-                <SelectTrigger className="w-full sm:w-[260px]"><SelectValue placeholder="Select District" /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-[260px]"><SelectValue placeholder={`Select ${hierarchy.level2}`} /></SelectTrigger>
                 <SelectContent>{districtsData?.data?.map(d => <SelectItem key={d.id} value={d.id!}>{d.districtName}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             {isSuperAdmin && selectedDistrict && (
               <Button onClick={() => { setAddFacilityForm({ facilityName: "", facilityType: "", address: "", description: "", contactPhone: "", contactEmail: "", capacity: "", gpsLatitude: "", gpsLongitude: "" }); setShowAddFacility(true); }}>
-                <Plus className="w-4 h-4 mr-2" /> Add Facility
+                <Plus className="w-4 h-4 mr-2" /> Add {hierarchy.level3}
               </Button>
             )}
           </div>
@@ -559,7 +561,7 @@ export default function Locations() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Facility</TableHead>
+                      <TableHead>{hierarchy.level3}</TableHead>
                       <TableHead>Type</TableHead>
                       <TableHead>Contact</TableHead>
                       <TableHead className="text-right">Capacity</TableHead>
@@ -570,13 +572,13 @@ export default function Locations() {
                   </TableHeader>
                   <TableBody>
                     {!selectedDistrict ? (
-                      <TableRow><TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-10 text-muted-foreground">Select a district to view facilities.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-10 text-muted-foreground">Select a {hierarchy.level2.toLowerCase()} to view {hierarchy.level3Plural.toLowerCase()}.</TableCell></TableRow>
                     ) : fLoading ? (
                       Array.from({ length: 4 }).map((_, i) => (
                         <TableRow key={i}><TableCell colSpan={isSuperAdmin ? 7 : 6}><Skeleton className="h-4 w-full" /></TableCell></TableRow>
                       ))
                     ) : facilitiesData?.data?.length === 0 ? (
-                      <TableRow><TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-10 text-muted-foreground">No facilities found.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-10 text-muted-foreground">No {hierarchy.level3Plural.toLowerCase()} found.</TableCell></TableRow>
                     ) : facilitiesData?.data?.map(f => {
                       const fExt = f as unknown as Facility;
                       return (
@@ -634,16 +636,16 @@ export default function Locations() {
         <Dialog open onOpenChange={open => { if (!open) setEditProvince(null); }}>
           <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
             <DialogHeader>
-              <DialogTitle>Edit Province — {editProvince.provinceName}</DialogTitle>
+              <DialogTitle>Edit {hierarchy.level1} — {editProvince.provinceName}</DialogTitle>
             </DialogHeader>
             <div className="overflow-y-auto pr-1 space-y-5 py-2">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <Label>Province Name</Label>
+                  <Label>{hierarchy.level1} Name</Label>
                   <Input value={editProvinceForm.provinceName} onChange={e => setEditProvinceForm(f => ({ ...f, provinceName: e.target.value }))} />
                 </div>
                 <div className="space-y-1">
-                  <Label>Region</Label>
+                  <Label>Region / Division</Label>
                   <Select value={editProvinceForm.region || "_none"} onValueChange={v => setEditProvinceForm(f => ({ ...f, region: v === "_none" ? "" : v }))}>
                     <SelectTrigger><SelectValue placeholder="Select region" /></SelectTrigger>
                     <SelectContent>
@@ -653,8 +655,8 @@ export default function Locations() {
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label>Capital City</Label>
-                  <Input placeholder="e.g. Port Moresby" value={editProvinceForm.capitalCity} onChange={e => setEditProvinceForm(f => ({ ...f, capitalCity: e.target.value }))} />
+                  <Label>Capital / Main City</Label>
+                  <Input placeholder="e.g. Headquarters / Capital" value={editProvinceForm.capitalCity} onChange={e => setEditProvinceForm(f => ({ ...f, capitalCity: e.target.value }))} />
                 </div>
                 <div className="space-y-1">
                   <Label>Population</Label>
@@ -665,20 +667,20 @@ export default function Locations() {
                   <Input type="number" placeholder="e.g. 29500.5" value={editProvinceForm.areaKm2} onChange={e => setEditProvinceForm(f => ({ ...f, areaKm2: e.target.value }))} />
                 </div>
                 <div className="space-y-1">
-                  <Label>Flag Image URL</Label>
+                  <Label>Flag / Emblem URL</Label>
                   <Input placeholder="/flags/province.svg" value={editProvinceForm.flagUrl} onChange={e => setEditProvinceForm(f => ({ ...f, flagUrl: e.target.value }))} />
                 </div>
               </div>
               <div className="space-y-1">
                 <Label>Description</Label>
-                <Textarea rows={3} placeholder="Brief description of the province..." value={editProvinceForm.description} onChange={e => setEditProvinceForm(f => ({ ...f, description: e.target.value }))} />
+                <Textarea rows={3} placeholder={`Brief description of the ${hierarchy.level1.toLowerCase()}...`} value={editProvinceForm.description} onChange={e => setEditProvinceForm(f => ({ ...f, description: e.target.value }))} />
               </div>
               {editProvinceForm.flagUrl && (
                 <FlagColorPicker flagUrl={editProvinceForm.flagUrl} currentCount={editProvinceForm.flagColors.length} maxColors={8} onColorPicked={hex => { if (editProvinceForm.flagColors.length < 8) setEditProvinceForm(f => ({ ...f, flagColors: [...f.flagColors, hex] })); }} />
               )}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>Flag Colors</Label>
+                  <Label>Emblem / Theme Colors</Label>
                   {editProvinceForm.flagColors.length < 8 && (
                     <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => setEditProvinceForm(f => ({ ...f, flagColors: [...f.flagColors, "#000000"] }))}>
                       <Plus className="w-3 h-3 mr-1" /> Add Color
@@ -700,7 +702,7 @@ export default function Locations() {
                       <div className="flex rounded overflow-hidden border h-6 flex-1">{editProvinceForm.flagColors.map((c, i) => <div key={i} className="flex-1" style={{ backgroundColor: c }} />)}</div>
                     </div>
                   </div>
-                ) : <p className="text-xs text-muted-foreground">Click the flag image above to sample colors.</p>}
+                ) : <p className="text-xs text-muted-foreground">Click the emblem image above to sample colors.</p>}
               </div>
             </div>
             <DialogFooter>
@@ -715,7 +717,7 @@ export default function Locations() {
       {isSuperAdmin && editDistrict && (
         <Dialog open onOpenChange={open => { if (!open) setEditDistrict(null); }}>
           <DialogContent className="max-w-lg">
-            <DialogHeader><DialogTitle>Edit District — {editDistrict.districtName}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>Edit {hierarchy.level2} — {editDistrict.districtName}</DialogTitle></DialogHeader>
             <DistrictForm form={editDistrictForm} setForm={setEditDistrictForm} />
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditDistrict(null)}>Cancel</Button>
@@ -729,11 +731,11 @@ export default function Locations() {
       {isSuperAdmin && showAddDistrict && (
         <Dialog open onOpenChange={open => { if (!open) setShowAddDistrict(false); }}>
           <DialogContent className="max-w-lg">
-            <DialogHeader><DialogTitle>Add New District</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>Add New {hierarchy.level2}</DialogTitle></DialogHeader>
             <DistrictForm form={addDistrictForm} setForm={setAddDistrictForm} />
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowAddDistrict(false)}>Cancel</Button>
-              <Button onClick={handleAddDistrict} disabled={saving || !addDistrictForm.districtName}>{saving ? "Creating…" : "Create District"}</Button>
+              <Button onClick={handleAddDistrict} disabled={saving || !addDistrictForm.districtName}>{saving ? "Creating…" : `Create ${hierarchy.level2}`}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -744,10 +746,10 @@ export default function Locations() {
         <Dialog open onOpenChange={open => { if (!open) setDeleteDistrict(null); }}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Delete District</DialogTitle>
+              <DialogTitle>Delete {hierarchy.level2}</DialogTitle>
               <DialogDescription>
                 Are you sure you want to delete <strong>{deleteDistrict.districtName}</strong>?
-                {(deleteDistrict.facilityCount ?? 0) > 0 && ` This district has ${deleteDistrict.facilityCount} facilities — delete them first.`}
+                {(deleteDistrict.facilityCount ?? 0) > 0 && ` This ${hierarchy.level2.toLowerCase()} has ${deleteDistrict.facilityCount} ${hierarchy.level3Plural.toLowerCase()} — delete them first.`}
                 {(deleteDistrict.assetCount ?? 0) > 0 && ` There are ${deleteDistrict.assetCount} assets linked to it — reassign them first.`}
               </DialogDescription>
             </DialogHeader>
@@ -765,7 +767,7 @@ export default function Locations() {
       {isSuperAdmin && editFacility && (
         <Dialog open onOpenChange={open => { if (!open) setEditFacility(null); }}>
           <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-            <DialogHeader><DialogTitle>Edit Facility — {editFacility.facilityName}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>Edit {hierarchy.level3} — {editFacility.facilityName}</DialogTitle></DialogHeader>
             <div className="overflow-y-auto pr-1">
               <FacilityForm form={editFacilityForm} setForm={setEditFacilityForm} />
             </div>
@@ -781,13 +783,13 @@ export default function Locations() {
       {isSuperAdmin && showAddFacility && (
         <Dialog open onOpenChange={open => { if (!open) setShowAddFacility(false); }}>
           <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-            <DialogHeader><DialogTitle>Add New Facility</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>Add New {hierarchy.level3}</DialogTitle></DialogHeader>
             <div className="overflow-y-auto pr-1">
               <FacilityForm form={addFacilityForm} setForm={setAddFacilityForm} />
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowAddFacility(false)}>Cancel</Button>
-              <Button onClick={handleAddFacility} disabled={saving || !addFacilityForm.facilityName}>{saving ? "Creating…" : "Create Facility"}</Button>
+              <Button onClick={handleAddFacility} disabled={saving || !addFacilityForm.facilityName}>{saving ? "Creating…" : `Create ${hierarchy.level3}`}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -798,7 +800,7 @@ export default function Locations() {
         <Dialog open onOpenChange={open => { if (!open) setDeleteFacility(null); }}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Delete Facility</DialogTitle>
+              <DialogTitle>Delete {hierarchy.level3}</DialogTitle>
               <DialogDescription>Delete <strong>{deleteFacility.facilityName}</strong>? Any assets assigned to it will be unlinked (not deleted).</DialogDescription>
             </DialogHeader>
             <DialogFooter>
@@ -817,16 +819,17 @@ export default function Locations() {
 type DistrictFormState = { districtName: string; districtCode: string; population: string; areaKm2: string; description: string };
 
 function DistrictForm({ form, setForm }: { form: DistrictFormState; setForm: React.Dispatch<React.SetStateAction<DistrictFormState>> }) {
+  const { hierarchy } = useOrganization();
   return (
     <div className="space-y-4 py-2">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
-          <Label>District Name <span className="text-destructive">*</span></Label>
-          <Input value={form.districtName} onChange={e => setForm(f => ({ ...f, districtName: e.target.value }))} placeholder="e.g. Lae District" />
+          <Label>{hierarchy.level2} Name <span className="text-destructive">*</span></Label>
+          <Input value={form.districtName} onChange={e => setForm(f => ({ ...f, districtName: e.target.value }))} placeholder={`e.g. Central ${hierarchy.level2}`} />
         </div>
         <div className="space-y-1">
-          <Label>District Code</Label>
-          <Input value={form.districtCode} onChange={e => setForm(f => ({ ...f, districtCode: e.target.value }))} placeholder="e.g. MO-LAE" />
+          <Label>{hierarchy.level2} Code</Label>
+          <Input value={form.districtCode} onChange={e => setForm(f => ({ ...f, districtCode: e.target.value }))} placeholder="e.g. DIV-01" />
         </div>
         <div className="space-y-1">
           <Label><Users className="inline w-3 h-3 mr-1" />Population</Label>
@@ -839,7 +842,7 @@ function DistrictForm({ form, setForm }: { form: DistrictFormState; setForm: Rea
       </div>
       <div className="space-y-1">
         <Label>Description</Label>
-        <Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Brief description of the district..." />
+        <Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder={`Brief description of the ${hierarchy.level2.toLowerCase()}...`} />
       </div>
     </div>
   );
@@ -848,15 +851,16 @@ function DistrictForm({ form, setForm }: { form: DistrictFormState; setForm: Rea
 type FacilityFormState = { facilityName: string; facilityType: string; address: string; description: string; contactPhone: string; contactEmail: string; capacity: string; gpsLatitude: string; gpsLongitude: string };
 
 function FacilityForm({ form, setForm }: { form: FacilityFormState; setForm: React.Dispatch<React.SetStateAction<FacilityFormState>> }) {
+  const { hierarchy } = useOrganization();
   return (
     <div className="space-y-4 py-2">
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2 space-y-1">
-          <Label>Facility Name <span className="text-destructive">*</span></Label>
-          <Input value={form.facilityName} onChange={e => setForm(f => ({ ...f, facilityName: e.target.value }))} placeholder="e.g. Daru Sea Port Office" />
+          <Label>{hierarchy.level3} Name <span className="text-destructive">*</span></Label>
+          <Input value={form.facilityName} onChange={e => setForm(f => ({ ...f, facilityName: e.target.value }))} placeholder={`e.g. Main ${hierarchy.level3} Office`} />
         </div>
         <div className="space-y-1">
-          <Label><Building2 className="inline w-3 h-3 mr-1" />Facility Type</Label>
+          <Label><Building2 className="inline w-3 h-3 mr-1" />{hierarchy.level3} Type</Label>
           <Select value={form.facilityType || "_none"} onValueChange={v => setForm(f => ({ ...f, facilityType: v === "_none" ? "" : v }))}>
             <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
             <SelectContent>
@@ -871,15 +875,15 @@ function FacilityForm({ form, setForm }: { form: FacilityFormState; setForm: Rea
         </div>
         <div className="col-span-2 space-y-1">
           <Label><MapPin className="inline w-3 h-3 mr-1" />Address</Label>
-          <Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="e.g. Milfordhaven Road, Lae" />
+          <Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="e.g. 123 Business Avenue" />
         </div>
         <div className="space-y-1">
           <Label><Phone className="inline w-3 h-3 mr-1" />Contact Phone</Label>
-          <Input value={form.contactPhone} onChange={e => setForm(f => ({ ...f, contactPhone: e.target.value }))} placeholder="+675 xxx xxxx" />
+          <Input value={form.contactPhone} onChange={e => setForm(f => ({ ...f, contactPhone: e.target.value }))} placeholder="+1 xxx xxx xxxx" />
         </div>
         <div className="space-y-1">
           <Label><Mail className="inline w-3 h-3 mr-1" />Contact Email</Label>
-          <Input type="email" value={form.contactEmail} onChange={e => setForm(f => ({ ...f, contactEmail: e.target.value }))} placeholder="contact@facility.gov.pg" />
+          <Input type="email" value={form.contactEmail} onChange={e => setForm(f => ({ ...f, contactEmail: e.target.value }))} placeholder="contact@organization.org" />
         </div>
         <div className="space-y-1">
           <Label><Navigation className="inline w-3 h-3 mr-1" />GPS Latitude</Label>
@@ -892,7 +896,7 @@ function FacilityForm({ form, setForm }: { form: FacilityFormState; setForm: Rea
       </div>
       <div className="space-y-1">
         <Label>Description</Label>
-        <Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Brief description of the facility..." />
+        <Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder={`Brief description of the ${hierarchy.level3.toLowerCase()}...`} />
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { apiFetch, apiFetchJson } from "@/lib/api-fetch";
 import { statusBadgeClass } from "@/lib/status";
+import { useOrganization } from "@/context/organization-context";
 
 interface AssetReportRow {
   asset_tag?: string;
@@ -36,34 +37,48 @@ interface AssetReportRow {
 }
 
 let crestDataUrlCache: string | null = null;
-async function loadCrestDataUrl(): Promise<string | null> {
-  if (crestDataUrlCache) return crestDataUrlCache;
+let lastLogoUrl: string | null = null;
+
+async function loadCrestDataUrl(customLogoUrl?: string | null): Promise<string | null> {
+  const targetUrl = customLogoUrl || `${import.meta.env.BASE_URL ?? "/"}agencies/pngica.svg`;
+  if (crestDataUrlCache && lastLogoUrl === targetUrl) return crestDataUrlCache;
   try {
-    const base = import.meta.env.BASE_URL ?? "/";
-    const res = await fetch(`${base}agencies/pngica.svg`);
+    const res = await fetch(targetUrl);
     if (!res.ok) return null;
-    const svgText = await res.text();
-    const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`;
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const size = 256;
-        const canvas = document.createElement("canvas");
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          reject(new Error("no 2d context"));
-          return;
-        }
-        ctx.drawImage(img, 0, 0, size, size);
-        resolve(canvas.toDataURL("image/png"));
-      };
-      img.onerror = reject;
-      img.src = svgUrl;
-    });
-    crestDataUrlCache = dataUrl;
-    return dataUrl;
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("image/svg") || targetUrl.endsWith(".svg")) {
+      const svgText = await res.text();
+      const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`;
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const size = 256;
+          const canvas = document.createElement("canvas");
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { reject(new Error("no 2d context")); return; }
+          ctx.drawImage(img, 0, 0, size, size);
+          resolve(canvas.toDataURL("image/png"));
+        };
+        img.onerror = reject;
+        img.src = svgUrl;
+      });
+      crestDataUrlCache = dataUrl;
+      lastLogoUrl = targetUrl;
+      return dataUrl;
+    } else {
+      const blob = await res.blob();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      crestDataUrlCache = dataUrl;
+      lastLogoUrl = targetUrl;
+      return dataUrl;
+    }
   } catch {
     return null;
   }
@@ -80,6 +95,7 @@ interface SummaryRow {
 
 export default function Reports() {
   const { user } = useAuth();
+  const { organization, hierarchy, formatCurrency } = useOrganization();
   const isNational = user?.scope_level === "national";
   const { toast } = useToast();
   const [reportData, setReportData] = useState<AssetReportRow[] | null>(null);
@@ -271,17 +287,17 @@ export default function Reports() {
   };
 
   const buildAssetRegisterPdf = async (items: AssetReportRow[]): Promise<jsPDF> => {
-    const crestDataUrl = await loadCrestDataUrl();
+    const crestDataUrl = await loadCrestDataUrl(organization.logoUrl);
 
     const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
 
-    const generatedLine = `Generated: ${new Date().toLocaleDateString("en-PG", { year: "numeric", month: "long", day: "numeric" })}${user?.full_name ? `   |   Prepared by: ${user.full_name}` : ""}`;
+    const generatedLine = `Generated: ${new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}${user?.full_name ? `   |   Prepared by: ${user.full_name}` : ""}`;
 
     autoTable(doc, {
       startY: 90,
-      head: [["Asset Name", "Tag", "Category", "Status", "Condition", "Province", "Facility", "Purchase Cost"]],
+      head: [["Asset Name", "Tag", "Category", "Status", "Condition", hierarchy.level1, hierarchy.level3, `Cost (${organization.currencyCode})`]],
       body: items.map(row => [
         row.asset_name ?? "—",
         row.asset_tag ?? "—",
@@ -290,7 +306,7 @@ export default function Reports() {
         row.condition ?? "—",
         row.province_name ?? "—",
         row.facility_name ?? row.district_name ?? "—",
-        formatCurrency(row.purchase_cost),
+        row.purchase_cost ? formatCurrency(row.purchase_cost) : "—",
       ]),
       styles: { fontSize: 7.5, cellPadding: 4 },
       headStyles: { fillColor: [15, 76, 129], textColor: 255, fontStyle: "bold" },
@@ -303,7 +319,7 @@ export default function Reports() {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(16);
         doc.setTextColor(15, 76, 129);
-        doc.text("ICSA — Asset Register", pageWidth / 2, 44, { align: "center" });
+        doc.text(`${organization.shortCode || organization.organizationName} — Asset Register`, pageWidth / 2, 44, { align: "center" });
         doc.setFont("helvetica", "normal");
         doc.setFontSize(9);
         doc.setTextColor(100);
@@ -318,7 +334,7 @@ export default function Reports() {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(8);
         doc.setTextColor(100);
-        doc.text("ICSA — Immigration & Citizenship Service Authority", 30, pageHeight - 18);
+        doc.text(`${organization.organizationName}${organization.tagline ? ` — ${organization.tagline}` : ""}`, 30, pageHeight - 18);
         doc.text(`Page ${pageNum} of ${pageCount}`, pageWidth - 30, pageHeight - 18, { align: "right" });
         doc.setTextColor(0);
       },
@@ -400,13 +416,6 @@ export default function Reports() {
     }
   };
 
-  const formatCurrency = (val?: string | number) => {
-    if (!val) return "—";
-    const num = typeof val === "string" ? parseFloat(val) : val;
-    if (isNaN(num)) return val as string;
-    return `PGK ${num.toLocaleString("en-PG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -433,25 +442,25 @@ export default function Reports() {
             </Select>
 
             <Select value={provinceId || "_none"} onValueChange={v => { if (v === "_none") { setProvinceId(""); setDistrictId(""); setFacilityId(""); } else { setProvinceId(v); setDistrictId(""); setFacilityId(""); } }}>
-              <SelectTrigger className="h-8 w-[190px] text-sm"><SelectValue placeholder="All Provinces" /></SelectTrigger>
+              <SelectTrigger className="h-8 w-[190px] text-sm"><SelectValue placeholder={`All ${hierarchy.level1Plural}`} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="_none">All Provinces</SelectItem>
+                <SelectItem value="_none">All {hierarchy.level1Plural}</SelectItem>
                 {filteredProvinces.map(p => <SelectItem key={p.id} value={p.id}>{p.provinceName}</SelectItem>)}
               </SelectContent>
             </Select>
 
             <Select value={districtId || "_none"} onValueChange={v => { if (v === "_none") { setDistrictId(""); setFacilityId(""); } else { setDistrictId(v); setFacilityId(""); } }} disabled={!provinceId}>
-              <SelectTrigger className="h-8 w-[180px] text-sm"><SelectValue placeholder={!provinceId ? "Select province first" : "All Districts"} /></SelectTrigger>
+              <SelectTrigger className="h-8 w-[180px] text-sm"><SelectValue placeholder={!provinceId ? `Select ${hierarchy.level1.toLowerCase()} first` : `All ${hierarchy.level2Plural}`} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="_none">All Districts</SelectItem>
+                <SelectItem value="_none">All {hierarchy.level2Plural}</SelectItem>
                 {districtsList.map(d => <SelectItem key={d.id} value={d.id}>{d.districtName}</SelectItem>)}
               </SelectContent>
             </Select>
 
             <Select value={facilityId || "_none"} onValueChange={v => { if (v === "_none") { setFacilityId(""); } else { setFacilityId(v); } }} disabled={!districtId}>
-              <SelectTrigger className="h-8 w-[180px] text-sm"><SelectValue placeholder={!districtId ? "Select district first" : "All Facilities"} /></SelectTrigger>
+              <SelectTrigger className="h-8 w-[180px] text-sm"><SelectValue placeholder={!districtId ? `Select ${hierarchy.level2.toLowerCase()} first` : `All ${hierarchy.level3Plural}`} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="_none">All Facilities</SelectItem>
+                <SelectItem value="_none">All {hierarchy.level3Plural}</SelectItem>
                 {facilitiesList.map(f => <SelectItem key={f.id} value={f.id}>{f.facilityName}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -521,9 +530,9 @@ export default function Reports() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-primary" /> Province Comparison
+                <FileText className="w-5 h-5 text-primary" /> {hierarchy.level1} Comparison
               </CardTitle>
-              <CardDescription>Compare asset metrics and values across all 22 provinces.</CardDescription>
+              <CardDescription>Compare asset metrics and values across all {hierarchy.level1Plural.toLowerCase()}.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <Button
@@ -532,7 +541,7 @@ export default function Reports() {
                 disabled={loadingSummary}
               >
                 <Download className="w-4 h-4 mr-2" />
-                {loadingSummary ? "Exporting..." : "Export Comparison (CSV)"}
+                {loadingSummary ? "Exporting..." : `Export ${hierarchy.level1} Comparison (CSV)`}
               </Button>
             </CardContent>
           </Card>
@@ -652,9 +661,9 @@ export default function Reports() {
                   <TableHead>Tag</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Province</TableHead>
-                  <TableHead>Facility</TableHead>
-                  <TableHead>Purchase Cost</TableHead>
+                  <TableHead>{hierarchy.level1}</TableHead>
+                  <TableHead>{hierarchy.level3}</TableHead>
+                  <TableHead>Cost ({organization.currencyCode})</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

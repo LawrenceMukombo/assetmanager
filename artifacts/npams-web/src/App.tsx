@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { ProvinceBrandingProvider } from "@/hooks/use-province-branding";
+import { OrganizationProvider } from "@/context/organization-context";
 import Login from "@/pages/login";
 import ResetPassword from "@/pages/reset-password";
 import { AppShell } from "@/components/layout/app-shell";
@@ -132,11 +133,13 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <ProvinceBrandingProvider>
-            <AuthProvider>
-              <Router />
-            </AuthProvider>
-          </ProvinceBrandingProvider>
+          <OrganizationProvider>
+            <ProvinceBrandingProvider>
+              <AuthProvider>
+                <Router />
+              </AuthProvider>
+            </ProvinceBrandingProvider>
+          </OrganizationProvider>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

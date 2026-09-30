@@ -16,6 +16,7 @@ import agencyRouter from "./agency";
 import stockRouter from "./stock";
 import purchaseRequestsRouter from "./purchase-requests";
 import systemRouter from "./system";
+import organizationRouter from "./organization";
 
 const router: IRouter = Router();
 
@@ -36,5 +37,6 @@ router.use(agencyRouter);
 router.use(stockRouter);
 router.use(purchaseRequestsRouter);
 router.use(systemRouter);
+router.use(organizationRouter);
 
 export default router;

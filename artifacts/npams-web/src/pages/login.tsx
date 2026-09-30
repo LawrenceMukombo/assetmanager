@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { useOrganization } from "@/context/organization-context";
+import { Building2, ShieldCheck, Loader2 } from "lucide-react";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/hooks/use-auth";
@@ -21,7 +23,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { ShieldCheck, Loader2 } from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -40,6 +41,8 @@ export default function Login() {
   const [forgotSubmitting, setForgotSubmitting] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotError, setForgotError] = useState<string | null>(null);
+
+  const { organization } = useOrganization();
 
   const openForgotDialog = (open: boolean) => {
     setShowForgotDialog(open);
@@ -90,7 +93,7 @@ export default function Login() {
     setIsLoading(true);
     try {
       await login(values);
-      toast({ title: "Login successful", description: "Welcome to ICSA Asset Management." });
+      toast({ title: "Login successful", description: `Welcome to ${organization.organizationName}.` });
     } catch (error: unknown) {
       toast({
         variant: "destructive",
@@ -107,14 +110,12 @@ export default function Login() {
       <div
         className="absolute inset-0 pointer-events-none opacity-80"
         style={{
-          background:
-            "radial-gradient(ellipse at 20% 20%, rgba(15,76,129,0.35) 0%, transparent 55%), radial-gradient(ellipse at 85% 80%, rgba(252,209,22,0.10) 0%, transparent 50%)",
+          background: `radial-gradient(ellipse at 20% 20%, ${organization.primaryColor}33 0%, transparent 55%), radial-gradient(ellipse at 85% 80%, ${organization.accentColor}22 0%, transparent 50%)`,
         }}
       />
       <div className="absolute inset-x-0 top-0 h-1 flex" aria-hidden>
-        <div className="flex-1" style={{ background: "#000000" }} />
-        <div className="flex-1" style={{ background: "#FCD116" }} />
-        <div className="flex-1" style={{ background: "#CE1126" }} />
+        <div className="flex-1" style={{ background: organization.primaryColor || "#0F4C81" }} />
+        <div className="flex-1" style={{ background: organization.accentColor || "#3B82F6" }} />
       </div>
 
       <div className="relative w-full max-w-[420px]">
@@ -122,36 +123,38 @@ export default function Login() {
           <div
             className="px-8 pt-8 pb-6 flex flex-col items-center text-center border-b"
             style={{
-              background:
-                "linear-gradient(180deg, rgba(15,76,129,0.12) 0%, transparent 100%)",
+              background: `linear-gradient(180deg, ${organization.primaryColor}18 0%, transparent 100%)`,
             }}
           >
             <div className="relative w-24 h-24 rounded-2xl flex items-center justify-center mb-4 overflow-hidden bg-white ring-1 ring-border shadow-sm p-2">
-              {logoError ? (
-                <div
-                  className="w-full h-full flex items-center justify-center text-sm font-bold rounded-lg"
-                  style={{ background: "#0F4C81", color: "#FCD116" }}
-                >
-                  ICSA
-                </div>
-              ) : (
+              {organization.logoUrl && !logoError ? (
                 <img
-                  src="/agencies/pngica.svg"
-                  alt="PNG Immigration & Citizenship Authority"
+                  src={organization.logoUrl}
+                  alt={organization.organizationName}
                   className="w-full h-full object-contain"
                   onError={() => setLogoError(true)}
                 />
+              ) : (
+                <div
+                  className="w-full h-full flex flex-col items-center justify-center text-base font-bold rounded-lg p-1 text-center shadow-inner"
+                  style={{ background: organization.primaryColor || "#0F4C81", color: "#FFFFFF" }}
+                >
+                  <Building2 className="w-6 h-6 mb-0.5 opacity-80" />
+                  <span className="text-xs uppercase tracking-wider">{organization.shortCode || "AM"}</span>
+                </div>
               )}
             </div>
-            <h1 className="text-xl font-semibold tracking-tight" style={{ color: "#0F4C81" }}>
-              PNG Immigration &amp; Citizenship Authority
+            <h1 className="text-xl font-semibold tracking-tight" style={{ color: organization.primaryColor || "#0F4C81" }}>
+              {organization.organizationName}
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Asset Management System
+            <p className="text-sm text-muted-foreground mt-1 font-medium">
+              {organization.systemTitle || "Asset Management System"}
             </p>
-            <p className="text-xs text-muted-foreground/70 mt-0.5">
-              Independent State of Papua New Guinea
-            </p>
+            {organization.tagline && (
+              <p className="text-xs text-muted-foreground/80 mt-0.5">
+                {organization.tagline}
+              </p>
+            )}
           </div>
 
           <div className="px-8 py-7">

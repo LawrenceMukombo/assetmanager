@@ -11,6 +11,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { ShieldCheck } from "lucide-react";
+import { useOrganization } from "@/context/organization-context";
 
 export type ReorderItem = {
   id: string;
@@ -42,6 +43,7 @@ function suggestedQty(it: ReorderItem): number {
 export function ReorderDialog({ item, open, onOpenChange }: Props) {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { organization } = useOrganization();
   const qc = useQueryClient();
   const [quantity, setQuantity] = useState("");
   const [supplier, setSupplier] = useState("");
@@ -112,7 +114,7 @@ export function ReorderDialog({ item, open, onOpenChange }: Props) {
                 <Input type="number" min="1" step="1" value={quantity} onChange={(e) => setQuantity(e.target.value.replace(/[^0-9]/g, ""))} />
               </div>
               <div className="col-span-1">
-                <Label>Unit cost (PGK)</Label>
+                <Label>Unit cost ({organization.currencyCode})</Label>
                 <Input value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />
               </div>
               <div className="col-span-2">
