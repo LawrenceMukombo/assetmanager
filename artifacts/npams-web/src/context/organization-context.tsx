@@ -170,17 +170,25 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         ? `/api/v1/public/organization?agencyId=${encodeURIComponent(activeId)}`
         : "/api/v1/public/organization";
 
-      const res = await apiFetchJson<{ success: boolean; data: OrganizationSettings }>(url);
-      if (res.ok && res.data?.data) {
-        const merged: OrganizationSettings = { ...DEFAULT_ORGANIZATION, ...res.data.data };
-        setOrganization(merged);
-        applyOrganizationEffects(merged);
+      const res = await apiFetchJson<any>(url);
+      if (res.ok && res.data) {
+        const raw = res.data.data !== undefined && res.data.data !== null ? res.data.data : res.data;
+        if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+          const merged: OrganizationSettings = { ...DEFAULT_ORGANIZATION, ...raw };
+          setOrganization(merged);
+          applyOrganizationEffects(merged);
+        }
       }
 
       // Also fetch list of all organizations for the switcher
-      const orgsRes = await apiFetchJson<{ success: boolean; data: OrganizationSummary[] }>("/api/v1/organizations");
-      if (orgsRes.ok && Array.isArray(orgsRes.data?.data)) {
-        setAllOrganizations(orgsRes.data.data);
+      const orgsRes = await apiFetchJson<any>("/api/v1/organizations");
+      if (orgsRes.ok && orgsRes.data) {
+        const list = Array.isArray(orgsRes.data)
+          ? orgsRes.data
+          : Array.isArray(orgsRes.data.data)
+          ? orgsRes.data.data
+          : [];
+        setAllOrganizations(list);
       }
     } catch (err) {
       console.warn("Failed to load organization settings, using defaults/cache:", err);
@@ -213,7 +221,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     async (updates: Partial<OrganizationSettings>, targetAgencyId?: string | null): Promise<{ ok: boolean; message?: string }> => {
       try {
         const agencyId = targetAgencyId !== undefined ? targetAgencyId : activeAgencyId;
-        const res = await apiFetchJson<{ success: boolean; message?: string; data: OrganizationSettings }>(
+        const res = await apiFetchJson<any>(
           "/api/v1/organization",
           {
             method: "PATCH",
@@ -221,14 +229,15 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
           }
         );
 
-        if (res.ok && res.data?.data) {
-          const updated = { ...organization, ...res.data.data };
+        if (res.ok && res.data) {
+          const raw = res.data.data !== undefined && res.data.data !== null ? res.data.data : res.data;
+          const updated = { ...organization, ...raw };
           setOrganization(updated);
           applyOrganizationEffects(updated);
           refreshOrganization();
-          return { ok: true, message: res.data.message };
+          return { ok: true, message: res.data?.message || res.message };
         }
-        return { ok: false, message: res.data?.message || "Failed to update organization settings" };
+        return { ok: false, message: res.data?.message || res.message || "Failed to update organization settings" };
       } catch (err) {
         return { ok: false, message: err instanceof Error ? err.message : "Network error" };
       }

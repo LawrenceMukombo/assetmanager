@@ -344,9 +344,14 @@ export default function OrganizationsPage() {
   const { data: orgs = [], isLoading, isError, refetch } = useQuery<EnrichedOrganization[]>({
     queryKey: ["/api/v1/organizations"],
     queryFn: async () => {
-      const res = await apiFetchJson<{ success: boolean; data: EnrichedOrganization[] }>("/api/v1/organizations");
-      if (res.ok && Array.isArray(res.data?.data)) {
-        return res.data.data;
+      const res = await apiFetchJson<any>("/api/v1/organizations");
+      if (res.ok && res.data) {
+        if (Array.isArray(res.data)) {
+          return res.data as EnrichedOrganization[];
+        }
+        if (Array.isArray(res.data.data)) {
+          return res.data.data as EnrichedOrganization[];
+        }
       }
       return [];
     },

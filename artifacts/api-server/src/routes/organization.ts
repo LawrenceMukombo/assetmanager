@@ -15,6 +15,7 @@ const router = Router();
 
 const DEFAULT_SETTINGS = {
   id: "default",
+  agencyId: null as string | null,
   organizationName: "Asset Manager",
   shortCode: "AM",
   organizationType: "enterprise",
@@ -36,7 +37,46 @@ const DEFAULT_SETTINGS = {
   active: true,
 };
 
+let hasEnsuredTable = false;
+async function ensureOrganizationSettingsTable() {
+  if (hasEnsuredTable) return;
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS organization_settings (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id uuid REFERENCES tenants(id),
+        agency_id uuid REFERENCES agencies(id),
+        organization_name varchar(255) NOT NULL DEFAULT 'Asset Manager',
+        short_code varchar(50) NOT NULL DEFAULT 'AM',
+        organization_type varchar(100) NOT NULL DEFAULT 'enterprise',
+        tagline text DEFAULT 'Enterprise Asset & Inventory Management',
+        system_title varchar(255) DEFAULT 'Asset Management System',
+        logo_url text,
+        favicon_url text,
+        primary_color varchar(30) DEFAULT '#0F4C81',
+        accent_color varchar(30) DEFAULT '#3B82F6',
+        currency_code varchar(10) DEFAULT 'USD',
+        currency_symbol varchar(10) DEFAULT '$',
+        hierarchy_preset varchar(50) DEFAULT 'corporate',
+        level1_label varchar(100) DEFAULT 'Division',
+        level1_plural varchar(100) DEFAULT 'Divisions',
+        level2_label varchar(100) DEFAULT 'Department',
+        level2_plural varchar(100) DEFAULT 'Departments',
+        level3_label varchar(100) DEFAULT 'Site / Room',
+        level3_plural varchar(100) DEFAULT 'Sites / Rooms',
+        active boolean NOT NULL DEFAULT true,
+        created_at timestamp NOT NULL DEFAULT now(),
+        updated_at timestamp NOT NULL DEFAULT now()
+      );
+    `);
+    hasEnsuredTable = true;
+  } catch {
+    // Non-fatal if table already exists
+  }
+}
+
 async function getOrInitSettings(agencyId?: string | null) {
+  await ensureOrganizationSettingsTable();
   if (agencyId) {
     const [agencyRow] = await db
       .select()
@@ -503,29 +543,34 @@ router.post("/v1/organizations", requireAuth, async (req, res) => {
       .returning();
 
     // Initialize individual organizationSettings for this organization
-    await db.insert(organizationSettings).values({
-      agencyId: createdAgency.id,
-      tenantId,
-      organizationName: cleanName,
-      shortCode: cleanCode,
-      organizationType: createdAgency.agencyType || "enterprise",
-      tagline: createdAgency.description || "Enterprise Asset & Inventory Management",
-      systemTitle: systemTitle ? String(systemTitle).trim() : `${cleanName} Asset Management`,
-      logoUrl: createdAgency.logoUrl,
-      faviconUrl: createdAgency.logoUrl,
-      primaryColor: createdAgency.themeAccentColor || "#0F4C81",
-      accentColor: "#3B82F6",
-      currencyCode: String(currencyCode).toUpperCase(),
-      currencySymbol: String(currencySymbol),
-      hierarchyPreset: String(hierarchyPreset),
-      level1Label: "Division",
-      level1Plural: "Divisions",
-      level2Label: "Department",
-      level2Plural: "Departments",
-      level3Label: "Site / Room",
-      level3Plural: "Sites / Rooms",
-      active: true,
-    });
+    try {
+      await ensureOrganizationSettingsTable();
+      await db.insert(organizationSettings).values({
+        agencyId: createdAgency.id,
+        tenantId,
+        organizationName: cleanName,
+        shortCode: cleanCode,
+        organizationType: createdAgency.agencyType || "enterprise",
+        tagline: createdAgency.description || "Enterprise Asset & Inventory Management",
+        systemTitle: systemTitle ? String(systemTitle).trim() : `${cleanName} Asset Management`,
+        logoUrl: createdAgency.logoUrl,
+        faviconUrl: createdAgency.logoUrl,
+        primaryColor: createdAgency.themeAccentColor || "#0F4C81",
+        accentColor: "#3B82F6",
+        currencyCode: String(currencyCode).toUpperCase(),
+        currencySymbol: String(currencySymbol),
+        hierarchyPreset: String(hierarchyPreset),
+        level1Label: "Division",
+        level1Plural: "Divisions",
+        level2Label: "Department",
+        level2Plural: "Departments",
+        level3Label: "Site / Room",
+        level3Plural: "Sites / Rooms",
+        active: true,
+      });
+    } catch (settingsErr) {
+      req.log.warn({ settingsErr }, "Non-fatal: organizationSettings initial record could not be written");
+    }
 
     res.status(201).json({
       success: true,
