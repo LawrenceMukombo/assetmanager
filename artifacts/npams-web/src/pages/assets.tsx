@@ -71,6 +71,7 @@ import { DistrictPicker } from "@/components/district-picker";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTablePagination } from "@/components/data-table-pagination";
 import { Box } from "lucide-react";
+import { INDUSTRY_SECTORS } from "@/lib/industries";
 
 const ALL = "__all__";
 
@@ -210,6 +211,22 @@ export default function Assets() {
   });
 
   const { data: categoriesData } = useGetCategories();
+  const [industryFilter, setIndustryFilter] = useState<string>("ALL");
+
+  const availableIndustries = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of INDUSTRY_SECTORS) set.add(s);
+    for (const c of categoriesData?.data ?? []) {
+      if (c.industry) set.add(c.industry);
+    }
+    return Array.from(set);
+  }, [categoriesData?.data]);
+
+  const filteredCategories = useMemo(() => {
+    const list = categoriesData?.data ?? [];
+    if (industryFilter === "ALL") return list;
+    return list.filter((c) => c.industry === industryFilter);
+  }, [categoriesData?.data, industryFilter]);
   const { data: provincesData } = useGetProvinces();
   const { data: districtsData } = useGetDistrictsByProvince(provinceId, {
     query: {
@@ -613,11 +630,35 @@ export default function Assets() {
             )}
 
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">
-                Category
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Category
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-muted-foreground">Sector:</span>
+                  <Select
+                    value={industryFilter}
+                    onValueChange={(val) => {
+                      setIndustryFilter(val);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="h-7 text-xs w-[180px]">
+                      <SelectValue placeholder="All Sectors" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All Sectors</SelectItem>
+                      {availableIndustries.map((ind) => (
+                        <SelectItem key={ind} value={ind}>
+                          {ind}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div className="flex flex-wrap gap-1.5">
-                {categoriesData?.data?.map((c) => {
+                {filteredCategories.map((c) => {
                   const isSelected = categoryId === c.id;
                   const meta = getCategoryMeta(c.categoryName, c.categoryCode, c.iconName, c.accentColor);
                   const Icon = meta.icon;

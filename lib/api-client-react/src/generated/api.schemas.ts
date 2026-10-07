@@ -152,6 +152,7 @@ export interface AssetCategory {
   id?: string;
   categoryName?: string;
   categoryCode?: string;
+  industry?: string | null;
   description?: string | null;
   iconName?: string | null;
   accentColor?: string | null;
@@ -180,6 +181,7 @@ export interface AssetCategoryInfo {
   id?: string;
   categoryName?: string;
   categoryCode?: string | null;
+  industry?: string | null;
 }
 
 export interface AssetUserInfo {
@@ -572,7 +574,8 @@ export type GetCategories200 = {
 export type CreateCategoryBody = {
   category_name: string;
   category_code?: string;
-  description?: string;
+  industry?: string | null;
+  description?: string | null;
   icon_name?: string | null;
   accent_color?: string | null;
 };
@@ -580,7 +583,8 @@ export type CreateCategoryBody = {
 export type UpdateCategoryBody = {
   category_name?: string;
   category_code?: string;
-  description?: string;
+  industry?: string | null;
+  description?: string | null;
   icon_name?: string | null;
   accent_color?: string | null;
 };

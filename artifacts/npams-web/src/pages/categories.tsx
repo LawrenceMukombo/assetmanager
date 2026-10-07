@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -14,6 +14,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -22,7 +23,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Edit, Trash, Tags, Check, ChevronDown } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Edit, Trash, Tags, Check, ChevronDown, Layers } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { getCategoryMeta } from "@/lib/category";
 import { ICON_OPTIONS, COLOR_OPTIONS, getIconByName } from "@/lib/category-options";
@@ -31,6 +33,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_ROLES } from "@/App";
 import { Redirect } from "wouter";
 import { cn } from "@/lib/utils";
+import { INDUSTRY_SECTORS } from "@/lib/industries";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,6 +52,7 @@ const categorySchema = z.object({
     .trim()
     .toUpperCase()
     .regex(/^[A-Z]{2,5}$/u, "Code must be 2-5 letters"),
+  industry: z.string().optional(),
   description: z.string().optional(),
   // Free-form so admin choices outside the curated palette (e.g. legacy
   // values set via API) are preserved on edit; the picker UI still
@@ -62,6 +66,7 @@ type CategoryFormValues = z.infer<typeof categorySchema>;
 const DEFAULTS: CategoryFormValues = {
   category_name: "",
   category_code: "",
+  industry: "",
   description: "",
   icon_name: null,
   accent_color: null,
@@ -136,6 +141,7 @@ export default function Categories() {
     form.reset({
       category_name: category.categoryName ?? "",
       category_code: category.categoryCode ?? "",
+      industry: category.industry ?? "",
       description: category.description ?? "",
       icon_name: category.iconName ?? null,
       accent_color: category.accentColor ?? null,
@@ -147,6 +153,7 @@ export default function Categories() {
   const onSubmit = (values: CategoryFormValues) => {
     const payload = {
       ...values,
+      industry: values.industry?.trim() || null,
       icon_name: values.icon_name ?? null,
       accent_color: values.accent_color ?? null,
     };
@@ -156,6 +163,23 @@ export default function Categories() {
       createMutation.mutate({ data: payload });
     }
   };
+
+  const [industryFilter, setIndustryFilter] = useState<string>("ALL");
+
+  const availableIndustries = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of INDUSTRY_SECTORS) set.add(s);
+    for (const c of data?.data ?? []) {
+      if (c.industry) set.add(c.industry);
+    }
+    return Array.from(set);
+  }, [data?.data]);
+
+  const filteredCategories = useMemo(() => {
+    const list = data?.data ?? [];
+    if (industryFilter === "ALL") return list;
+    return list.filter((c) => c.industry === industryFilter);
+  }, [data?.data, industryFilter]);
 
   const watchedName = form.watch("category_name");
   const watchedCode = form.watch("category_code");
@@ -170,20 +194,47 @@ export default function Categories() {
       <PageHeader
         icon={<Tags className="w-5 h-5" />}
         title="Categories"
-        subtitle="Manage asset classifications."
+        subtitle="Manage multi-industry asset classifications."
         breadcrumbs={[{ label: "Assets", href: "/assets" }, { label: "Categories" }]}
         actions={<Button onClick={openCreate}><Plus className="w-4 h-4" /> Add category</Button>}
       />
+
+      {/* Filter by Industry */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Layers className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm font-medium text-muted-foreground">Sector:</span>
+          <Select value={industryFilter} onValueChange={setIndustryFilter}>
+            <SelectTrigger className="w-[280px] h-9">
+              <SelectValue placeholder="Filter by sector" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">
+                🌐 All Sectors ({data?.data?.length ?? 0})
+              </SelectItem>
+              {availableIndustries.map((ind) => {
+                const count = (data?.data ?? []).filter((c) => c.industry === ind).length;
+                return (
+                  <SelectItem key={ind} value={ind}>
+                    {ind} ({count})
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
       <div className="bg-card border rounded-lg overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Category Name</TableHead>
-              <TableHead className="w-[100px]">Code</TableHead>
+              <TableHead className="w-[80px]">Code</TableHead>
+              <TableHead className="w-[200px]">Sector</TableHead>
               <TableHead>Description</TableHead>
-              <TableHead className="w-[120px] text-right">Asset Count</TableHead>
-              <TableHead className="w-[100px]">Actions</TableHead>
+              <TableHead className="w-[100px] text-right">Asset Count</TableHead>
+              <TableHead className="w-[90px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -191,16 +242,20 @@ export default function Categories() {
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-64" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-12" /></TableCell>
                   <TableCell><Skeleton className="h-8 w-16" /></TableCell>
                 </TableRow>
               ))
-            ) : data?.data?.length === 0 ? (
+            ) : filteredCategories.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No categories found.</TableCell>
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  No categories found in this sector.
+                </TableCell>
               </TableRow>
-            ) : data?.data?.map((cat) => (
+            ) : filteredCategories.map((cat) => (
               <TableRow
                 key={cat.id}
                 className="cursor-pointer hover:bg-muted/50 transition-colors"
@@ -225,6 +280,11 @@ export default function Categories() {
                   })()}
                 </TableCell>
                 <TableCell className="font-mono text-sm">{cat.categoryCode || "-"}</TableCell>
+                <TableCell>
+                  <Badge variant="outline" className="text-xs font-normal">
+                    {cat.industry || "General"}
+                  </Badge>
+                </TableCell>
                 <TableCell className="text-muted-foreground">{cat.description || "-"}</TableCell>
                 <TableCell className="text-right font-mono text-sm">{cat.assetCount ?? 0}</TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
@@ -290,6 +350,31 @@ export default function Categories() {
                         onChange={(e) => field.onChange(e.target.value.toUpperCase())}
                       />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="industry"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Industry / Sector</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || undefined}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select industry sector" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {INDUSTRY_SECTORS.map((sec) => (
+                          <SelectItem key={sec} value={sec}>
+                            {sec}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

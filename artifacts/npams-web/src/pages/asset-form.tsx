@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -30,10 +30,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, ChevronRight, Save, Upload, X, Image, Package } from "lucide-react";
+import { ArrowLeft, ChevronRight, Save, Upload, X, Image, Package, Layers } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { INDUSTRY_SECTORS, detectDefaultIndustry } from "@/lib/industries";
 
 const assetSchema = z.object({
   asset_name: z.string().min(1, "Asset name is required"),
@@ -182,6 +183,63 @@ export default function AssetForm() {
   const selectedProvince = form.watch("province_id");
   const selectedDistrict = form.watch("district_id");
   const selectedCategoryId = form.watch("category_id");
+
+  // Cascading industry selector state
+  const [selectedIndustry, setSelectedIndustry] = useState<string>("ALL");
+  const industryInitializedRef = useRef(false);
+
+  // Auto-detect default industry for current organization/agency on initial load
+  useEffect(() => {
+    if (industryInitializedRef.current || isEdit) return;
+    if (categoriesData?.data && categoriesData.data.length > 0) {
+      const detected = detectDefaultIndustry(agencyName);
+      if (detected) {
+        const hasCats = categoriesData.data.some((c) => c.industry === detected);
+        if (hasCats) {
+          setSelectedIndustry(detected);
+        }
+      }
+      industryInitializedRef.current = true;
+    }
+  }, [categoriesData, agencyName, isEdit]);
+
+  // Keep selectedIndustry in sync with selected category if editing or after category changes
+  useEffect(() => {
+    if (!selectedCategoryId || !categoriesData?.data) return;
+    const cat = categoriesData.data.find((c) => c.id === selectedCategoryId);
+    if (cat?.industry && selectedIndustry !== cat.industry && selectedIndustry !== "ALL") {
+      setSelectedIndustry(cat.industry);
+    }
+  }, [selectedCategoryId, categoriesData]);
+
+  // Unique industries present in the categories catalog + known sector list
+  const availableIndustries = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of INDUSTRY_SECTORS) set.add(s);
+    for (const c of categoriesData?.data ?? []) {
+      if (c.industry) set.add(c.industry);
+    }
+    return Array.from(set);
+  }, [categoriesData]);
+
+  // Filtered categories based on selectedIndustry
+  const filteredCategories = useMemo(() => {
+    const list = categoriesData?.data ?? [];
+    if (!selectedIndustry || selectedIndustry === "ALL") return list;
+    return list.filter((c) => c.industry === selectedIndustry);
+  }, [categoriesData, selectedIndustry]);
+
+  // Grouped categories by industry for "ALL" view
+  const groupedCategories = useMemo(() => {
+    const list = categoriesData?.data ?? [];
+    const map = new Map<string, typeof list>();
+    for (const c of list) {
+      const ind = c.industry || "General & Other";
+      if (!map.has(ind)) map.set(ind, []);
+      map.get(ind)!.push(c);
+    }
+    return map;
+  }, [categoriesData]);
 
   // Use the explicit `categoryCode` stored on each asset_category row as the
   // [TYPE] portion of `[AGENCY]-[TYPE]-[NNN]` asset tags. Fall back to the
@@ -511,25 +569,138 @@ export default function AssetForm() {
                       </FormItem>
                     )}
                   />
+                  {/* Cascading Industry Selector */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium leading-none flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-primary" />
+                        Industry / Sector
+                      </span>
+                      {selectedIndustry !== "ALL" && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedIndustry("ALL")}
+                          className="text-xs text-primary hover:underline font-normal cursor-pointer"
+                        >
+                          Show All Industries
+                        </button>
+                      )}
+                    </label>
+                    <Select
+                      value={selectedIndustry}
+                      onValueChange={(val) => {
+                        setSelectedIndustry(val);
+                        if (val !== "ALL") {
+                          const currentCat = categoriesData?.data?.find((c) => c.id === form.getValues("category_id"));
+                          if (currentCat && currentCat.industry && currentCat.industry !== val) {
+                            form.setValue("category_id", "", { shouldValidate: true });
+                          }
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Select industry sector" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[300px]">
+                        <SelectItem value="ALL">
+                          <span className="font-semibold text-primary">🌐 All Industries (Show All)</span>
+                        </SelectItem>
+                        {availableIndustries.map((ind) => (
+                          <SelectItem key={ind} value={ind}>
+                            {ind}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-muted-foreground">
+                      Filters categories by sector (Healthcare, Finance, IT, etc.)
+                    </p>
+                  </div>
+
+                  {/* Cascading Category Selector */}
                   <FormField
                     control={form.control}
                     name="category_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Category *</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || undefined}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            {categoriesData?.data?.map(c => (
-                              <SelectItem key={c.id} value={c.id!}>
-                                {c.categoryName}{c.categoryCode ? ` (${c.categoryCode})` : ""}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    render={({ field }) => {
+                      const selectedCat = categoriesData?.data?.find((c) => c.id === field.value);
+                      return (
+                        <FormItem>
+                          <FormLabel className="flex items-center justify-between">
+                            <span>Category *</span>
+                            {selectedCat?.categoryCode && (
+                              <span className="text-xs font-mono text-primary font-medium">
+                                Code: {selectedCat.categoryCode}
+                              </span>
+                            )}
+                          </FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value || undefined}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="h-9">
+                                <SelectValue
+                                  placeholder={
+                                    selectedIndustry === "ALL"
+                                      ? "Select category..."
+                                      : `Select ${selectedIndustry} category...`
+                                  }
+                                />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent className="max-h-[320px]">
+                              {selectedIndustry !== "ALL" ? (
+                                filteredCategories.length > 0 ? (
+                                  filteredCategories.map((c) => (
+                                    <SelectItem key={c.id} value={c.id!}>
+                                      <div className="flex items-center justify-between w-full gap-2">
+                                        <span>{c.categoryName}</span>
+                                        {c.categoryCode && (
+                                          <span className="text-[11px] font-mono text-muted-foreground ml-2">
+                                            [{c.categoryCode}]
+                                          </span>
+                                        )}
+                                      </div>
+                                    </SelectItem>
+                                  ))
+                                ) : (
+                                  <div className="p-2 text-xs text-muted-foreground text-center">
+                                    No categories in this sector
+                                  </div>
+                                )
+                              ) : (
+                                Array.from(groupedCategories.entries()).map(([indName, cats]) => (
+                                  <SelectGroup key={indName}>
+                                    <SelectLabel className="font-semibold text-xs text-primary px-2 py-1.5 bg-muted/40 sticky top-0">
+                                      {indName}
+                                    </SelectLabel>
+                                    {cats.map((c) => (
+                                      <SelectItem key={c.id} value={c.id!}>
+                                        <div className="flex items-center justify-between w-full gap-2">
+                                          <span>{c.categoryName}</span>
+                                          {c.categoryCode && (
+                                            <span className="text-[11px] font-mono text-muted-foreground ml-2">
+                                              [{c.categoryCode}]
+                                            </span>
+                                          )}
+                                        </div>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectGroup>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                          {selectedCat?.description ? (
+                            <p className="text-[11px] text-muted-foreground line-clamp-1">
+                              {selectedCat.description}
+                            </p>
+                          ) : (
+                            <FormMessage />
+                          )}
+                        </FormItem>
+                      );
+                    }}
                   />
                   <FormField
                     control={form.control}
@@ -897,7 +1068,7 @@ export default function AssetForm() {
                       {form.getValues("purchase_date") && <div><span className="font-semibold">Purchase Date:</span> {form.getValues("purchase_date")}</div>}
                       {form.getValues("purchase_cost") && <div><span className="font-semibold">Cost (K):</span> {Number(form.getValues("purchase_cost")).toLocaleString()}</div>}
                       {form.getValues("warranty_expiry") && <div><span className="font-semibold">Warranty Expires:</span> {form.getValues("warranty_expiry")}</div>}
-                      {(() => { const cat = categoriesData?.data?.find(c => c.id === form.getValues("category_id")); return cat ? <div><span className="font-semibold">Category:</span> {cat.categoryName}</div> : null; })()}
+                      {(() => { const cat = categoriesData?.data?.find(c => c.id === form.getValues("category_id")); return cat ? <div><span className="font-semibold">Category:</span> {cat.categoryName}{cat.industry ? ` (${cat.industry})` : ""}</div> : null; })()}
                       {isAgencyUser
                         ? <div><span className="font-semibold">Agency:</span> {agencyName}</div>
                         : (() => { const prov = provincesData?.data?.find(p => p.id === form.getValues("province_id")); return prov ? <div><span className="font-semibold">Province:</span> {(prov as { provinceName?: string }).provinceName}</div> : null; })()

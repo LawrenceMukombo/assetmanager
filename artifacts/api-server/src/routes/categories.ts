@@ -1,10 +1,22 @@
 import { Router } from "express";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, sql, count } from "drizzle-orm";
 import { db, assetCategories, assets } from "@workspace/db";
 import { requireAuth, requireAssetAdmin } from "../lib/auth";
-import { count } from "drizzle-orm";
 
 const router = Router();
+
+let hasEnsuredCategoryColumns = false;
+async function ensureCategoryColumns() {
+  if (hasEnsuredCategoryColumns) return;
+  try {
+    await db.execute(sql`
+      ALTER TABLE asset_categories ADD COLUMN IF NOT EXISTS industry varchar(100);
+    `);
+    hasEnsuredCategoryColumns = true;
+  } catch {
+    // Non-fatal if column already exists
+  }
+}
 
 // Returns:
 //   { provided: false }                 — caller omitted category_code
@@ -53,11 +65,13 @@ function normalizeAccentColor(input: unknown): { provided: boolean; value?: stri
 
 router.get("/v1/categories", requireAuth, async (req, res) => {
   try {
+    await ensureCategoryColumns();
     const rows = await db
       .select({
         id: assetCategories.id,
         categoryName: assetCategories.categoryName,
         categoryCode: assetCategories.categoryCode,
+        industry: assetCategories.industry,
         description: assetCategories.description,
         iconName: assetCategories.iconName,
         accentColor: assetCategories.accentColor,
@@ -76,7 +90,8 @@ router.get("/v1/categories", requireAuth, async (req, res) => {
 });
 
 router.post("/v1/categories", requireAuth, requireAssetAdmin, async (req, res) => {
-  const { category_name, category_code, description, icon_name, accent_color } = req.body;
+  await ensureCategoryColumns();
+  const { category_name, category_code, industry, description, icon_name, accent_color } = req.body;
   if (!category_name) {
     res.status(400).json({ success: false, message: "category_name is required", data: null });
     return;
@@ -119,6 +134,7 @@ router.post("/v1/categories", requireAuth, requireAssetAdmin, async (req, res) =
       .values({
         categoryName: category_name,
         categoryCode: finalCode,
+        industry: industry ? String(industry).trim() : null,
         description,
         iconName: normalizedIcon.provided ? normalizedIcon.value ?? null : null,
         accentColor: normalizedColor.provided ? normalizedColor.value ?? null : null,
@@ -140,7 +156,8 @@ router.post("/v1/categories", requireAuth, requireAssetAdmin, async (req, res) =
 });
 
 router.put("/v1/categories/:id", requireAuth, requireAssetAdmin, async (req, res) => {
-  const { category_name, category_code, description, icon_name, accent_color } = req.body;
+  await ensureCategoryColumns();
+  const { category_name, category_code, industry, description, icon_name, accent_color } = req.body;
   const normalized = normalizeCategoryCode(category_code);
   if (normalized.provided && normalized.code === null) {
     res.status(400).json({ success: false, message: "category_code must be 2-5 letters", data: null });
@@ -161,6 +178,7 @@ router.put("/v1/categories/:id", requireAuth, requireAssetAdmin, async (req, res
       categoryName: category_name,
       description,
     };
+    if (industry !== undefined) updates.industry = industry ? String(industry).trim() : null;
     if (normalizedIcon.provided) updates.iconName = normalizedIcon.value;
     if (normalizedColor.provided) updates.accentColor = normalizedColor.value;
     let nextCode: string | undefined;

@@ -66,7 +66,7 @@ export async function autoSeedIfEmpty(): Promise<void> {
   await seedAgencyStock();
   await seedIcaPerLocationStockBalances();
   await seedAssetHistory();
-  await pruneLegacyCategories();
+  await seedMultiIndustryCategories();
   await seedExampleWorkflowData();
 
   if (usersExist && agenciesExist) {
@@ -1949,77 +1949,462 @@ async function recategorizeIcaAssetsForIcsaCatalog(): Promise<void> {
 }
 
 /**
- * Idempotent prune of legacy generic categories ("Medical Equipment",
- * "Heavy Machinery") that were dropped in task #80 in favour of the
- * ICSA-specific catalog. Any pre-existing assets in those categories are
- * re-homed (legacy MO/WHP/NCD demo tags use a curated mapping; anything
- * else falls back to "Buildings & Infrastructure"), then the empty
- * categories are deleted. Safe to run on each startup.
+ * Seed comprehensive multi-industry asset categories across:
+ * - Healthcare & Medical
+ * - Banking, Finance & Insurance
+ * - Information Technology & Telecom
+ * - Transportation, Fleet & Logistics
+ * - Facilities, Buildings & Infrastructure
+ * - Manufacturing, Mining & Heavy Industry
+ * - Education & Academic Institutions
+ * - Agriculture, Forestry & Natural Resources
+ * - Government, Law Enforcement & Public Safety
+ * - Corporate, Hospitality & Commercial
+ *
+ * Fully idempotent, non-destructive (upsert only, never wipes or deletes).
  */
-async function pruneLegacyCategories(): Promise<void> {
-  const LEGACY_CATEGORY_NAMES = ["Medical Equipment", "Heavy Machinery"];
+async function seedMultiIndustryCategories(): Promise<void> {
+  interface SeedCat {
+    industry: string;
+    categoryName: string;
+    categoryCode: string;
+    usefulLifeYears: number;
+    depreciationMethod: string;
+    description: string;
+  }
 
-  // Curated re-homing for the legacy demo tags from seedInitialData. Keeps
-  // existing demo dashboards / notifications meaningful.
-  const LEGACY_TAG_REMAP: Record<string, { name: string; category: string }> = {
-    "MO-MED-001":  { name: "Passport Document Scanner (Lae)",            category: "Passport & Document Production" },
-    "MO-MED-002":  { name: "Biometric Fingerprint Reader (Lae)",         category: "Biometric & Identity Capture"   },
-    "MO-MED-003":  { name: "Border Stamp Set — Entry/Exit (Lae)",        category: "Border Control Equipment"       },
-    "WHP-MED-001": { name: "Passport Document Scanner (Mt Hagen)",       category: "Passport & Document Production" },
-    "WHP-MED-002": { name: "Biometric Capture Workstation (Mt Hagen)",   category: "Biometric & Identity Capture"   },
-    "WHP-HM-001":  { name: "Backup Diesel Generator (Mt Hagen)",         category: "Buildings & Infrastructure"     },
-    "NCD-MED-001": { name: "Passport Personalisation Press (NCD)",       category: "Passport & Document Production" },
-    "NCD-MED-002": { name: "Biometric Capture Workstation (NCD)",        category: "Biometric & Identity Capture"   },
-    "NCD-MED-003": { name: "Border Stamp Set — Entry/Exit (NCD)",        category: "Border Control Equipment"       },
-    "NCD-HM-001":  { name: "Caterpillar Generator 250KVA",               category: "Buildings & Infrastructure"     },
+  const INDUSTRY_CATEGORIES: SeedCat[] = [
+    // 1. Healthcare & Medical
+    {
+      industry: "Healthcare & Medical",
+      categoryName: "Diagnostic & Medical Imaging",
+      categoryCode: "IMG",
+      usefulLifeYears: 7,
+      depreciationMethod: "straight_line",
+      description: "X-Ray machines, CT scanners, MRI units, ultrasound and echocardiogram systems.",
+    },
+    {
+      industry: "Healthcare & Medical",
+      categoryName: "Laboratory & Pathology Equipment",
+      categoryCode: "LAB",
+      usefulLifeYears: 5,
+      depreciationMethod: "straight_line",
+      description: "Centrifuges, hematology analyzers, microscopes, PCR units, and chemistry analyzers.",
+    },
+    {
+      industry: "Healthcare & Medical",
+      categoryName: "Patient Care & Monitoring",
+      categoryCode: "PCM",
+      usefulLifeYears: 5,
+      depreciationMethod: "straight_line",
+      description: "Multiparameter patient monitors, infusion pumps, defibrillators, ECG units, and hospital beds.",
+    },
+    {
+      industry: "Healthcare & Medical",
+      categoryName: "Surgical & Operating Theatre",
+      categoryCode: "SUR",
+      usefulLifeYears: 7,
+      depreciationMethod: "straight_line",
+      description: "Anesthesia workstations, surgical operating lights, electrosurgical units, and autoclaves.",
+    },
+    {
+      industry: "Healthcare & Medical",
+      categoryName: "Cold Chain & Vaccine Storage",
+      categoryCode: "CLD",
+      usefulLifeYears: 7,
+      depreciationMethod: "straight_line",
+      description: "Solar direct drive fridges, ultra-low temperature freezers (-80C), vaccine cold boxes and temperature loggers.",
+    },
+    {
+      industry: "Healthcare & Medical",
+      categoryName: "Mobile Health & Emergency Response",
+      categoryCode: "AMB",
+      usefulLifeYears: 6,
+      depreciationMethod: "straight_line",
+      description: "Emergency ambulances, mobile clinic vans, rapid triage sets, and emergency medical kits.",
+    },
+
+    // 2. Banking, Finance & Insurance
+    {
+      industry: "Banking, Finance & Insurance",
+      categoryName: "ATMs & Cash Recyclers",
+      categoryCode: "ATM",
+      usefulLifeYears: 5,
+      depreciationMethod: "straight_line",
+      description: "Automated Teller Machines, smart cash deposit recyclers, and kiosk terminals.",
+    },
+    {
+      industry: "Banking, Finance & Insurance",
+      categoryName: "Point of Sale & Payment Devices",
+      categoryCode: "POS",
+      usefulLifeYears: 3,
+      depreciationMethod: "straight_line",
+      description: "Wireless EFTPOS terminals, smart POS checkout registers, card readers, and biometric verifiers.",
+    },
+    {
+      industry: "Banking, Finance & Insurance",
+      categoryName: "Vault & Cash Processing Systems",
+      categoryCode: "VLT",
+      usefulLifeYears: 10,
+      depreciationMethod: "straight_line",
+      description: "High-speed banknote counters and sorters, currency detectors, cash drop safes, and vault timer locks.",
+    },
+    {
+      industry: "Banking, Finance & Insurance",
+      categoryName: "Branch Teller & Counter Stations",
+      categoryCode: "BNK",
+      usefulLifeYears: 5,
+      depreciationMethod: "straight_line",
+      description: "Teller authentication stations, UV currency scanners, passport/ID document verifiers.",
+    },
+    {
+      industry: "Banking, Finance & Insurance",
+      categoryName: "Financial Security & Transaction Appliances",
+      categoryCode: "HSM",
+      usefulLifeYears: 5,
+      depreciationMethod: "straight_line",
+      description: "Hardware Security Modules (HSM), cryptographic transaction servers, financial token signers.",
+    },
+
+    // 3. Information Technology & Telecom
+    {
+      industry: "Information Technology & Telecom",
+      categoryName: "Server & Datacenter Infrastructure",
+      categoryCode: "SRV",
+      usefulLifeYears: 5,
+      depreciationMethod: "straight_line",
+      description: "Rackmount and blade servers, SAN/NAS storage arrays, server racks, and hyperconverged nodes.",
+    },
+    {
+      industry: "Information Technology & Telecom",
+      categoryName: "Networking & Telecommunications",
+      categoryCode: "NET",
+      usefulLifeYears: 5,
+      depreciationMethod: "straight_line",
+      description: "Core switches, routers, edge firewalls, fiber transceivers, cellular base station gear, and microwave links.",
+    },
+    {
+      industry: "Information Technology & Telecom",
+      categoryName: "End-User Computing & Workstations",
+      categoryCode: "CMP",
+      usefulLifeYears: 4,
+      depreciationMethod: "straight_line",
+      description: "Laptops, desktop workstations, all-in-one PCs, monitors, and ergonomic workstation docks.",
+    },
+    {
+      industry: "Information Technology & Telecom",
+      categoryName: "Power Backup & UPS Systems",
+      categoryCode: "UPS",
+      usefulLifeYears: 5,
+      depreciationMethod: "straight_line",
+      description: "Online uninterruptible power supplies (UPS), inverter units, deep-cycle battery banks, and PDUs.",
+    },
+    {
+      industry: "Information Technology & Telecom",
+      categoryName: "Audio-Visual & Conferencing Systems",
+      categoryCode: "AV",
+      usefulLifeYears: 4,
+      depreciationMethod: "straight_line",
+      description: "Interactive board displays, video conference codecs, ceiling mic arrays, and digital signage players.",
+    },
+    {
+      industry: "Information Technology & Telecom",
+      categoryName: "Printers & Document Scanning",
+      categoryCode: "PRN",
+      usefulLifeYears: 4,
+      depreciationMethod: "straight_line",
+      description: "Departmental multifunction copiers, high-capacity duplex scanners, heavy duty plotters.",
+    },
+
+    // 4. Transportation, Fleet & Logistics
+    {
+      industry: "Transportation, Fleet & Logistics",
+      categoryName: "Passenger Vehicles & Light Fleet",
+      categoryCode: "FLT",
+      usefulLifeYears: 5,
+      depreciationMethod: "straight_line",
+      description: "Staff sedans, 4x4 utility pick-ups, passenger minibuses, and dispatch motorcycles.",
+    },
+    {
+      industry: "Transportation, Fleet & Logistics",
+      categoryName: "Heavy Commercial Trucks & Haulage",
+      categoryCode: "TRK",
+      usefulLifeYears: 8,
+      depreciationMethod: "straight_line",
+      description: "Heavy cargo lorries, prime movers, flatbeds, refrigerated transport trucks, and water tankers.",
+    },
+    {
+      industry: "Transportation, Fleet & Logistics",
+      categoryName: "Warehouse & Material Handling",
+      categoryCode: "WHS",
+      usefulLifeYears: 7,
+      depreciationMethod: "straight_line",
+      description: "Electric forklifts, pallet trucks, reach stackers, warehouse racking, and automated conveyor systems.",
+    },
+    {
+      industry: "Transportation, Fleet & Logistics",
+      categoryName: "Marine Vessels & Watercraft",
+      categoryCode: "MAR",
+      usefulLifeYears: 10,
+      depreciationMethod: "straight_line",
+      description: "Patrol speedboats, river transport barges, outboard engines, and marine GPS equipment.",
+    },
+
+    // 5. Facilities, Buildings & Infrastructure
+    {
+      industry: "Facilities, Buildings & Infrastructure",
+      categoryName: "Buildings & Permanent Structures",
+      categoryCode: "BLD",
+      usefulLifeYears: 25,
+      depreciationMethod: "straight_line",
+      description: "Administrative headquarters, hospital wings, border posts, regional branch offices, and warehouses.",
+    },
+    {
+      industry: "Facilities, Buildings & Infrastructure",
+      categoryName: "Power Generation & Solar Plants",
+      categoryCode: "PWR",
+      usefulLifeYears: 10,
+      depreciationMethod: "straight_line",
+      description: "Industrial diesel generators (50KVA-500KVA), solar PV arrays, step-down transformers, and distribution boards.",
+    },
+    {
+      industry: "Facilities, Buildings & Infrastructure",
+      categoryName: "HVAC & Central Climate Systems",
+      categoryCode: "HVC",
+      usefulLifeYears: 8,
+      depreciationMethod: "straight_line",
+      description: "Chiller systems, variable refrigerant flow (VRF) units, ducted AHUs, and industrial exhaust blowers.",
+    },
+    {
+      industry: "Facilities, Buildings & Infrastructure",
+      categoryName: "Water & Sanitation Systems",
+      categoryCode: "WTR",
+      usefulLifeYears: 12,
+      depreciationMethod: "straight_line",
+      description: "Deep boreholes, water filtration plants, heavy-duty pressure pumps, overhead storage reservoirs.",
+    },
+    {
+      industry: "Facilities, Buildings & Infrastructure",
+      categoryName: "Fire Protection & Safety Systems",
+      categoryCode: "FIR",
+      usefulLifeYears: 10,
+      depreciationMethod: "straight_line",
+      description: "Fire alarm control panels, sprinkler pumps, gaseous clean-agent suppression systems, hydrants.",
+    },
+
+    // 6. Manufacturing, Mining & Heavy Industry
+    {
+      industry: "Manufacturing, Mining & Heavy Industry",
+      categoryName: "Production & Processing Machinery",
+      categoryCode: "MFG",
+      usefulLifeYears: 10,
+      depreciationMethod: "straight_line",
+      description: "Automated filling and packaging lines, industrial milling units, CNC machining centers, and mixers.",
+    },
+    {
+      industry: "Manufacturing, Mining & Heavy Industry",
+      categoryName: "Heavy Earthmoving Equipment",
+      categoryCode: "HVY",
+      usefulLifeYears: 8,
+      depreciationMethod: "straight_line",
+      description: "Hydraulic excavators, track bulldozers, motor graders, wheel loaders, and dump trucks.",
+    },
+    {
+      industry: "Manufacturing, Mining & Heavy Industry",
+      categoryName: "Industrial Compressors & Pneumatics",
+      categoryCode: "TLS",
+      usefulLifeYears: 7,
+      depreciationMethod: "straight_line",
+      description: "Rotary screw air compressors, high-pressure washers, heavy-duty welding rigs, and plasma cutters.",
+    },
+
+    // 7. Education & Academic Institutions
+    {
+      industry: "Education & Academic Institutions",
+      categoryName: "Smart Classroom & Audio-Visual",
+      categoryCode: "EDU",
+      usefulLifeYears: 5,
+      depreciationMethod: "straight_line",
+      description: "Interactive smartboards, digital laser projectors, classroom sound reinforcement, and document cameras.",
+    },
+    {
+      industry: "Education & Academic Institutions",
+      categoryName: "Scientific & Research Laboratories",
+      categoryCode: "SCI",
+      usefulLifeYears: 6,
+      depreciationMethod: "straight_line",
+      description: "Fume hoods, analytical balances, laboratory spectrometers, optical microscopes, and STEM training stations.",
+    },
+    {
+      industry: "Education & Academic Institutions",
+      categoryName: "Vocational & Technical Workshop Equipment",
+      categoryCode: "VOC",
+      usefulLifeYears: 8,
+      depreciationMethod: "straight_line",
+      description: "Woodworking machinery, metal turning lathes, automotive diagnostic rigs, and electrical training boards.",
+    },
+
+    // 8. Agriculture, Forestry & Natural Resources
+    {
+      industry: "Agriculture, Forestry & Natural Resources",
+      categoryName: "Tractors & Agricultural Implements",
+      categoryCode: "AGR",
+      usefulLifeYears: 8,
+      depreciationMethod: "straight_line",
+      description: "Farm tractors, disc ploughs, seeders, combined harvesters, and boom sprayers.",
+    },
+    {
+      industry: "Agriculture, Forestry & Natural Resources",
+      categoryName: "Irrigation & Water Distribution",
+      categoryCode: "IRR",
+      usefulLifeYears: 7,
+      depreciationMethod: "straight_line",
+      description: "Centre-pivot irrigation, drip distribution manifolds, solar irrigation booster pumps, and water bowsers.",
+    },
+    {
+      industry: "Agriculture, Forestry & Natural Resources",
+      categoryName: "Post-Harvest & Processing Equipment",
+      categoryCode: "PST",
+      usefulLifeYears: 8,
+      depreciationMethod: "straight_line",
+      description: "Grain driers, maize/coffee milling machinery, fruit sorting lines, and produce cooling chambers.",
+    },
+
+    // 9. Government, Law Enforcement & Public Safety
+    {
+      industry: "Government, Law Enforcement & Public Safety",
+      categoryName: "Passport & Document Production",
+      categoryCode: "PAS",
+      usefulLifeYears: 7,
+      depreciationMethod: "straight_line",
+      description: "Laser engravers, chip encoders, high-speed passport book printers, and booklet laminators.",
+    },
+    {
+      industry: "Government, Law Enforcement & Public Safety",
+      categoryName: "Biometric & Identity Capture",
+      categoryCode: "BIO",
+      usefulLifeYears: 5,
+      depreciationMethod: "straight_line",
+      description: "Ten-print fingerprint scanners, dual iris cameras, face capture kits, and mobile enrolment suitcases.",
+    },
+    {
+      industry: "Government, Law Enforcement & Public Safety",
+      categoryName: "Border & Security Screening",
+      categoryCode: "BDR",
+      usefulLifeYears: 7,
+      depreciationMethod: "straight_line",
+      description: "Dual-view luggage X-ray scanners, walk-through metal detectors, handheld explosives trace detectors.",
+    },
+    {
+      industry: "Government, Law Enforcement & Public Safety",
+      categoryName: "Law Enforcement & Tactical Equipment",
+      categoryCode: "SEC",
+      usefulLifeYears: 5,
+      depreciationMethod: "straight_line",
+      description: "Secure digital radios, body-worn cameras, speed detection radars, and alcohol breathalyzers.",
+    },
+    {
+      industry: "Government, Law Enforcement & Public Safety",
+      categoryName: "Uniforms & Personal Protective Equipment",
+      categoryCode: "PPE",
+      usefulLifeYears: 2,
+      depreciationMethod: "straight_line",
+      description: "Ceremonial and service uniforms, ballistic body armor, tactical helmets, and high-visibility gear.",
+    },
+
+    // 10. Corporate, Hospitality & Commercial
+    {
+      industry: "Corporate, Hospitality & Commercial",
+      categoryName: "Office Furniture & Executive Fixtures",
+      categoryCode: "FF",
+      usefulLifeYears: 7,
+      depreciationMethod: "straight_line",
+      description: "Boardroom conference tables, executive desks, ergonomic mesh seating, and steel filing cabinets.",
+    },
+    {
+      industry: "Corporate, Hospitality & Commercial",
+      categoryName: "Commercial Kitchen & Catering",
+      categoryCode: "KIT",
+      usefulLifeYears: 7,
+      depreciationMethod: "straight_line",
+      description: "Combi ovens, industrial cold rooms, stainless steel preparation stations, and dishwashers.",
+    },
+  ];
+
+  // Existing categories mapping update:
+  // For categories that already exist by name, assign their correct industry.
+  const existingCats = await db
+    .select({
+      id: assetCategories.id,
+      categoryName: assetCategories.categoryName,
+      categoryCode: assetCategories.categoryCode,
+      industry: assetCategories.industry,
+    })
+    .from(assetCategories);
+
+  const existingMap = new Map(existingCats.map((c) => [c.categoryName.toLowerCase(), c]));
+
+  let inserted = 0;
+  let updated = 0;
+
+  for (const cat of INDUSTRY_CATEGORIES) {
+    const existing = existingMap.get(cat.categoryName.toLowerCase());
+    if (existing) {
+      // Update industry if missing or different
+      if (!existing.industry || existing.industry !== cat.industry) {
+        await db
+          .update(assetCategories)
+          .set({ industry: cat.industry })
+          .where(eq(assetCategories.id, existing.id));
+        updated++;
+      }
+    } else {
+      // Check if code collision exists
+      let code = cat.categoryCode;
+      const codeExists = existingCats.some((c) => c.categoryCode === code);
+      if (codeExists) {
+        code = `${cat.categoryCode}1`;
+      }
+
+      await db.insert(assetCategories).values({
+        industry: cat.industry,
+        categoryName: cat.categoryName,
+        categoryCode: code,
+        usefulLifeYears: cat.usefulLifeYears,
+        depreciationMethod: cat.depreciationMethod,
+        description: cat.description,
+      });
+      inserted++;
+    }
+  }
+
+  // Also assign appropriate industry to any pre-existing legacy category names
+  const LEGACY_INDUSTRY_MAP: Record<string, string> = {
+    "ICT & Networking Equipment": "Information Technology & Telecom",
+    "Office Equipment & Furniture": "Corporate, Hospitality & Commercial",
+    "Fleet Vehicles & Vessels": "Transportation, Fleet & Logistics",
+    "Buildings & Infrastructure": "Facilities, Buildings & Infrastructure",
+    "Border Control Equipment": "Government, Law Enforcement & Public Safety",
+    "Medical Equipment": "Healthcare & Medical",
+    "Heavy Machinery": "Manufacturing, Mining & Heavy Industry",
   };
 
-  const cats = await db
-    .select({ id: assetCategories.id, name: assetCategories.categoryName })
-    .from(assetCategories);
-  const catIdByName: Record<string, string> = {};
-  for (const c of cats) catIdByName[c.name] = c.id;
-
-  const legacyIds = cats.filter((c) => LEGACY_CATEGORY_NAMES.includes(c.name)).map((c) => c.id);
-  if (legacyIds.length === 0) return;
-
-  const fallbackId = catIdByName["Buildings & Infrastructure"];
-
-  // Step 1: rename + recategorise the curated legacy demo tags.
-  let demoUpdated = 0;
-  for (const [tag, target] of Object.entries(LEGACY_TAG_REMAP)) {
-    const targetCatId = catIdByName[target.category];
-    if (!targetCatId) continue;
-    const r = await db
-      .update(assets)
-      .set({ assetName: target.name, categoryId: targetCatId })
-      .where(eq(assets.assetTag, tag))
-      .returning({ id: assets.id });
-    demoUpdated += r.length;
+  for (const [name, ind] of Object.entries(LEGACY_INDUSTRY_MAP)) {
+    const match = existingMap.get(name.toLowerCase());
+    if (match && (!match.industry || match.industry !== ind)) {
+      await db
+        .update(assetCategories)
+        .set({ industry: ind })
+        .where(eq(assetCategories.id, match.id));
+      updated++;
+    }
   }
 
-  // Step 2: any remaining assets in legacy categories → fallback (so we can
-  // safely delete the categories).
-  let othersMoved = 0;
-  if (fallbackId) {
-    const r = await db
-      .update(assets)
-      .set({ categoryId: fallbackId })
-      .where(inArray(assets.categoryId, legacyIds))
-      .returning({ id: assets.id });
-    othersMoved = r.length;
-  }
-
-  // Step 3: delete the now-empty legacy categories.
-  const deleted = await db
-    .delete(assetCategories)
-    .where(inArray(assetCategories.id, legacyIds))
-    .returning({ id: assetCategories.id });
-
-  if (demoUpdated > 0 || othersMoved > 0 || deleted.length > 0) {
+  if (inserted > 0 || updated > 0) {
     logger.info(
-      { demoUpdated, othersMoved, deletedCategories: deleted.length },
-      "Auto-seed: pruned legacy generic categories (Medical Equipment / Heavy Machinery)",
+      { inserted, updated, totalConfigured: INDUSTRY_CATEGORIES.length },
+      "Auto-seed: multi-industry category catalog initialized and synchronized",
     );
   }
 }
+

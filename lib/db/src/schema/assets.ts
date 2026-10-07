@@ -31,6 +31,7 @@ export const assetCategories = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     categoryName: varchar("category_name", { length: 255 }).notNull().unique(),
     categoryCode: varchar("category_code", { length: 10 }).notNull().default(""),
+    industry: varchar("industry", { length: 100 }),
     description: text("description"),
     iconName: varchar("icon_name", { length: 50 }),
     accentColor: varchar("accent_color", { length: 32 }),
