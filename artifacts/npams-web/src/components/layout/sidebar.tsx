@@ -211,6 +211,16 @@ export function Sidebar() {
 
               {isAdmin && (
                 <>
+                  {(user?.role === "Super Admin" || user?.role === "Agency Admin") && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={location === "/organizations"}>
+                        <Link href="/organizations">
+                          <Building2 />
+                          <span>Organizations</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild isActive={location === "/users"}>
                       <Link href="/users">

@@ -31,6 +31,7 @@ import StockDetailPage from "@/pages/stock-detail";
 import PurchaseRequestsPage from "@/pages/purchase-requests";
 import PurchaseRequestDetailPage from "@/pages/purchase-request-detail";
 import SystemStatusPage from "@/pages/system-status";
+import OrganizationsPage from "@/pages/organizations";
 const GIS = lazy(() => import("@/pages/gis"));
 
 const queryClient = new QueryClient();
@@ -102,6 +103,7 @@ function Router() {
       <ProtectedRoute path="/assets/:id/edit" component={AssetForm} requiredRoles={OFFICER_ROLES} />
       <ProtectedRoute path="/categories" component={Categories} requiredRoles={ADMIN_ROLES} />
       <ProtectedRoute path="/reports" component={Reports} />
+      <ProtectedRoute path="/organizations" component={OrganizationsPage} requiredRoles={ADMIN_ROLES} />
       <ProtectedRoute path="/users" component={Users} requiredRoles={ADMIN_ROLES} />
       <ProtectedRoute path="/locations" component={Locations} requiredRoles={ADMIN_ROLES} />
       <ProtectedRoute path="/audit" component={Audit} />

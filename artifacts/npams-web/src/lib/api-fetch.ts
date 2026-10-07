@@ -34,9 +34,11 @@ export async function apiFetch(
   options: RequestInit = {}
 ): Promise<Response> {
   const token = localStorage.getItem("npams_token");
+  const activeAgencyId = localStorage.getItem("npams_active_agency_id");
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(activeAgencyId && activeAgencyId !== "all" ? { "x-active-agency-id": activeAgencyId } : {}),
     ...(options.headers as Record<string, string> | undefined ?? {}),
   };
 

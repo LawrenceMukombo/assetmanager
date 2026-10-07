@@ -3,6 +3,7 @@ import { apiFetchJson } from "@/lib/api-fetch";
 
 export interface OrganizationSettings {
   id?: string;
+  agencyId?: string | null;
   organizationName: string;
   shortCode: string;
   organizationType: string;
@@ -33,12 +34,30 @@ export interface HierarchyLabels {
   level3Plural: string;
 }
 
+export interface OrganizationSummary {
+  id: string;
+  tenantId?: string;
+  agencyCode: string;
+  agencyName: string;
+  agencyType: string | null;
+  logoUrl: string | null;
+  themeAccentColor: string | null;
+  description: string | null;
+  active: boolean;
+  assetCount?: number;
+  stockCount?: number;
+  userCount?: number;
+}
+
 interface OrganizationContextType {
   organization: OrganizationSettings;
   hierarchy: HierarchyLabels;
   isLoading: boolean;
+  activeAgencyId: string | null;
+  allOrganizations: OrganizationSummary[];
+  setActiveAgencyId: (id: string | null) => void;
   refreshOrganization: () => Promise<void>;
-  updateOrganization: (updates: Partial<OrganizationSettings>) => Promise<{ ok: boolean; message?: string }>;
+  updateOrganization: (updates: Partial<OrganizationSettings>, targetAgencyId?: string | null) => Promise<{ ok: boolean; message?: string }>;
   formatCurrency: (amount: number | string | null | undefined) => string;
 }
 
@@ -64,6 +83,7 @@ const DEFAULT_ORGANIZATION: OrganizationSettings = {
 };
 
 const STORAGE_KEY = "npams_org_settings";
+const ACTIVE_AGENCY_KEY = "npams_active_agency_id";
 
 function loadCached(): OrganizationSettings {
   try {
@@ -103,6 +123,10 @@ const OrganizationContext = createContext<OrganizationContextType | undefined>(u
 export function OrganizationProvider({ children }: { children: ReactNode }) {
   const [organization, setOrganization] = useState<OrganizationSettings>(loadCached);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeAgencyId, setActiveAgencyIdState] = useState<string | null>(() => {
+    return localStorage.getItem(ACTIVE_AGENCY_KEY) || null;
+  });
+  const [allOrganizations, setAllOrganizations] = useState<OrganizationSummary[]>([]);
 
   const applyOrganizationEffects = useCallback((org: OrganizationSettings) => {
     // Update document title
@@ -129,11 +153,22 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
 
   const refreshOrganization = useCallback(async () => {
     try {
-      const res = await apiFetchJson<{ success: boolean; data: OrganizationSettings }>("/api/v1/public/organization");
+      const activeId = localStorage.getItem(ACTIVE_AGENCY_KEY);
+      const url = activeId && activeId !== "all"
+        ? `/api/v1/public/organization?agencyId=${encodeURIComponent(activeId)}`
+        : "/api/v1/public/organization";
+
+      const res = await apiFetchJson<{ success: boolean; data: OrganizationSettings }>(url);
       if (res.ok && res.data?.data) {
         const merged: OrganizationSettings = { ...DEFAULT_ORGANIZATION, ...res.data.data };
         setOrganization(merged);
         applyOrganizationEffects(merged);
+      }
+
+      // Also fetch list of all organizations for the switcher
+      const orgsRes = await apiFetchJson<{ success: boolean; data: OrganizationSummary[] }>("/api/v1/organizations");
+      if (orgsRes.ok && Array.isArray(orgsRes.data?.data)) {
+        setAllOrganizations(orgsRes.data.data);
       }
     } catch (err) {
       console.warn("Failed to load organization settings, using defaults/cache:", err);
@@ -142,19 +177,35 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     }
   }, [applyOrganizationEffects]);
 
+  const setActiveAgencyId = useCallback(
+    (id: string | null) => {
+      if (id && id !== "all") {
+        localStorage.setItem(ACTIVE_AGENCY_KEY, id);
+        setActiveAgencyIdState(id);
+      } else {
+        localStorage.removeItem(ACTIVE_AGENCY_KEY);
+        setActiveAgencyIdState(null);
+      }
+      // Re-fetch organization settings and notify components
+      refreshOrganization();
+    },
+    [refreshOrganization]
+  );
+
   useEffect(() => {
     applyOrganizationEffects(organization);
     refreshOrganization();
   }, []);
 
   const updateOrganization = useCallback(
-    async (updates: Partial<OrganizationSettings>): Promise<{ ok: boolean; message?: string }> => {
+    async (updates: Partial<OrganizationSettings>, targetAgencyId?: string | null): Promise<{ ok: boolean; message?: string }> => {
       try {
+        const agencyId = targetAgencyId !== undefined ? targetAgencyId : activeAgencyId;
         const res = await apiFetchJson<{ success: boolean; message?: string; data: OrganizationSettings }>(
           "/api/v1/organization",
           {
             method: "PATCH",
-            body: JSON.stringify(updates),
+            body: JSON.stringify({ ...updates, agencyId }),
           }
         );
 
@@ -162,6 +213,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
           const updated = { ...organization, ...res.data.data };
           setOrganization(updated);
           applyOrganizationEffects(updated);
+          refreshOrganization();
           return { ok: true, message: res.data.message };
         }
         return { ok: false, message: res.data?.message || "Failed to update organization settings" };
@@ -169,7 +221,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         return { ok: false, message: err instanceof Error ? err.message : "Network error" };
       }
     },
-    [organization, applyOrganizationEffects]
+    [organization, activeAgencyId, applyOrganizationEffects, refreshOrganization]
   );
 
   const formatCurrency = useCallback(
@@ -202,6 +254,9 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         organization,
         hierarchy,
         isLoading,
+        activeAgencyId,
+        allOrganizations,
+        setActiveAgencyId,
         refreshOrganization,
         updateOrganization,
         formatCurrency,

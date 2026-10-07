@@ -135,6 +135,16 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
         return;
       }
       req.user = { ...dbUser, email: tokenPayload.email };
+      const activeAgencyHeader = req.headers["x-active-agency-id"];
+      if (
+        activeAgencyHeader &&
+        typeof activeAgencyHeader === "string" &&
+        activeAgencyHeader !== "all" &&
+        (req.user.roleName === "Super Admin" || req.user.scopeLevel === "national")
+      ) {
+        req.user.agencyId = activeAgencyHeader;
+        req.user.scopedAgencyId = activeAgencyHeader;
+      }
       next();
     })
     .catch(() => {

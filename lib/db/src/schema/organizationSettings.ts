@@ -1,9 +1,11 @@
 import { pgTable, uuid, varchar, text, boolean, timestamp } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
+import { agencies } from "./agencies";
 
 export const organizationSettings = pgTable("organization_settings", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").references(() => tenants.id),
+  agencyId: uuid("agency_id").references(() => agencies.id),
   organizationName: varchar("organization_name", { length: 255 }).notNull().default("Asset Manager"),
   shortCode: varchar("short_code", { length: 50 }).notNull().default("AM"),
   organizationType: varchar("organization_type", { length: 100 }).notNull().default("enterprise"),
