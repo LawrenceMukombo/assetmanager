@@ -285,7 +285,13 @@ router.patch("/v1/organization", requireAuth, async (req, res) => {
   }
   if (tagline !== undefined) updates.tagline = tagline ? String(tagline).trim() : null;
   if (systemTitle !== undefined) updates.systemTitle = systemTitle ? String(systemTitle).trim() : "Asset Management System";
-  if (logoUrl !== undefined) updates.logoUrl = logoUrl ? String(logoUrl).trim() : null;
+  if (logoUrl !== undefined) {
+    const cleanLogo = logoUrl ? String(logoUrl).trim() : null;
+    updates.logoUrl = cleanLogo;
+    if (faviconUrl === undefined) {
+      updates.faviconUrl = cleanLogo;
+    }
+  }
   if (faviconUrl !== undefined) updates.faviconUrl = faviconUrl ? String(faviconUrl).trim() : null;
   if (primaryColor !== undefined) updates.primaryColor = primaryColor ? String(primaryColor).trim() : "#0F4C81";
   if (accentColor !== undefined) updates.accentColor = accentColor ? String(accentColor).trim() : "#3B82F6";
@@ -506,6 +512,7 @@ router.post("/v1/organizations", requireAuth, async (req, res) => {
       tagline: createdAgency.description || "Enterprise Asset & Inventory Management",
       systemTitle: systemTitle ? String(systemTitle).trim() : `${cleanName} Asset Management`,
       logoUrl: createdAgency.logoUrl,
+      faviconUrl: createdAgency.logoUrl,
       primaryColor: createdAgency.themeAccentColor || "#0F4C81",
       accentColor: "#3B82F6",
       currencyCode: String(currencyCode).toUpperCase(),
@@ -608,7 +615,10 @@ router.patch("/v1/organizations/:id", requireAuth, async (req, res) => {
     const settingsSync: Record<string, unknown> = { updatedAt: new Date() };
     if (updates.agencyName) settingsSync.organizationName = updates.agencyName;
     if (updates.agencyType) settingsSync.organizationType = updates.agencyType;
-    if (updates.logoUrl !== undefined) settingsSync.logoUrl = updates.logoUrl;
+    if (updates.logoUrl !== undefined) {
+      settingsSync.logoUrl = updates.logoUrl;
+      settingsSync.faviconUrl = updates.logoUrl;
+    }
     if (updates.themeAccentColor !== undefined) settingsSync.primaryColor = updates.themeAccentColor;
     if (typeof active === "boolean") settingsSync.active = active;
 

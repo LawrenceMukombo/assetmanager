@@ -33,15 +33,16 @@ function loadFromStorage(): ProvinceBranding {
   return { provinceName: null, flagUrl: null, themeAccentColor: null, flagColors: [] };
 }
 
-const DEFAULT_FAVICON = "/agencies/pngica.svg";
-
 function setFavicon(url: string | null) {
-  const href = url && url.trim() ? url : DEFAULT_FAVICON;
+  if (!url || !url.trim()) return;
+  const href = url.trim();
   const lower = href.toLowerCase();
   const type = lower.endsWith(".svg")
     ? "image/svg+xml"
     : lower.endsWith(".jpg") || lower.endsWith(".jpeg")
     ? "image/jpeg"
+    : lower.startsWith("data:image/svg")
+    ? "image/svg+xml"
     : "image/png";
   let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
   if (!link) {

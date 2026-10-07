@@ -98,14 +98,27 @@ function loadCached(): OrganizationSettings {
 }
 
 function updateFavicon(url: string | null) {
-  if (!url || !url.trim()) return;
-  let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
-  if (!link) {
-    link = document.createElement("link");
-    link.rel = "icon";
-    document.head.appendChild(link);
+  const href = url && url.trim() ? url.trim() : "/favicon.svg";
+  const lower = href.toLowerCase();
+  const type = lower.endsWith(".svg")
+    ? "image/svg+xml"
+    : lower.endsWith(".jpg") || lower.endsWith(".jpeg")
+    ? "image/jpeg"
+    : lower.startsWith("data:image/svg")
+    ? "image/svg+xml"
+    : "image/png";
+
+  const rels = ["icon", "shortcut icon", "apple-touch-icon"];
+  for (const rel of rels) {
+    let link = document.querySelector<HTMLLinkElement>(`link[rel='${rel}']`);
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = rel;
+      document.head.appendChild(link);
+    }
+    link.type = type;
+    link.href = href;
   }
-  link.href = url.trim();
 }
 
 function updateThemeVariables(primary: string, accent: string) {
@@ -135,10 +148,9 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       document.title = titleParts.join(" — ");
     }
 
-    // Update favicon
-    if (org.faviconUrl || org.logoUrl) {
-      updateFavicon(org.faviconUrl || org.logoUrl);
-    }
+    // Update site icon (browser favicon and touch icons) to the uploaded logo
+    const siteIconUrl = org.logoUrl || org.faviconUrl || "/favicon.svg";
+    updateFavicon(siteIconUrl);
 
     // Update colors
     updateThemeVariables(org.primaryColor, org.accentColor);
