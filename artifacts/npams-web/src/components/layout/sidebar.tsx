@@ -53,23 +53,37 @@ export function Sidebar() {
   });
   const unreadCount = notifications?.data?.filter((n) => !n.readStatus).length ?? 0;
 
-  const { organization, hierarchy } = useOrganization();
+  const { organization, hierarchy, activeAgencyId, allOrganizations } = useOrganization();
 
+  const activeOrg = activeAgencyId ? allOrganizations.find((o) => o.id === activeAgencyId) : null;
+  const isSuperAdmin =
+    user?.role === "Super Admin" ||
+    user?.role === "Super Administrator" ||
+    (user?.role as string)?.toLowerCase().includes("super");
   const isNational = user?.scope_level === "national";
   const isAgency = user?.scope_level === "agency";
   const isAdmin = user?.role ? ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]) : false;
   const isOfficer = user?.role ? OFFICER_ROLES.includes(user.role as typeof OFFICER_ROLES[number]) : false;
 
-  const scopeLabel = isNational
-    ? "Headquarters"
+  const scopeLabel = activeOrg
+    ? `Org · ${activeOrg.agencyCode}`
+    : isSuperAdmin
+    ? "Enterprise HQ"
+    : isNational
+    ? "National Scope"
     : isAgency
     ? "Branch / Agency"
     : hierarchy.level1;
 
   const userAgencyName = (user?.scope as { agency_name?: string } | undefined)?.agency_name ?? null;
-  const orgName = isNational
-    ? organization.organizationName
+  const orgName = activeOrg
+    ? activeOrg.agencyName
+    : isSuperAdmin || isNational
+    ? organization.organizationName || "Asset Manager"
     : branding.provinceName ?? (isAgency ? userAgencyName ?? organization.organizationName : organization.organizationName);
+
+  const displayLogoUrl = activeOrg?.logoUrl || (!isNational && branding.flagUrl ? branding.flagUrl : organization.logoUrl);
+  const themeBarColor = activeOrg?.themeAccentColor || (isNational || isSuperAdmin ? (organization.primaryColor || "#0F4C81") : "var(--province-accent, hsl(var(--primary)))");
 
   return (
     <SidebarComponent>
@@ -78,28 +92,23 @@ export function Sidebar() {
         style={{
           borderTopWidth: 4,
           borderTopStyle: "solid",
-          borderTopColor: isNational ? (organization.primaryColor || "#0F4C81") : "var(--province-accent, hsl(var(--primary)))",
+          borderTopColor: themeBarColor,
         }}
       >
         <div className="flex items-center gap-2.5">
-          {!isNational && branding.flagUrl ? (
+          {displayLogoUrl ? (
             <img
-              src={branding.flagUrl}
-              alt={`${branding.provinceName ?? scopeLabel} ${isAgency ? "logo" : "flag"}`}
-              className={isAgency ? "w-10 h-10 object-contain rounded-sm bg-white p-0.5" : "w-10 h-6 object-contain rounded-sm border bg-muted"}
-            />
-          ) : organization.logoUrl ? (
-            <img
-              src={organization.logoUrl}
-              alt={organization.organizationName}
+              src={displayLogoUrl}
+              alt={orgName}
               className="w-10 h-10 object-contain rounded-sm bg-white p-0.5 ring-1 ring-border"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
           ) : (
             <div
               className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-white text-xs shrink-0 shadow-sm"
-              style={{ background: organization.primaryColor || "#0F4C81" }}
+              style={{ background: activeOrg?.themeAccentColor || organization.primaryColor || "#0F4C81" }}
             >
-              {organization.shortCode || "AM"}
+              {activeOrg?.agencyCode?.slice(0, 2) || organization.shortCode || "AM"}
             </div>
           )}
           <div className="flex flex-col min-w-0">

@@ -96,6 +96,30 @@ async function getOrInitSettings(agencyId?: string | null) {
     .limit(1);
 
   if (existing) {
+    // If the legacy single-tenant row was hardcoded to ICSA, safely associate it
+    // with the PNGICA agency so ICSA retains its custom identity, while the
+    // global root level cleanly represents Enterprise HQ / Multi-Organization.
+    if (existing.organizationName === "ICSA" || existing.shortCode === "ICSA") {
+      const [icaAg] = await db
+        .select()
+        .from(agencies)
+        .where(eq(agencies.agencyCode, "PNGICA"))
+        .limit(1);
+
+      if (icaAg) {
+        await db
+          .update(organizationSettings)
+          .set({ agencyId: icaAg.id, updatedAt: new Date() })
+          .where(eq(organizationSettings.id, existing.id));
+
+        return {
+          ...DEFAULT_SETTINGS,
+          organizationName: "Enterprise HQ",
+          shortCode: "E-HQ",
+          systemTitle: "Asset Management System",
+        };
+      }
+    }
     return existing;
   }
 

@@ -22,7 +22,11 @@ export function Header() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [notifOpen, setNotifOpen] = useState(false);
-  const isSuperAdmin = user?.role === "Super Admin";
+  const isSuperAdmin =
+    user?.role === "Super Admin" ||
+    user?.role === "Super Administrator" ||
+    (user?.role as string)?.toLowerCase().includes("super") ||
+    user?.role === "National Asset Controller";
   const isNational = user?.scope_level === "national";
   const isAgency = user?.scope_level === "agency";
   const userAgencyName = (user?.scope as { agency_name?: string } | undefined)?.agency_name ?? null;
@@ -61,15 +65,19 @@ export function Header() {
     }
   };
 
-  const headerTitle = isNational
-    ? `${organization.organizationName} — ${organization.systemTitle}`
+  const activeOrg = activeAgencyId ? allOrganizations.find((o) => o.id === activeAgencyId) : null;
+
+  const headerTitle = activeOrg
+    ? `${activeOrg.agencyName} — ${organization.systemTitle || "Asset Management"}`
+    : isNational || isSuperAdmin
+    ? `${organization.organizationName || "Asset Manager"} — ${organization.systemTitle || "Asset Management System"}`
     : isAgency
     ? agencyDisplayName
-      ? `${agencyDisplayName} — ${organization.systemTitle}`
-      : `${organization.organizationName} — ${organization.systemTitle}`
+      ? `${agencyDisplayName} — ${organization.systemTitle || "Asset Management"}`
+      : `${organization.organizationName} — ${organization.systemTitle || "Asset Management"}`
     : branding.provinceName
-    ? `${branding.provinceName} — ${organization.systemTitle}`
-    : `${organization.organizationName} — ${organization.systemTitle}`;
+    ? `${branding.provinceName} — ${organization.systemTitle || "Asset Management"}`
+    : `${organization.organizationName} — ${organization.systemTitle || "Asset Management"}`;
 
   const defaultColors = [organization.primaryColor || "#0F4C81", organization.accentColor || "#3B82F6"];
 
@@ -91,38 +99,28 @@ export function Header() {
       ? { background: accentColors[0], height: "3px" }
       : null;
 
+  const activeLogoUrl = activeOrg?.logoUrl || organization.logoUrl || branding.flagUrl;
+
   return (
     <header className="border-b flex flex-col bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/70 shrink-0 sticky top-0 z-30" style={{ height: accentBarStyle ? "67px" : "64px" }}>
       {accentBarStyle && <div style={accentBarStyle} className="w-full shrink-0" />}
-      <div className="flex items-center justify-between px-4 md:px-6 flex-1 gap-3">
-        <div className="flex items-center gap-3 shrink-0">
+      <div className="flex items-center justify-between px-3 md:px-6 flex-1 gap-2 md:gap-3">
+        <div className="flex items-center gap-2.5 shrink-0">
           <SidebarTrigger />
-          <div className="flex items-center gap-2.5">
-            {organization.logoUrl ? (
+          <div className="flex items-center gap-2">
+            {activeLogoUrl ? (
               <img
-                src={organization.logoUrl}
-                alt={organization.organizationName}
+                src={activeLogoUrl}
+                alt={activeOrg?.agencyName || organization.organizationName}
                 className="h-8 w-8 object-contain rounded bg-white p-0.5 border hidden sm:block"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
               />
-            ) : isNational ? (
-              <img
-                src="/agencies/pngica.svg"
-                alt="ICSA"
-                className="h-8 w-8 object-contain rounded bg-white p-0.5 border hidden sm:block"
-              />
-            ) : branding.flagUrl ? (
-              <img
-                src={branding.flagUrl}
-                alt="Org branding"
-                className="h-6 w-9 object-contain rounded border bg-muted hidden sm:block"
-              />
             ) : (
               <div className="h-8 w-8 rounded bg-primary/10 items-center justify-center text-primary font-bold text-xs hidden sm:flex border border-primary/20">
-                {organization.shortCode?.slice(0, 2) || "AM"}
+                {activeOrg?.agencyCode?.slice(0, 2) || organization.shortCode?.slice(0, 2) || "AM"}
               </div>
             )}
-            <h1 className="font-semibold text-sm lg:text-base tracking-tight hidden sm:block truncate max-w-[16rem] lg:max-w-[24rem]">
+            <h1 className="font-semibold text-xs sm:text-sm lg:text-base tracking-tight hidden sm:block truncate max-w-[14rem] lg:max-w-[22rem]">
               {headerTitle}
             </h1>
           </div>
@@ -130,7 +128,7 @@ export function Header() {
 
         {/* Multi-Tenant Organization Switcher for Super Admins / Cross-Org Users */}
         {(isSuperAdmin || isNational) && (
-          <div className="hidden md:flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <Select
               value={activeAgencyId || "all"}
               onValueChange={(val) => {
@@ -138,7 +136,7 @@ export function Header() {
                 queryClient.invalidateQueries();
               }}
             >
-              <SelectTrigger className="h-8 w-[14rem] lg:w-[17rem] text-xs font-medium border-border/80 bg-background/80 shadow-none hover:bg-muted/50 transition-colors">
+              <SelectTrigger className="h-8 w-44 sm:w-56 lg:w-68 text-xs font-medium border-border/80 bg-background/80 shadow-none hover:bg-muted/50 transition-colors">
                 <Building2 className="w-3.5 h-3.5 mr-1.5 text-primary shrink-0" />
                 <SelectValue placeholder="All Organizations" />
               </SelectTrigger>
