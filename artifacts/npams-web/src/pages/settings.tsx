@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { useEffect, useState } from "react";
 import { Settings as SettingsIcon, Building2, Layers, DollarSign, Palette, CheckCircle2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { LogoUploaderField, BrandColorPickerField } from "@/components/brand-fields";
 
 const profileSchema = z.object({
   full_name: z.string().min(1, "Name is required"),
@@ -407,8 +408,15 @@ export default function Settings() {
                     name="logo_url"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Logo URL</FormLabel>
-                        <FormControl><Input {...field} placeholder="/agencies/your-logo.png or https://..." /></FormControl>
+                        <FormControl>
+                          <LogoUploaderField
+                            id="agency-logo-upload"
+                            label="Agency Logo"
+                            description="PNG, JPG, SVG, WebP (up to 10MB)"
+                            value={field.value || ""}
+                            onChange={field.onChange}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -419,18 +427,14 @@ export default function Settings() {
                       name="theme_accent_color"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Accent Colour</FormLabel>
-                          <div className="flex items-center gap-2">
-                            <FormControl>
-                              <Input {...field} placeholder="#0D47A1" />
-                            </FormControl>
-                            {field.value && (
-                              <div
-                                className="w-9 h-9 rounded border shrink-0"
-                                style={{ backgroundColor: field.value }}
-                              />
-                            )}
-                          </div>
+                          <FormControl>
+                            <BrandColorPickerField
+                              id="agency-accent-color"
+                              label="Accent Colour"
+                              value={field.value || "#0D47A1"}
+                              onChange={field.onChange}
+                            />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -633,9 +637,21 @@ export default function Settings() {
                         name="logoUrl"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Logo URL</FormLabel>
                             <FormControl>
-                              <Input {...field} placeholder="https://... or /agencies/logo.svg" />
+                              <LogoUploaderField
+                                id="org-logo-upload"
+                                label="Organization Logo"
+                                description="PNG, JPG, SVG, WebP (up to 10MB) — auto-applies as site icon"
+                                value={field.value || ""}
+                                onChange={(val) => {
+                                  field.onChange(val);
+                                  // Auto-sync faviconUrl if it was empty or matched previous logo
+                                  const currentFavicon = orgForm.getValues("faviconUrl");
+                                  if (!currentFavicon || currentFavicon === field.value) {
+                                    orgForm.setValue("faviconUrl", val);
+                                  }
+                                }}
+                              />
                             </FormControl>
                             <FormDescription>Shown in the header, login page, and report exports.</FormDescription>
                             <FormMessage />
@@ -647,9 +663,14 @@ export default function Settings() {
                         name="faviconUrl"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Favicon URL</FormLabel>
                             <FormControl>
-                              <Input {...field} placeholder="https://.../favicon.ico" />
+                              <LogoUploaderField
+                                id="org-favicon-upload"
+                                label="Favicon / Site Icon"
+                                description="Browser tab icon (SVG, PNG, ICO, JPG)"
+                                value={field.value || ""}
+                                onChange={field.onChange}
+                              />
                             </FormControl>
                             <FormDescription>Browser tab icon URL.</FormDescription>
                             <FormMessage />
@@ -664,18 +685,14 @@ export default function Settings() {
                         name="primaryColor"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Primary Brand Color</FormLabel>
-                            <div className="flex items-center gap-2">
-                              <FormControl>
-                                <Input {...field} placeholder="#0F4C81" />
-                              </FormControl>
-                              {field.value && (
-                                <div
-                                  className="w-9 h-9 rounded border shadow-inner shrink-0"
-                                  style={{ backgroundColor: field.value }}
-                                />
-                              )}
-                            </div>
+                            <FormControl>
+                              <BrandColorPickerField
+                                id="org-primary-color"
+                                label="Primary Brand Color"
+                                value={field.value || "#0F4C81"}
+                                onChange={field.onChange}
+                              />
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -685,18 +702,14 @@ export default function Settings() {
                         name="accentColor"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Secondary Accent Color</FormLabel>
-                            <div className="flex items-center gap-2">
-                              <FormControl>
-                                <Input {...field} placeholder="#3B82F6" />
-                              </FormControl>
-                              {field.value && (
-                                <div
-                                  className="w-9 h-9 rounded border shadow-inner shrink-0"
-                                  style={{ backgroundColor: field.value }}
-                                />
-                              )}
-                            </div>
+                            <FormControl>
+                              <BrandColorPickerField
+                                id="org-accent-color"
+                                label="Secondary Accent Color"
+                                value={field.value || "#3B82F6"}
+                                onChange={field.onChange}
+                              />
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
