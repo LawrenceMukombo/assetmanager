@@ -248,4 +248,94 @@ router.delete("/v1/categories/:id", requireAuth, requireAssetAdmin, async (req, 
   }
 });
 
+router.post("/v1/categories/bulk", requireAuth, requireAssetAdmin, async (req, res) => {
+  await ensureCategoryColumns();
+  const items = req.body?.items;
+  if (!Array.isArray(items) || items.length === 0) {
+    res.status(400).json({ success: false, message: "items must be a non-empty array", data: null });
+    return;
+  }
+
+  let createdCount = 0;
+  let updatedCount = 0;
+  const errors: { row: number; name?: string; error: string }[] = [];
+
+  for (let idx = 0; idx < items.length; idx++) {
+    const raw = items[idx];
+    const rowNum = idx + 1;
+    const catName = String(raw.category_name || raw.name || raw.categoryName || "").trim();
+    if (!catName) {
+      errors.push({ row: rowNum, error: "category_name is required" });
+      continue;
+    }
+
+    let code = String(raw.category_code || raw.code || raw.categoryCode || "").trim().toUpperCase();
+    if (!code || !/^[A-Z]{2,5}$/.test(code)) {
+      code = deriveCategoryCode(catName);
+    }
+
+    const industry = raw.industry ? String(raw.industry).trim() : null;
+    const description = raw.description ? String(raw.description).trim() : null;
+    const iconName = raw.icon_name || raw.iconName || null;
+    const accentColor = raw.accent_color || raw.accentColor || null;
+
+    try {
+      // Check existing by name or code
+      const [existingByName] = await db
+        .select({ id: assetCategories.id, code: assetCategories.categoryCode })
+        .from(assetCategories)
+        .where(eq(assetCategories.categoryName, catName))
+        .limit(1);
+
+      if (existingByName) {
+        await db
+          .update(assetCategories)
+          .set({
+            ...(industry ? { industry } : {}),
+            ...(description ? { description } : {}),
+            ...(iconName ? { iconName } : {}),
+            ...(accentColor ? { accentColor } : {}),
+          })
+          .where(eq(assetCategories.id, existingByName.id));
+        updatedCount++;
+      } else {
+        // Ensure code doesn't conflict
+        const [existingCode] = await db
+          .select({ id: assetCategories.id })
+          .from(assetCategories)
+          .where(eq(assetCategories.categoryCode, code))
+          .limit(1);
+
+        if (existingCode) {
+          code = deriveCategoryCode(catName + Math.floor(10 + Math.random() * 89));
+        }
+
+        await db.insert(assetCategories).values({
+          categoryName: catName,
+          categoryCode: code,
+          industry,
+          description,
+          iconName,
+          accentColor,
+        });
+        createdCount++;
+      }
+    } catch (err: any) {
+      errors.push({ row: rowNum, name: catName, error: err.message || "Failed to save category" });
+    }
+  }
+
+  res.json({
+    success: true,
+    message: `Batch category import completed: ${createdCount} created, ${updatedCount} updated${errors.length > 0 ? `, ${errors.length} errors` : ""}`,
+    data: {
+      total: items.length,
+      created: createdCount,
+      updated: updatedCount,
+      failed: errors.length,
+      errors,
+    },
+  });
+});
+
 export default router;

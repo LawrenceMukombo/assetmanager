@@ -77,19 +77,23 @@ router.get("/v1/assets", requireAuth, enforceScopeFilter, async (req, res) => {
 
     const conditions = [isNull(assets.deletedAt)];
 
-    const effectiveAgencyId = req.user?.scopedAgencyId || undefined;
-    if (effectiveAgencyId) {
-      // Agency users see ONLY their agency's assets — never province/district/facility filters
-      conditions.push(eq(assets.agencyId, effectiveAgencyId));
-    } else {
-      const effectiveProvinceId = province_id || req.user?.scopedProvinceId || undefined;
-      const effectiveDistrictId = district_id || req.user?.scopedDistrictId || undefined;
-      const effectiveFacilityId = facility_id || req.user?.scopedFacilityId || undefined;
+    const activeAgencyHeader = req.headers["x-active-agency-id"] as string | undefined;
+    const requestedAgencyId =
+      (req.query.agency_id as string | undefined) ||
+      (activeAgencyHeader && activeAgencyHeader !== "all" ? activeAgencyHeader : undefined);
+    const effectiveAgencyId = requestedAgencyId || req.user?.scopedAgencyId || req.user?.agencyId || undefined;
 
-      if (effectiveProvinceId) conditions.push(eq(assets.provinceId, effectiveProvinceId));
-      if (effectiveDistrictId) conditions.push(eq(assets.districtId, effectiveDistrictId));
-      if (effectiveFacilityId) conditions.push(eq(assets.facilityId, effectiveFacilityId));
+    if (effectiveAgencyId) {
+      conditions.push(eq(assets.agencyId, effectiveAgencyId));
     }
+
+    const effectiveProvinceId = province_id || (!effectiveAgencyId ? req.user?.scopedProvinceId : undefined) || undefined;
+    const effectiveDistrictId = district_id || (!effectiveAgencyId ? req.user?.scopedDistrictId : undefined) || undefined;
+    const effectiveFacilityId = facility_id || (!effectiveAgencyId ? req.user?.scopedFacilityId : undefined) || undefined;
+
+    if (effectiveProvinceId) conditions.push(eq(assets.provinceId, effectiveProvinceId));
+    if (effectiveDistrictId) conditions.push(eq(assets.districtId, effectiveDistrictId));
+    if (effectiveFacilityId) conditions.push(eq(assets.facilityId, effectiveFacilityId));
     if (category_id) conditions.push(eq(assets.categoryId, category_id));
     const VALID_STATUSES = ["active", "disposed", "missing", "under_maintenance"] as const;
     const VALID_CONDITIONS = ["excellent", "good", "fair", "poor"] as const;
@@ -266,10 +270,12 @@ router.post("/v1/assets", requireAuth, requireAssetAdmin, async (req, res) => {
         notes: orNull(body.notes),
         status: body.status ?? "active",
         condition: body.condition ?? "good",
-        provinceId: isAgencyScoped ? null : (orNull(body.province_id) ?? userProvinceId ?? null),
-        agencyId: isAgencyScoped ? userAgencyId : null,
-        districtId: isAgencyScoped ? null : orNull(body.district_id),
-        facilityId: isAgencyScoped ? null : orNull(body.facility_id),
+        provinceId: orNull(body.province_id) ?? userProvinceId ?? null,
+        agencyId: isAgencyScoped
+          ? userAgencyId
+          : (orNull(body.agency_id) ?? req.user.scopedAgencyId ?? req.user.agencyId ?? ((req.headers["x-active-agency-id"] && req.headers["x-active-agency-id"] !== "all") ? String(req.headers["x-active-agency-id"]) : null)),
+        districtId: orNull(body.district_id),
+        facilityId: orNull(body.facility_id),
         assignedToUser: orNull(body.assigned_to_user),
         createdBy: req.user.userId,
       })
@@ -292,6 +298,145 @@ router.post("/v1/assets", requireAuth, requireAssetAdmin, async (req, res) => {
     req.log.error({ err }, "Create asset error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
+});
+
+router.post("/v1/assets/bulk", requireAuth, requireAssetAdmin, async (req, res) => {
+  if (!req.user) return;
+  const items = req.body?.items;
+  if (!Array.isArray(items) || items.length === 0) {
+    res.status(400).json({ success: false, message: "items must be a non-empty array", data: null });
+    return;
+  }
+
+  const activeAgencyHeader = req.headers["x-active-agency-id"] as string | undefined;
+  const defaultAgencyId =
+    (req.body?.agency_id as string | undefined) ||
+    req.user.scopedAgencyId ||
+    req.user.agencyId ||
+    (activeAgencyHeader && activeAgencyHeader !== "all" ? activeAgencyHeader : null);
+
+  // Pre-load all categories and facilities to resolve names quickly
+  const existingCategories = await db.select({ id: assetCategories.id, name: assetCategories.categoryName, code: assetCategories.categoryCode }).from(assetCategories);
+  const catByName = new Map(existingCategories.map(c => [c.name.trim().toLowerCase(), c.id]));
+  const catByCode = new Map(existingCategories.map(c => [c.code.trim().toUpperCase(), c.id]));
+
+  const existingFacilities = await db.select({ id: facilities.id, name: facilities.facilityName, districtId: facilities.districtId }).from(facilities);
+  const facByName = new Map(existingFacilities.map(f => [f.name.trim().toLowerCase(), f]));
+
+  let createdCount = 0;
+  let updatedCount = 0;
+  const errors: { row: number; tag?: string; error: string }[] = [];
+
+  for (let idx = 0; idx < items.length; idx++) {
+    const raw = items[idx];
+    const rowNum = idx + 1;
+    const assetTag = String(raw.asset_tag || raw.assetTag || raw.tag || "").trim();
+    const assetName = String(raw.asset_name || raw.assetName || raw.name || "").trim();
+
+    if (!assetTag || !assetName) {
+      errors.push({ row: rowNum, tag: assetTag, error: "asset_tag and asset_name are required" });
+      continue;
+    }
+
+    // Resolve category
+    let categoryId: string | null = null;
+    const catInput = String(raw.category_id || raw.category_name || raw.category || raw.category_code || "").trim();
+    if (catInput) {
+      if (catByName.has(catInput.toLowerCase())) {
+        categoryId = catByName.get(catInput.toLowerCase())!;
+      } else if (catByCode.has(catInput.toUpperCase())) {
+        categoryId = catByCode.get(catInput.toUpperCase())!;
+      }
+    }
+
+    // Resolve facility
+    let facilityId: string | null = null;
+    let districtId: string | null = null;
+    const facInput = String(raw.facility_name || raw.facility || raw.facility_id || "").trim();
+    if (facInput && facByName.has(facInput.toLowerCase())) {
+      const facObj = facByName.get(facInput.toLowerCase())!;
+      facilityId = facObj.id;
+      districtId = facObj.districtId;
+    }
+
+    const itemAgencyId = raw.agency_id || defaultAgencyId || null;
+    const rawStatus = String(raw.status || "active").toLowerCase().replace(/\s+/g, "_");
+    const statusVal = ["active", "disposed", "missing", "under_maintenance"].includes(rawStatus)
+      ? (rawStatus as any)
+      : "active";
+    const rawCond = String(raw.condition || "good").toLowerCase();
+    const condVal = ["excellent", "good", "fair", "poor"].includes(rawCond)
+      ? (rawCond as any)
+      : "good";
+
+    try {
+      const [existing] = await db.select({ id: assets.id }).from(assets).where(eq(assets.assetTag, assetTag)).limit(1);
+      if (existing) {
+        // Upsert: update existing asset fields, preserving id and created_at
+        await db.update(assets).set({
+          assetName,
+          ...(categoryId ? { categoryId } : {}),
+          ...(raw.brand ? { brand: String(raw.brand).trim() } : {}),
+          ...(raw.model ? { model: String(raw.model).trim() } : {}),
+          ...(raw.serial_number ? { serialNumber: String(raw.serial_number).trim() } : {}),
+          ...(raw.purchase_cost != null && raw.purchase_cost !== "" ? { purchaseCost: String(raw.purchase_cost) } : {}),
+          ...(raw.purchase_date ? { purchaseDate: String(raw.purchase_date) } : {}),
+          ...(raw.useful_life_years != null && raw.useful_life_years !== "" ? { usefulLifeYears: Number(raw.useful_life_years) } : {}),
+          status: statusVal,
+          condition: condVal,
+          ...(raw.notes ? { notes: String(raw.notes).trim() } : {}),
+          ...(raw.supplier ? { supplier: String(raw.supplier).trim() } : {}),
+          ...(facilityId ? { facilityId, districtId } : {}),
+          ...(itemAgencyId ? { agencyId: itemAgencyId } : {}),
+          updatedAt: new Date(),
+        }).where(eq(assets.id, existing.id));
+        updatedCount++;
+      } else {
+        await db.insert(assets).values({
+          assetTag,
+          assetName,
+          categoryId,
+          brand: raw.brand ? String(raw.brand).trim() : null,
+          model: raw.model ? String(raw.model).trim() : null,
+          serialNumber: raw.serial_number ? String(raw.serial_number).trim() : null,
+          purchaseCost: raw.purchase_cost != null && raw.purchase_cost !== "" ? String(raw.purchase_cost) : null,
+          purchaseDate: raw.purchase_date ? String(raw.purchase_date) : null,
+          usefulLifeYears: raw.useful_life_years != null && raw.useful_life_years !== "" ? Number(raw.useful_life_years) : null,
+          status: statusVal,
+          condition: condVal,
+          notes: raw.notes ? String(raw.notes).trim() : null,
+          supplier: raw.supplier ? String(raw.supplier).trim() : null,
+          facilityId,
+          districtId,
+          agencyId: itemAgencyId,
+          createdBy: req.user.userId,
+        });
+        createdCount++;
+      }
+    } catch (insertErr: any) {
+      errors.push({ row: rowNum, tag: assetTag, error: insertErr.message || "Failed to save record" });
+    }
+  }
+
+  await db.insert(activityLogs).values({
+    userId: req.user.userId,
+    actionType: "BULK_IMPORT",
+    entityType: "asset",
+    entityId: defaultAgencyId || req.user.userId,
+    description: `Batch asset import: ${createdCount} created, ${updatedCount} updated, ${errors.length} failed`,
+  }).catch(() => {});
+
+  res.json({
+    success: true,
+    message: `Batch import completed: ${createdCount} created, ${updatedCount} updated${errors.length > 0 ? `, ${errors.length} errors` : ""}`,
+    data: {
+      total: items.length,
+      created: createdCount,
+      updated: updatedCount,
+      failed: errors.length,
+      errors,
+    },
+  });
 });
 
 // Returns the latest asset_tag in scope that matches `[AGENCY]-[TYPE]-[NNN]`
@@ -397,18 +542,23 @@ router.get("/v1/assets/:id/neighbors", requireAuth, enforceScopeFilter, async (r
 
     const conditions = [isNull(assets.deletedAt)];
 
-    const effectiveAgencyId = req.user?.scopedAgencyId || undefined;
+    const activeAgencyHeader = req.headers["x-active-agency-id"] as string | undefined;
+    const requestedAgencyId =
+      (req.query.agency_id as string | undefined) ||
+      (activeAgencyHeader && activeAgencyHeader !== "all" ? activeAgencyHeader : undefined);
+    const effectiveAgencyId = requestedAgencyId || req.user?.scopedAgencyId || req.user?.agencyId || undefined;
+
     if (effectiveAgencyId) {
       conditions.push(eq(assets.agencyId, effectiveAgencyId));
-    } else {
-      const effectiveProvinceId = province_id || req.user?.scopedProvinceId || undefined;
-      const effectiveDistrictId = district_id || req.user?.scopedDistrictId || undefined;
-      const effectiveFacilityId = facility_id || req.user?.scopedFacilityId || undefined;
-
-      if (effectiveProvinceId) conditions.push(eq(assets.provinceId, effectiveProvinceId));
-      if (effectiveDistrictId) conditions.push(eq(assets.districtId, effectiveDistrictId));
-      if (effectiveFacilityId) conditions.push(eq(assets.facilityId, effectiveFacilityId));
     }
+
+    const effectiveProvinceId = province_id || (!effectiveAgencyId ? req.user?.scopedProvinceId : undefined) || undefined;
+    const effectiveDistrictId = district_id || (!effectiveAgencyId ? req.user?.scopedDistrictId : undefined) || undefined;
+    const effectiveFacilityId = facility_id || (!effectiveAgencyId ? req.user?.scopedFacilityId : undefined) || undefined;
+
+    if (effectiveProvinceId) conditions.push(eq(assets.provinceId, effectiveProvinceId));
+    if (effectiveDistrictId) conditions.push(eq(assets.districtId, effectiveDistrictId));
+    if (effectiveFacilityId) conditions.push(eq(assets.facilityId, effectiveFacilityId));
 
     if (category_id) conditions.push(eq(assets.categoryId, category_id));
 

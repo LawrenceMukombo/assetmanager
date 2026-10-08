@@ -253,8 +253,15 @@ export function enforceScopeFilter(
   }
 
   if (req.user.scopeLevel === "national") {
+    const activeAgencyHeader = req.headers["x-active-agency-id"] as string | undefined;
+    const requestedAgencyId =
+      (req.query.agency_id as string | undefined) ||
+      (req.body?.agency_id as string | undefined) ||
+      (req.params?.agency_id as string | undefined) ||
+      (activeAgencyHeader && activeAgencyHeader !== "all" ? activeAgencyHeader : undefined);
+
     req.user.scopedProvinceId = null;
-    req.user.scopedAgencyId = null;
+    req.user.scopedAgencyId = requestedAgencyId || req.user.scopedAgencyId || null;
     req.user.scopedDistrictId = null;
     req.user.scopedFacilityId = null;
     next();

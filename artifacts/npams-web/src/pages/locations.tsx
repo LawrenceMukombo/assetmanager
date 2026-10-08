@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetProvinces, getGetProvincesQueryKey,
@@ -18,12 +18,30 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, Plus, Trash2, X, MapPin, Users, Ruler, Building2, Phone, Mail, Navigation } from "lucide-react";
+import { Pencil, Plus, Trash2, X, MapPin, Users, Ruler, Building2, Phone, Mail, Navigation, Upload, Download, Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetchJson } from "@/lib/api-fetch";
 import { FlagColorPicker } from "@/components/flag-color-picker";
 import { useOrganization } from "@/context/organization-context";
+import { BulkUploadModal } from "@/components/bulk-upload-modal";
+import { DataTablePagination } from "@/components/data-table-pagination";
+import {
+  ColumnVisibilityDropdown,
+  SortableHeader,
+  exportToCsv,
+  type ColumnDefinition,
+} from "@/components/table-column-visibility";
+
+const FACILITY_COLUMNS: ColumnDefinition[] = [
+  { id: "facility_name", label: "Facility / Location", alwaysVisible: true },
+  { id: "type", label: "Facility Type" },
+  { id: "contact", label: "Contact Info" },
+  { id: "capacity", label: "Capacity" },
+  { id: "assets", label: "Asset Count" },
+  { id: "gps", label: "GPS Coordinates" },
+  { id: "actions", label: "Actions", alwaysVisible: true },
+];
 
 interface District {
   id?: string;
@@ -120,6 +138,23 @@ export default function Locations() {
   });
   const [deleteFacility, setDeleteFacility] = useState<Facility | null>(null);
 
+  // Table Rule 24 states for Facilities
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+  const [facilitySearch, setFacilitySearch] = useState("");
+  const [facilitySortField, setFacilitySortField] = useState("facility_name");
+  const [facilitySortDir, setFacilitySortDir] = useState<"asc" | "desc">("asc");
+  const [facilityPage, setFacilityPage] = useState(1);
+  const [facilityPageSize, setFacilityPageSize] = useState(25);
+  const [facilityVisibleColumns, setFacilityVisibleColumns] = useState<Record<string, boolean>>({
+    facility_name: true,
+    type: true,
+    contact: true,
+    capacity: true,
+    assets: true,
+    gps: true,
+    actions: true,
+  });
+
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -133,6 +168,70 @@ export default function Locations() {
   const { data: facilitiesData, isLoading: fLoading } = useGetFacilitiesByDistrict(selectedDistrict, {
     query: { enabled: !!selectedDistrict, queryKey: getGetFacilitiesByDistrictQueryKey(selectedDistrict) }
   });
+
+  const toggleFacilitySort = (field: string) => {
+    if (facilitySortField === field) {
+      setFacilitySortDir(facilitySortDir === "asc" ? "desc" : "asc");
+    } else {
+      setFacilitySortField(field);
+      setFacilitySortDir("asc");
+    }
+  };
+
+  const filteredFacilities = useMemo(() => {
+    let list = (facilitiesData?.data ?? []) as unknown as Facility[];
+    if (facilitySearch.trim()) {
+      const q = facilitySearch.toLowerCase();
+      list = list.filter((f) =>
+        f.facilityName?.toLowerCase().includes(q) ||
+        f.facilityType?.toLowerCase().includes(q) ||
+        f.address?.toLowerCase().includes(q) ||
+        f.contactPhone?.toLowerCase().includes(q) ||
+        f.contactEmail?.toLowerCase().includes(q)
+      );
+    }
+    return [...list].sort((a, b) => {
+      let valA: string | number = "";
+      let valB: string | number = "";
+      if (facilitySortField === "facility_name") {
+        valA = a.facilityName ?? "";
+        valB = b.facilityName ?? "";
+      } else if (facilitySortField === "type") {
+        valA = a.facilityType ?? "";
+        valB = b.facilityType ?? "";
+      } else if (facilitySortField === "capacity") {
+        valA = a.capacity ?? 0;
+        valB = b.capacity ?? 0;
+      } else if (facilitySortField === "assets") {
+        valA = a.assetCount ?? 0;
+        valB = b.assetCount ?? 0;
+      }
+      if (valA < valB) return facilitySortDir === "asc" ? -1 : 1;
+      if (valA > valB) return facilitySortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [facilitiesData?.data, facilitySearch, facilitySortField, facilitySortDir]);
+
+  const paginatedFacilities = useMemo(() => {
+    const start = (facilityPage - 1) * facilityPageSize;
+    return filteredFacilities.slice(start, start + facilityPageSize);
+  }, [filteredFacilities, facilityPage, facilityPageSize]);
+
+  const handleExportFacilities = () => {
+    const headers = ["Facility Name", "Type", "Address", "Phone", "Email", "Capacity", "Assets", "GPS Lat", "GPS Lng"];
+    const rows = filteredFacilities.map((f) => [
+      f.facilityName ?? "",
+      f.facilityType ?? "",
+      f.address ?? "",
+      f.contactPhone ?? "",
+      f.contactEmail ?? "",
+      f.capacity ?? 0,
+      f.assetCount ?? 0,
+      f.gpsLatitude ?? "",
+      f.gpsLongitude ?? "",
+    ]);
+    exportToCsv("facilities_export.csv", headers, rows);
+  };
 
   // Prefill the district code when the New District dialog opens. Looks up the
   // latest existing district code in the selected province that matches
@@ -384,6 +483,16 @@ export default function Locations() {
         title="Locations &amp; Hierarchy"
         subtitle={<>Manage {hierarchy.level1Plural.toLowerCase()}, {hierarchy.level2Plural.toLowerCase()}, and {hierarchy.level3Plural.toLowerCase()} for {organization.organizationName}.{isSuperAdmin ? " As Administrator you can create, edit, and delete records." : ""}</>}
         breadcrumbs={[{ label: "Locations" }]}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setIsBulkUploadOpen(true)}>
+              <Upload className="w-4 h-4 mr-1.5" /> Batch Upload
+            </Button>
+            <Button variant="outline" onClick={handleExportFacilities} disabled={filteredFacilities.length === 0}>
+              <Download className="w-4 h-4 mr-1.5" /> Export Facilities
+            </Button>
+          </div>
+        }
       />
 
       <Tabs defaultValue="provinces" className="w-full">
@@ -535,24 +644,49 @@ export default function Locations() {
           </Card>
         </TabsContent>
 
-        {/* ── FACILITIES TAB ── */}
+        {/* ── FACILITIES TAB (ENTERPRISE RULE 24) ── */}
         <TabsContent value="facilities" className="mt-6 space-y-4">
-          <div className="flex flex-wrap items-center gap-3 justify-between">
-            <div className="flex flex-wrap gap-3">
-              <Select onValueChange={val => { setSelectedProvince(val); setSelectedDistrict(""); }} value={selectedProvince}>
-                <SelectTrigger className="w-full sm:w-[260px]"><SelectValue placeholder={`Select ${hierarchy.level1}`} /></SelectTrigger>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2 flex-1">
+              <Select onValueChange={val => { setSelectedProvince(val); setSelectedDistrict(""); setFacilityPage(1); }} value={selectedProvince}>
+                <SelectTrigger className="w-full sm:w-[220px]"><SelectValue placeholder={`Select ${hierarchy.level1}`} /></SelectTrigger>
                 <SelectContent>{provincesData?.data?.map(p => <SelectItem key={p.id} value={p.id!}>{p.provinceName}</SelectItem>)}</SelectContent>
               </Select>
-              <Select onValueChange={setSelectedDistrict} value={selectedDistrict} disabled={!selectedProvince}>
-                <SelectTrigger className="w-full sm:w-[260px]"><SelectValue placeholder={`Select ${hierarchy.level2}`} /></SelectTrigger>
+              <Select onValueChange={(val) => { setSelectedDistrict(val); setFacilityPage(1); }} value={selectedDistrict} disabled={!selectedProvince}>
+                <SelectTrigger className="w-full sm:w-[220px]"><SelectValue placeholder={`Select ${hierarchy.level2}`} /></SelectTrigger>
                 <SelectContent>{districtsData?.data?.map(d => <SelectItem key={d.id} value={d.id!}>{d.districtName}</SelectItem>)}</SelectContent>
               </Select>
+
+              {selectedDistrict && (
+                <div className="relative w-full sm:w-60">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search facilities..."
+                    value={facilitySearch}
+                    onChange={(e) => {
+                      setFacilitySearch(e.target.value);
+                      setFacilityPage(1);
+                    }}
+                    className="pl-8 h-9 text-sm"
+                  />
+                </div>
+              )}
             </div>
-            {isSuperAdmin && selectedDistrict && (
-              <Button onClick={() => { setAddFacilityForm({ facilityName: "", facilityType: "", address: "", description: "", contactPhone: "", contactEmail: "", capacity: "", gpsLatitude: "", gpsLongitude: "" }); setShowAddFacility(true); }}>
-                <Plus className="w-4 h-4 mr-2" /> Add {hierarchy.level3}
-              </Button>
-            )}
+
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              {selectedDistrict && (
+                <ColumnVisibilityDropdown
+                  columns={FACILITY_COLUMNS}
+                  visibleColumns={facilityVisibleColumns}
+                  onChange={setFacilityVisibleColumns}
+                />
+              )}
+              {isSuperAdmin && selectedDistrict && (
+                <Button onClick={() => { setAddFacilityForm({ facilityName: "", facilityType: "", address: "", description: "", contactPhone: "", contactEmail: "", capacity: "", gpsLatitude: "", gpsLongitude: "" }); setShowAddFacility(true); }}>
+                  <Plus className="w-4 h-4 mr-1.5" /> Add {hierarchy.level3}
+                </Button>
+              )}
+            </div>
           </div>
 
           <Card>
@@ -561,13 +695,48 @@ export default function Locations() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>{hierarchy.level3}</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Contact</TableHead>
-                      <TableHead className="text-right">Capacity</TableHead>
-                      <TableHead className="text-right">Assets</TableHead>
-                      <TableHead>GPS</TableHead>
-                      {isSuperAdmin && <TableHead />}
+                      {facilityVisibleColumns.facility_name && (
+                        <SortableHeader
+                          label={hierarchy.level3}
+                          field="facility_name"
+                          currentSortField={facilitySortField}
+                          currentSortDir={facilitySortDir}
+                          onSort={toggleFacilitySort}
+                        />
+                      )}
+                      {facilityVisibleColumns.type && (
+                        <SortableHeader
+                          label="Type"
+                          field="type"
+                          currentSortField={facilitySortField}
+                          currentSortDir={facilitySortDir}
+                          onSort={toggleFacilitySort}
+                          className="w-36"
+                        />
+                      )}
+                      {facilityVisibleColumns.contact && <TableHead>Contact</TableHead>}
+                      {facilityVisibleColumns.capacity && (
+                        <SortableHeader
+                          label="Capacity"
+                          field="capacity"
+                          currentSortField={facilitySortField}
+                          currentSortDir={facilitySortDir}
+                          onSort={toggleFacilitySort}
+                          className="w-28 text-right"
+                        />
+                      )}
+                      {facilityVisibleColumns.assets && (
+                        <SortableHeader
+                          label="Assets"
+                          field="assets"
+                          currentSortField={facilitySortField}
+                          currentSortDir={facilitySortDir}
+                          onSort={toggleFacilitySort}
+                          className="w-24 text-right"
+                        />
+                      )}
+                      {facilityVisibleColumns.gps && <TableHead>GPS</TableHead>}
+                      {facilityVisibleColumns.actions && isSuperAdmin && <TableHead className="w-20" />}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -577,42 +746,53 @@ export default function Locations() {
                       Array.from({ length: 4 }).map((_, i) => (
                         <TableRow key={i}><TableCell colSpan={isSuperAdmin ? 7 : 6}><Skeleton className="h-4 w-full" /></TableCell></TableRow>
                       ))
-                    ) : facilitiesData?.data?.length === 0 ? (
+                    ) : paginatedFacilities.length === 0 ? (
                       <TableRow><TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-10 text-muted-foreground">No {hierarchy.level3Plural.toLowerCase()} found.</TableCell></TableRow>
-                    ) : facilitiesData?.data?.map(f => {
-                      const fExt = f as unknown as Facility;
+                    ) : paginatedFacilities.map((f: Facility) => {
                       return (
-                        <TableRow key={f.id} className={isSuperAdmin ? "cursor-pointer hover:bg-muted/50" : ""} onClick={() => isSuperAdmin && openEditFacility(fExt)}>
-                          <TableCell>
-                            <div className="font-medium">{f.facilityName}</div>
-                            {fExt.address && <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1"><MapPin className="w-3 h-3" />{fExt.address}</div>}
-                          </TableCell>
-                          <TableCell>
-                            {f.facilityType
-                              ? <Badge variant="secondary" className="text-xs">{f.facilityType}</Badge>
-                              : <span className="text-muted-foreground text-xs">—</span>}
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-xs space-y-0.5">
-                              {fExt.contactPhone && <div className="flex items-center gap-1"><Phone className="w-3 h-3 text-muted-foreground" />{fExt.contactPhone}</div>}
-                              {fExt.contactEmail && <div className="flex items-center gap-1"><Mail className="w-3 h-3 text-muted-foreground" />{fExt.contactEmail}</div>}
-                              {!fExt.contactPhone && !fExt.contactEmail && <span className="text-muted-foreground">—</span>}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">{fExt.capacity != null ? fExt.capacity.toLocaleString() : <span className="text-muted-foreground text-xs">—</span>}</TableCell>
-                          <TableCell className="text-right">{fExt.assetCount ?? 0}</TableCell>
-                          <TableCell>
-                            {fExt.gpsLatitude && fExt.gpsLongitude
-                              ? <div className="text-xs text-muted-foreground font-mono">{parseFloat(fExt.gpsLatitude).toFixed(4)}, {parseFloat(fExt.gpsLongitude).toFixed(4)}</div>
-                              : <span className="text-muted-foreground text-xs">—</span>}
-                          </TableCell>
-                          {isSuperAdmin && (
+                        <TableRow key={f.id} className={isSuperAdmin ? "cursor-pointer hover:bg-muted/50" : ""} onClick={() => isSuperAdmin && openEditFacility(f)}>
+                          {facilityVisibleColumns.facility_name && (
+                            <TableCell>
+                              <div className="font-medium">{f.facilityName}</div>
+                              {f.address && <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1"><MapPin className="w-3 h-3" />{f.address}</div>}
+                            </TableCell>
+                          )}
+                          {facilityVisibleColumns.type && (
+                            <TableCell>
+                              {f.facilityType
+                                ? <Badge variant="secondary" className="text-xs">{f.facilityType}</Badge>
+                                : <span className="text-muted-foreground text-xs">—</span>}
+                            </TableCell>
+                          )}
+                          {facilityVisibleColumns.contact && (
+                            <TableCell>
+                              <div className="text-xs space-y-0.5">
+                                {f.contactPhone && <div className="flex items-center gap-1"><Phone className="w-3 h-3 text-muted-foreground" />{f.contactPhone}</div>}
+                                {f.contactEmail && <div className="flex items-center gap-1"><Mail className="w-3 h-3 text-muted-foreground" />{f.contactEmail}</div>}
+                                {!f.contactPhone && !f.contactEmail && <span className="text-muted-foreground">—</span>}
+                              </div>
+                            </TableCell>
+                          )}
+                          {facilityVisibleColumns.capacity && (
+                            <TableCell className="text-right">{f.capacity != null ? f.capacity.toLocaleString() : <span className="text-muted-foreground text-xs">—</span>}</TableCell>
+                          )}
+                          {facilityVisibleColumns.assets && (
+                            <TableCell className="text-right">{f.assetCount ?? 0}</TableCell>
+                          )}
+                          {facilityVisibleColumns.gps && (
+                            <TableCell>
+                              {f.gpsLatitude && f.gpsLongitude
+                                ? <div className="text-xs text-muted-foreground font-mono">{parseFloat(f.gpsLatitude).toFixed(4)}, {parseFloat(f.gpsLongitude).toFixed(4)}</div>
+                                : <span className="text-muted-foreground text-xs">—</span>}
+                            </TableCell>
+                          )}
+                          {facilityVisibleColumns.actions && isSuperAdmin && (
                             <TableCell onClick={e => e.stopPropagation()}>
                               <div className="flex items-center gap-1">
-                                <Button variant="ghost" size="sm" onClick={() => openEditFacility(fExt)}>
+                                <Button variant="ghost" size="sm" onClick={() => openEditFacility(f)}>
                                   <Pencil className="w-3 h-3 mr-1" /> Edit
                                 </Button>
-                                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteFacility(fExt)}>
+                                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteFacility(f)}>
                                   <Trash2 className="w-3 h-3" />
                                 </Button>
                               </div>
@@ -624,10 +804,41 @@ export default function Locations() {
                   </TableBody>
                 </Table>
               </div>
+
+              {/* Table Rule 24 Pagination */}
+              {selectedDistrict && (
+                <DataTablePagination
+                  page={facilityPage}
+                  pageSize={facilityPageSize}
+                  total={filteredFacilities.length}
+                  onPageChange={setFacilityPage}
+                  onPageSizeChange={(newSize) => {
+                    setFacilityPageSize(newSize);
+                    setFacilityPage(1);
+                  }}
+                  pageSizeOptions={[10, 25, 50, 100]}
+                />
+              )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Batch Upload Modal for Locations / Facilities */}
+      <BulkUploadModal
+        open={isBulkUploadOpen}
+        onOpenChange={setIsBulkUploadOpen}
+        entityType="locations"
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: getGetProvincesQueryKey() });
+          if (selectedProvince) {
+            queryClient.invalidateQueries({ queryKey: getGetDistrictsByProvinceQueryKey(selectedProvince) });
+          }
+          if (selectedDistrict) {
+            queryClient.invalidateQueries({ queryKey: getGetFacilitiesByDistrictQueryKey(selectedDistrict) });
+          }
+        }}
+      />
 
       {/* ═══════════════ DIALOGS ═══════════════ */}
 

@@ -829,4 +829,146 @@ async function resolveUserProvinceId(user: { provinceId: string | null; district
   return null;
 }
 
+router.post("/v1/locations/facilities/bulk", requireAuth, async (req, res) => {
+  const user = req.user!;
+  if (user.roleName !== "Super Admin" && user.roleName !== "National Admin" && user.roleName !== "Province Director") {
+    res.status(403).json({ success: false, message: "Administrative privileges required to import facilities", data: null });
+    return;
+  }
+
+  const items = req.body?.items;
+  if (!Array.isArray(items) || items.length === 0) {
+    res.status(400).json({ success: false, message: "items must be a non-empty array", data: null });
+    return;
+  }
+
+  // Pre-load all provinces and districts
+  const allProvs = await db.select().from(provinces);
+  const provByName = new Map(allProvs.map(p => [p.provinceName.trim().toLowerCase(), p]));
+  const provByCode = new Map(allProvs.map(p => [p.provinceCode.trim().toUpperCase(), p]));
+
+  const allDists = await db.select().from(districts);
+  const distByName = new Map(allDists.map(d => [d.districtName.trim().toLowerCase(), d]));
+
+  let createdCount = 0;
+  let updatedCount = 0;
+  const errors: { row: number; name?: string; error: string }[] = [];
+
+  for (let idx = 0; idx < items.length; idx++) {
+    const raw = items[idx];
+    const rowNum = idx + 1;
+    const facName = String(raw.facility_name || raw.name || raw.facilityName || "").trim();
+    if (!facName) {
+      errors.push({ row: rowNum, error: "facility_name is required" });
+      continue;
+    }
+
+    // Resolve province
+    let provinceId: string | null = null;
+    const provInput = String(raw.province_name || raw.province || raw.provinceName || raw.province_code || "").trim();
+    if (provInput) {
+      if (provByName.has(provInput.toLowerCase())) {
+        provinceId = provByName.get(provInput.toLowerCase())!.id;
+      } else if (provByCode.has(provInput.toUpperCase())) {
+        provinceId = provByCode.get(provInput.toUpperCase())!.id;
+      }
+    }
+    if (!provinceId && allProvs.length > 0) {
+      provinceId = allProvs[0].id;
+    }
+
+    // Resolve district
+    let districtId: string | null = null;
+    const distInput = String(raw.district_name || raw.district || raw.districtName || "").trim();
+    if (distInput && distByName.has(distInput.toLowerCase())) {
+      districtId = distByName.get(distInput.toLowerCase())!.id;
+    } else if (distInput && provinceId) {
+      // Create new district if it doesn't exist
+      try {
+        const [newDist] = await db.insert(districts).values({
+          provinceId,
+          districtName: distInput,
+          districtCode: distInput.slice(0, 3).toUpperCase() + "-" + Math.floor(100 + Math.random() * 899),
+        }).returning();
+        districtId = newDist.id;
+        distByName.set(distInput.toLowerCase(), newDist);
+      } catch {
+        // fallback
+      }
+    }
+
+    if (!districtId) {
+      // Fallback to first district of province or any district
+      const provDist = allDists.find(d => d.provinceId === provinceId) || allDists[0];
+      if (provDist) {
+        districtId = provDist.id;
+      }
+    }
+
+    if (!districtId) {
+      errors.push({ row: rowNum, name: facName, error: "Unable to associate facility with a district" });
+      continue;
+    }
+
+    const facilityType = raw.facility_type || raw.facilityType || "Site / Office";
+    const address = raw.address ? String(raw.address).trim() : null;
+    const description = raw.description ? String(raw.description).trim() : null;
+    const contactPhone = raw.contact_phone || raw.contactPhone || null;
+    const contactEmail = raw.contact_email || raw.contactEmail || null;
+    const capacity = raw.capacity != null ? Number(raw.capacity) : null;
+    const gpsLat = raw.gps_latitude || raw.gpsLatitude || null;
+    const gpsLng = raw.gps_longitude || raw.gpsLongitude || null;
+
+    try {
+      const [existing] = await db
+        .select({ id: facilities.id })
+        .from(facilities)
+        .where(and(eq(facilities.districtId, districtId), eq(facilities.facilityName, facName)))
+        .limit(1);
+
+      if (existing) {
+        await db.update(facilities).set({
+          facilityType,
+          ...(address ? { address } : {}),
+          ...(description ? { description } : {}),
+          ...(contactPhone ? { contactPhone } : {}),
+          ...(contactEmail ? { contactEmail } : {}),
+          ...(capacity != null ? { capacity } : {}),
+          ...(gpsLat ? { gpsLatitude: String(gpsLat) } : {}),
+          ...(gpsLng ? { gpsLongitude: String(gpsLng) } : {}),
+        }).where(eq(facilities.id, existing.id));
+        updatedCount++;
+      } else {
+        await db.insert(facilities).values({
+          districtId,
+          facilityName: facName,
+          facilityType,
+          address,
+          description,
+          contactPhone,
+          contactEmail,
+          capacity,
+          gpsLatitude: gpsLat ? String(gpsLat) : null,
+          gpsLongitude: gpsLng ? String(gpsLng) : null,
+        });
+        createdCount++;
+      }
+    } catch (facErr: any) {
+      errors.push({ row: rowNum, name: facName, error: facErr.message || "Failed to save facility" });
+    }
+  }
+
+  res.json({
+    success: true,
+    message: `Batch facility import completed: ${createdCount} created, ${updatedCount} updated${errors.length > 0 ? `, ${errors.length} errors` : ""}`,
+    data: {
+      total: items.length,
+      created: createdCount,
+      updated: updatedCount,
+      failed: errors.length,
+      errors,
+    },
+  });
+});
+
 export default router;

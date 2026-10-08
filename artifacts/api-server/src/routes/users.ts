@@ -316,13 +316,18 @@ router.get("/v1/users", requireAuth, async (req, res) => {
     const alertCounts = await getPasswordResetAlertCounts();
 
     const user = req.user;
+    const activeAgencyHeader = req.headers["x-active-agency-id"] as string | undefined;
+    const requestedAgencyId =
+      (req.query.agency_id as string | undefined) ||
+      (activeAgencyHeader && activeAgencyHeader !== "all" ? activeAgencyHeader : undefined);
+    const effectiveAgencyId = requestedAgencyId || user.scopedAgencyId || user.agencyId || undefined;
+
     const filtered =
-      user.scopeLevel === "national"
+      effectiveAgencyId
+        ? allUsers.filter((u) => u.scope?.agencyId === effectiveAgencyId)
+        : user.scopeLevel === "national"
         ? allUsers
         : allUsers.filter((u) => {
-            if (user.scopeLevel === "agency" || user.agencyId) {
-              return !!user.agencyId && u.scope?.agencyId === user.agencyId;
-            }
             if (user.facilityId) {
               return u.scope?.facilityId === user.facilityId;
             }
@@ -434,6 +439,142 @@ router.post("/v1/users", requireAuth, requireUserAdmin, async (req, res) => {
     req.log.error({ err }, "Create user error");
     res.status(500).json({ success: false, message: "Internal server error", data: null });
   }
+});
+
+router.post("/v1/users/bulk", requireAuth, requireUserAdmin, async (req, res) => {
+  if (!req.user) return;
+  const items = req.body?.items;
+  if (!Array.isArray(items) || items.length === 0) {
+    res.status(400).json({ success: false, message: "items must be a non-empty array", data: null });
+    return;
+  }
+
+  const activeAgencyHeader = req.headers["x-active-agency-id"] as string | undefined;
+  const defaultAgencyId =
+    (req.body?.agency_id as string | undefined) ||
+    req.user.scopedAgencyId ||
+    req.user.agencyId ||
+    (activeAgencyHeader && activeAgencyHeader !== "all" ? activeAgencyHeader : null);
+
+  // Pre-load all roles and agencies
+  const allRoles = await db.select().from(roles);
+  const roleByName = new Map(allRoles.map(r => [r.roleName.trim().toLowerCase(), r]));
+  const defaultRole = roleByName.get("asset manager") || roleByName.get("viewer") || allRoles[0];
+
+  const allAgencies = await db.select().from(agencies);
+  const agencyByCode = new Map(allAgencies.map(a => [a.agencyCode.trim().toUpperCase(), a.id]));
+
+  let createdCount = 0;
+  let updatedCount = 0;
+  const errors: { row: number; email?: string; error: string }[] = [];
+
+  for (let idx = 0; idx < items.length; idx++) {
+    const raw = items[idx];
+    const rowNum = idx + 1;
+    const email = String(raw.email || "").trim().toLowerCase();
+    const fullName = String(raw.full_name || raw.name || raw.fullName || "").trim();
+
+    if (!email || !fullName) {
+      errors.push({ row: rowNum, email, error: "email and full_name are required" });
+      continue;
+    }
+
+    // Resolve role
+    let roleObj = defaultRole;
+    const roleInput = String(raw.role_name || raw.role || raw.roleName || "").trim().toLowerCase();
+    if (roleInput && roleByName.has(roleInput)) {
+      roleObj = roleByName.get(roleInput)!;
+    }
+
+    // Resolve agency
+    let userAgencyId = defaultAgencyId;
+    const agencyCode = String(raw.agency_code || raw.agencyCode || raw.agency || "").trim().toUpperCase();
+    if (agencyCode && agencyByCode.has(agencyCode)) {
+      userAgencyId = agencyByCode.get(agencyCode)!;
+    }
+
+    const phone = raw.phone_number || raw.phoneNumber || raw.phone || null;
+    const department = raw.department || null;
+    const jobTitle = raw.job_title || raw.jobTitle || raw.title || null;
+
+    try {
+      const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+      if (existing) {
+        // Update user profile info non-destructively
+        await db.update(users).set({
+          fullName,
+          ...(phone ? { phoneNumber: String(phone).trim() } : {}),
+          ...(department ? { department: String(department).trim() } : {}),
+          ...(jobTitle ? { jobTitle: String(jobTitle).trim() } : {}),
+          updatedAt: new Date(),
+        }).where(eq(users.id, existing.id));
+
+        // Update role if specified
+        if (roleObj) {
+          await db.delete(userRoles).where(eq(userRoles.userId, existing.id));
+          await db.insert(userRoles).values({ userId: existing.id, roleId: roleObj.id });
+        }
+
+        // Update scope agency if specified
+        if (userAgencyId) {
+          const [scopeRow] = await db.select({ id: userScope.id }).from(userScope).where(eq(userScope.userId, existing.id)).limit(1);
+          if (scopeRow) {
+            await db.update(userScope).set({ agencyId: userAgencyId }).where(eq(userScope.id, scopeRow.id));
+          } else {
+            await db.insert(userScope).values({ userId: existing.id, agencyId: userAgencyId });
+          }
+        }
+
+        updatedCount++;
+      } else {
+        // Create new user with secure temporary password
+        const initialPassword = String(raw.password || "AssetManager2026!").trim();
+        const passwordHash = await bcrypt.hash(initialPassword, 10);
+
+        const [newUser] = await db.insert(users).values({
+          fullName,
+          email,
+          passwordHash,
+          phoneNumber: phone ? String(phone).trim() : null,
+          department: department ? String(department).trim() : null,
+          jobTitle: jobTitle ? String(jobTitle).trim() : null,
+        }).returning();
+
+        if (roleObj) {
+          await db.insert(userRoles).values({ userId: newUser.id, roleId: roleObj.id });
+        }
+
+        await db.insert(userScope).values({
+          userId: newUser.id,
+          agencyId: userAgencyId,
+        });
+
+        createdCount++;
+      }
+    } catch (userErr: any) {
+      errors.push({ row: rowNum, email, error: userErr.message || "Failed to save user" });
+    }
+  }
+
+  await db.insert(activityLogs).values({
+    userId: req.user.userId,
+    actionType: "BULK_IMPORT",
+    entityType: "user",
+    entityId: defaultAgencyId || req.user.userId,
+    description: `Batch user import: ${createdCount} created, ${updatedCount} updated, ${errors.length} failed`,
+  }).catch(() => {});
+
+  res.json({
+    success: true,
+    message: `Batch user import completed: ${createdCount} created, ${updatedCount} updated${errors.length > 0 ? `, ${errors.length} errors` : ""}`,
+    data: {
+      total: items.length,
+      created: createdCount,
+      updated: updatedCount,
+      failed: errors.length,
+      errors,
+    },
+  });
 });
 
 router.get("/v1/users/:id", requireAuth, async (req, res) => {

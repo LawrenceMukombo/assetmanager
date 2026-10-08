@@ -63,6 +63,9 @@ import {
   SlidersHorizontal,
   ChevronDown,
   ChevronUp,
+  Upload,
+  Download,
+  Building2,
 } from "lucide-react";
 import { statusBadgeClass } from "@/lib/status";
 import { getCategoryMeta } from "@/lib/category";
@@ -72,8 +75,30 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DataTablePagination } from "@/components/data-table-pagination";
 import { Box } from "lucide-react";
 import { INDUSTRY_SECTORS } from "@/lib/industries";
+import { useOrganization } from "@/context/organization-context";
+import { BulkUploadModal } from "@/components/bulk-upload-modal";
+import {
+  ColumnVisibilityDropdown,
+  SortableHeader,
+  exportToCsv,
+  type ColumnDefinition,
+} from "@/components/table-column-visibility";
 
 const ALL = "__all__";
+
+const ASSET_COLUMNS: ColumnDefinition[] = [
+  { id: "asset_tag", label: "Asset Tag", alwaysVisible: true },
+  { id: "name", label: "Asset Name", alwaysVisible: true },
+  { id: "category", label: "Category" },
+  { id: "condition", label: "Condition" },
+  { id: "status", label: "Status" },
+  { id: "cost", label: "Purchase Cost" },
+  { id: "serial_number", label: "Serial Number" },
+  { id: "brand_model", label: "Brand / Model" },
+  { id: "province", label: "Province / Region" },
+  { id: "facility", label: "Facility / Location" },
+  { id: "actions", label: "Actions", alwaysVisible: true },
+];
 
 const STATUS_OPTIONS = [
   { value: GetAssetsStatus.active, label: "Active" },
@@ -178,7 +203,26 @@ export default function Assets() {
   const isNational = user?.scope_level === "national";
   const userProvinceId = (!isNational ? (user?.scope as { province_id?: string })?.province_id : undefined) ?? "";
 
+  const { activeAgencyId, organization } = useOrganization();
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [sortField, setSortField] = useState<string>("assetTag");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
+    asset_tag: true,
+    name: true,
+    category: true,
+    condition: true,
+    status: true,
+    cost: false,
+    serial_number: false,
+    brand_model: false,
+    province: true,
+    facility: true,
+    actions: true,
+  });
+
   const [search, setSearch] = useState("");
   const [regionName, setRegionName] = useState("");
   const [provinceId, setProvinceId] = useState(userProvinceId);
@@ -194,9 +238,10 @@ export default function Assets() {
     user?.role as (typeof OFFICER_ROLES)[number]
   );
 
-  const filters: GetAssetsParams = {
+  const filters: GetAssetsParams & { agency_id?: string } = {
     page,
-    limit: 10,
+    limit: pageSize,
+    ...(activeAgencyId && activeAgencyId !== "all" ? { agency_id: activeAgencyId } : {}),
     ...(search ? { search } : {}),
     ...(provinceId ? { province_id: provinceId } : {}),
     ...(districtId ? { district_id: districtId } : {}),
@@ -207,7 +252,7 @@ export default function Assets() {
   };
 
   const { data, isLoading, refetch } = useGetAssets(filters, {
-    query: { queryKey: getGetAssetsQueryKey(filters) },
+    query: { queryKey: [...getGetAssetsQueryKey(filters), activeAgencyId ?? "all"] },
   });
 
   const { data: categoriesData } = useGetCategories();
@@ -393,6 +438,65 @@ export default function Assets() {
     facilityName?: string;
   }[];
 
+  const rawAssets = assets;
+
+  const sortedAssets = useMemo(() => {
+    if (!sortField) return rawAssets;
+    return [...rawAssets].sort((a: any, b: any) => {
+      let aVal = a[sortField];
+      let bVal = b[sortField];
+      if (sortField === "category") {
+        aVal = a.category?.categoryName || "";
+        bVal = b.category?.categoryName || "";
+      } else if (sortField === "province") {
+        aVal = a.province?.provinceName || "";
+        bVal = b.province?.provinceName || "";
+      } else if (sortField === "facility") {
+        aVal = a.facility?.facilityName || "";
+        bVal = b.facility?.facilityName || "";
+      }
+      if (typeof aVal === "string") {
+        const cmp = aVal.localeCompare(String(bVal || ""));
+        return sortDir === "asc" ? cmp : -cmp;
+      }
+      if (typeof aVal === "number") {
+        const cmp = aVal - Number(bVal || 0);
+        return sortDir === "asc" ? cmp : -cmp;
+      }
+      return 0;
+    });
+  }, [rawAssets, sortField, sortDir]);
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
+
+  const handleExport = () => {
+    const exportRows = (sortedAssets ?? []).map((a: any) => [
+      a.assetTag,
+      a.assetName,
+      a.category?.categoryName || "",
+      a.condition,
+      a.status,
+      a.purchaseCost || "",
+      a.serialNumber || "",
+      `${a.brand || ""} ${a.model || ""}`.trim(),
+      a.province?.provinceName || "",
+      a.facility?.facilityName || "",
+    ]);
+    exportToCsv(
+      `assets-${organization.shortCode || "export"}-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["Asset Tag", "Asset Name", "Category", "Condition", "Status", "Purchase Cost", "Serial Number", "Brand & Model", "Province", "Facility"],
+      exportRows
+    );
+    toast({ title: "Export Complete", description: `Exported ${exportRows.length} assets to CSV.` });
+  };
+
   const goToAsset = (assetId: string) => {
     const ctx: Record<string, string> = {};
     if (provinceId) ctx.province_id = provinceId;
@@ -418,13 +522,51 @@ export default function Assets() {
         subtitle="Manage and track all public assets."
         icon={<Box className="w-5 h-5" />}
         breadcrumbs={[{ label: "Assets" }]}
-        actions={canCreateAsset && (
-          <Button onClick={() => setLocation("/assets/new")}>
-            <Plus className="w-4 h-4" />
-            Add Asset
-          </Button>
-        )}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              className="gap-1.5 h-9"
+            >
+              <Download className="w-4 h-4 text-muted-foreground" />
+              Export CSV
+            </Button>
+            {canCreateAsset && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setBulkUploadOpen(true)}
+                className="gap-1.5 h-9 text-primary border-primary/30 hover:bg-primary/5"
+              >
+                <Upload className="w-4 h-4" />
+                Batch Upload
+              </Button>
+            )}
+            {canCreateAsset && (
+              <Button size="sm" onClick={() => setLocation("/assets/new")} className="gap-1.5 h-9">
+                <Plus className="w-4 h-4" />
+                Add Asset
+              </Button>
+            )}
+          </div>
+        }
       />
+
+      {activeAgencyId && activeAgencyId !== "all" && (
+        <div className="flex items-center justify-between p-3 rounded-lg border bg-primary/5 border-primary/20 text-xs">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-primary shrink-0" />
+            <span>
+              Scoped to organization: <strong className="text-foreground">{organization.organizationName}</strong> ({organization.shortCode})
+            </span>
+          </div>
+          <Badge variant="outline" className="text-[11px] bg-background text-primary border-primary/30">
+            Tenant Isolated
+          </Badge>
+        </div>
+      )}
 
       <div className="bg-card rounded-lg border">
         <div className="flex items-center justify-between px-4 py-3 border-b">
@@ -742,142 +884,244 @@ export default function Assets() {
         )}
       </div>
 
-      <div className="bg-card border rounded-lg overflow-hidden">
+      <div className="bg-card border rounded-lg overflow-hidden shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3 border-b bg-muted/20">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-foreground">Asset Register</span>
+            <span className="text-xs text-muted-foreground">
+              ({pagination?.total?.toLocaleString() ?? 0} total records)
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <ColumnVisibilityDropdown
+              columns={ASSET_COLUMNS}
+              visibleColumns={visibleColumns}
+              onChange={setVisibleColumns}
+            />
+          </div>
+        </div>
+
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Asset Tag</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Condition</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Province</TableHead>
-                <TableHead>Facility</TableHead>
-                <TableHead>Actions</TableHead>
+              <TableRow className="bg-muted/40">
+                {visibleColumns.asset_tag !== false && (
+                  <TableHead>
+                    <SortableHeader label="Asset Tag" field="assetTag" currentSortField={sortField} currentSortDir={sortDir} onSort={handleSort} />
+                  </TableHead>
+                )}
+                {visibleColumns.name !== false && (
+                  <TableHead>
+                    <SortableHeader label="Asset Name" field="assetName" currentSortField={sortField} currentSortDir={sortDir} onSort={handleSort} />
+                  </TableHead>
+                )}
+                {visibleColumns.category !== false && (
+                  <TableHead>
+                    <SortableHeader label="Category" field="category" currentSortField={sortField} currentSortDir={sortDir} onSort={handleSort} />
+                  </TableHead>
+                )}
+                {visibleColumns.brand_model !== false && (
+                  <TableHead>
+                    <SortableHeader label="Brand / Model" field="brand" currentSortField={sortField} currentSortDir={sortDir} onSort={handleSort} />
+                  </TableHead>
+                )}
+                {visibleColumns.serial_number !== false && (
+                  <TableHead>
+                    <SortableHeader label="Serial No" field="serialNumber" currentSortField={sortField} currentSortDir={sortDir} onSort={handleSort} />
+                  </TableHead>
+                )}
+                {visibleColumns.cost !== false && (
+                  <TableHead>
+                    <SortableHeader label="Cost" field="purchaseCost" currentSortField={sortField} currentSortDir={sortDir} onSort={handleSort} />
+                  </TableHead>
+                )}
+                {visibleColumns.condition !== false && (
+                  <TableHead>
+                    <SortableHeader label="Condition" field="condition" currentSortField={sortField} currentSortDir={sortDir} onSort={handleSort} />
+                  </TableHead>
+                )}
+                {visibleColumns.status !== false && (
+                  <TableHead>
+                    <SortableHeader label="Status" field="status" currentSortField={sortField} currentSortDir={sortDir} onSort={handleSort} />
+                  </TableHead>
+                )}
+                {visibleColumns.province !== false && (
+                  <TableHead>
+                    <SortableHeader label="Province" field="province" currentSortField={sortField} currentSortDir={sortDir} onSort={handleSort} />
+                  </TableHead>
+                )}
+                {visibleColumns.facility !== false && (
+                  <TableHead>
+                    <SortableHeader label="Facility" field="facility" currentSortField={sortField} currentSortDir={sortDir} onSort={handleSort} />
+                  </TableHead>
+                )}
+                {visibleColumns.actions !== false && (
+                  <TableHead className="w-16 text-right">Actions</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 8 }).map((__, j) => (
+                    {Array.from({ length: Object.values(visibleColumns).filter(Boolean).length }).map((__, j) => (
                       <TableCell key={j}>
                         <Skeleton className="h-4 w-20" />
                       </TableCell>
                     ))}
                   </TableRow>
                 ))
-              ) : assets.length === 0 ? (
+              ) : sortedAssets.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
-                    className="text-center py-8 text-muted-foreground"
+                    colSpan={Object.values(visibleColumns).filter(Boolean).length}
+                    className="text-center py-12 text-muted-foreground"
                   >
-                    No assets found.
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Box className="h-10 w-10 text-muted-foreground/40" />
+                      <p className="font-medium text-foreground">No assets found</p>
+                      <p className="text-xs">
+                        {hasActiveFilters
+                          ? "Try clearing filters to see more records."
+                          : activeAgencyId && activeAgencyId !== "all"
+                          ? `No assets have been recorded yet for ${organization.organizationName}. Use "Add Asset" or "Batch Upload" above to register assets.`
+                          : "No assets have been recorded yet."}
+                      </p>
+                    </div>
                   </TableCell>
                 </TableRow>
               ) : (
-                assets.map((asset) => (
+                sortedAssets.map((asset: any) => (
                   <TableRow
                     key={asset.id}
                     className="cursor-pointer hover:bg-muted/50 transition-colors"
                     onClick={() => goToAsset(asset.id!)}
                   >
-                    <TableCell className="font-mono text-xs">
-                      {asset.assetTag}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {asset.assetName}
-                    </TableCell>
-                    <TableCell>
-                      {asset.category?.categoryName ? (() => {
-                        const meta = getCategoryMeta(
-                          asset.category.categoryName,
-                          asset.category.categoryCode,
-                        );
-                        const Icon = meta.icon;
-                        return (
-                          <span className="inline-flex items-center gap-1.5">
-                            <span
-                              className={cn(
-                                "inline-flex items-center justify-center w-6 h-6 rounded-md shrink-0",
-                                meta.chipClass,
-                              )}
-                              aria-hidden
-                            >
-                              <Icon className="w-3.5 h-3.5" />
-                            </span>
-                            <span>{asset.category.categoryName}</span>
-                            {asset.category.categoryCode && (
-                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                                {asset.category.categoryCode}
+                    {visibleColumns.asset_tag !== false && (
+                      <TableCell className="font-mono text-xs font-semibold text-primary">
+                        {asset.assetTag}
+                      </TableCell>
+                    )}
+                    {visibleColumns.name !== false && (
+                      <TableCell className="font-medium text-foreground">
+                        {asset.assetName}
+                      </TableCell>
+                    )}
+                    {visibleColumns.category !== false && (
+                      <TableCell>
+                        {asset.category?.categoryName ? (() => {
+                          const meta = getCategoryMeta(
+                            asset.category.categoryName,
+                            asset.category.categoryCode,
+                          );
+                          const Icon = meta.icon;
+                          return (
+                            <span className="inline-flex items-center gap-1.5">
+                              <span
+                                className={cn(
+                                  "inline-flex items-center justify-center w-6 h-6 rounded-md shrink-0",
+                                  meta.chipClass,
+                                )}
+                                aria-hidden
+                              >
+                                <Icon className="w-3.5 h-3.5" />
                               </span>
+                              <span>{asset.category.categoryName}</span>
+                              {asset.category.categoryCode && (
+                                <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                                  {asset.category.categoryCode}
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })() : (
+                          "N/A"
+                        )}
+                      </TableCell>
+                    )}
+                    {visibleColumns.brand_model !== false && (
+                      <TableCell className="text-xs text-muted-foreground">
+                        {[asset.brand, asset.model].filter(Boolean).join(" — ") || "N/A"}
+                      </TableCell>
+                    )}
+                    {visibleColumns.serial_number !== false && (
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {asset.serialNumber || "N/A"}
+                      </TableCell>
+                    )}
+                    {visibleColumns.cost !== false && (
+                      <TableCell className="text-xs font-medium">
+                        {asset.purchaseCost != null ? `${organization.currencySymbol} ${Number(asset.purchaseCost).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "N/A"}
+                      </TableCell>
+                    )}
+                    {visibleColumns.condition !== false && (
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize text-xs">
+                          {asset.condition}
+                        </Badge>
+                      </TableCell>
+                    )}
+                    {visibleColumns.status !== false && (
+                      <TableCell>
+                        <Badge
+                          className={`capitalize text-xs ${statusBadgeClass(asset.status)}`}
+                        >
+                          {asset.status?.replace("_", " ")}
+                        </Badge>
+                      </TableCell>
+                    )}
+                    {visibleColumns.province !== false && (
+                      <TableCell className="text-xs">
+                        {asset.province?.provinceName || "N/A"}
+                      </TableCell>
+                    )}
+                    {visibleColumns.facility !== false && (
+                      <TableCell className="text-xs">
+                        {asset.facility?.facilityName || "N/A"}
+                      </TableCell>
+                    )}
+                    {visibleColumns.actions !== false && (
+                      <TableCell onClick={(e) => e.stopPropagation()} className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => goToAsset(asset.id!)}
+                            >
+                              <Eye className="mr-2 h-4 w-4" />
+                              View Details
+                            </DropdownMenuItem>
+                            {canCreateAsset && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  setLocation(`/assets/${asset.id}/edit`)
+                                }
+                              >
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                              </DropdownMenuItem>
                             )}
-                          </span>
-                        );
-                      })() : (
-                        "N/A"
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="capitalize">
-                        {asset.condition}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        className={`capitalize ${statusBadgeClass(asset.status)}`}
-                      >
-                        {asset.status?.replace("_", " ")}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {asset.province?.provinceName || "N/A"}
-                    </TableCell>
-                    <TableCell>
-                      {asset.facility?.facilityName || "N/A"}
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => goToAsset(asset.id!)}
-                          >
-                            <Eye className="mr-2 h-4 w-4" />
-                            View Details
-                          </DropdownMenuItem>
-                          {canCreateAsset && (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                setLocation(`/assets/${asset.id}/edit`)
-                              }
-                            >
-                              <Edit className="mr-2 h-4 w-4" />
-                              Edit
-                            </DropdownMenuItem>
-                          )}
-                          {user?.role === "Super Admin" && (
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={() => setDeleteId(asset.id!)}
-                            >
-                              <Trash className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+                            {user?.role === "Super Admin" && (
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => setDeleteId(asset.id!)}
+                              >
+                                <Trash className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}
@@ -885,16 +1129,28 @@ export default function Assets() {
           </Table>
         </div>
 
-        {pagination && pagination.total !== undefined && pagination.total > 0 && (
+        {pagination && pagination.total !== undefined && (
           <DataTablePagination
             page={pagination.page ?? page}
-            pageSize={pagination.limit ?? 10}
+            pageSize={pageSize}
             total={pagination.total}
             onPageChange={(p) => setPage(p)}
+            onPageSizeChange={(sz) => {
+              setPageSize(sz);
+              setPage(1);
+            }}
+            pageSizeOptions={[10, 25, 50, 100]}
             label="assets"
           />
         )}
       </div>
+
+      <BulkUploadModal
+        open={bulkUploadOpen}
+        onOpenChange={setBulkUploadOpen}
+        entityType="assets"
+        onSuccess={() => refetch()}
+      />
 
       <AlertDialog
         open={!!deleteId}

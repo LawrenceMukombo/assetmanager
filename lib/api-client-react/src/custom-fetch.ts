@@ -17,6 +17,7 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _activeAgencyGetter: (() => string | null) | null = null;
 let _on401Handler: (() => void) | null = null;
 
 /**
@@ -54,6 +55,13 @@ export function setBaseUrl(url: string | null): void {
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
+}
+
+/**
+ * Register a getter for the current active agency / organization.
+ */
+export function setActiveAgencyGetter(getter: (() => string | null) | null): void {
+  _activeAgencyGetter = getter;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -367,6 +375,27 @@ export async function customFetch<T = unknown>(
     const token = await _authTokenGetter();
     if (token) {
       headers.set("authorization", `Bearer ${token}`);
+    }
+  }
+
+  // Attach active agency / organization header when configured or stored in localStorage
+  if (!headers.has("x-active-agency-id")) {
+    let agencyId: string | null = null;
+    if (_activeAgencyGetter) {
+      try {
+        agencyId = _activeAgencyGetter();
+      } catch {
+        // ignore
+      }
+    } else if (typeof localStorage !== "undefined") {
+      try {
+        agencyId = localStorage.getItem("npams_active_agency_id");
+      } catch {
+        // ignore
+      }
+    }
+    if (agencyId && agencyId !== "all") {
+      headers.set("x-active-agency-id", agencyId);
     }
   }
 

@@ -46,10 +46,29 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, ShieldCheck, Users as UsersIcon, Trash2, Activity as ActivityIcon, Mail, Loader2, ChevronDown, ChevronRight, AlertTriangle, Download } from "lucide-react";
+import { Plus, Pencil, ShieldCheck, Users as UsersIcon, Trash2, Activity as ActivityIcon, Mail, Loader2, ChevronDown, ChevronRight, AlertTriangle, Download, Upload, Search } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageHeader } from "@/components/layout/page-header";
 import { Label } from "@/components/ui/label";
+import { useOrganization } from "@/context/organization-context";
+import { BulkUploadModal } from "@/components/bulk-upload-modal";
+import {
+  ColumnVisibilityDropdown,
+  SortableHeader,
+  exportToCsv,
+  type ColumnDefinition,
+} from "@/components/table-column-visibility";
+
+const USER_COLUMNS: ColumnDefinition[] = [
+  { id: "name", label: "Full Name", alwaysVisible: true },
+  { id: "email", label: "Email Address" },
+  { id: "department", label: "Department / Title" },
+  { id: "role", label: "System Role" },
+  { id: "province", label: "Location / Province" },
+  { id: "status", label: "Status" },
+  { id: "active", label: "Active Toggle" },
+  { id: "actions", label: "Actions", alwaysVisible: true },
+];
 
 interface RoleItem {
   id: string;
@@ -257,12 +276,109 @@ export default function Users() {
   const [editGeoError, setEditGeoError] = useState<{ field: "province_id" | "district_id" | "facility_id"; message: string } | null>(null);
 
   const token = localStorage.getItem("npams_token");
+  const { activeAgencyId } = useOrganization();
+
+  // Table Rule 24 states
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
+  const [userSortField, setUserSortField] = useState("fullName");
+  const [userSortDir, setUserSortDir] = useState<"asc" | "desc">("asc");
+  const [userRoleFilter, setUserRoleFilter] = useState("ALL");
+  const [userStatusFilter, setUserStatusFilter] = useState("ALL");
+  const [userPage, setUserPage] = useState(1);
+  const [userPageSize, setUserPageSize] = useState(25);
+  const [userVisibleColumns, setUserVisibleColumns] = useState<Record<string, boolean>>({
+    name: true,
+    email: true,
+    department: true,
+    role: true,
+    province: true,
+    status: true,
+    active: true,
+    actions: true,
+  });
 
   const { data, isLoading, refetch } = useGetUsers({
-    query: { queryKey: getGetUsersQueryKey() },
+    query: { queryKey: [getGetUsersQueryKey()[0], { agency_id: activeAgencyId }] },
   });
-  const { pageItems: usersPageItems, paginationProps: usersPaginationProps } =
-    useClientPagination<UserRow>((data?.data as UserRow[]) ?? [], 20);
+
+  const toggleUserSort = (field: string) => {
+    if (userSortField === field) {
+      setUserSortDir(userSortDir === "asc" ? "desc" : "asc");
+    } else {
+      setUserSortField(field);
+      setUserSortDir("asc");
+    }
+  };
+
+  const filteredUsers = useMemo(() => {
+    let list = (data?.data as UserRow[]) ?? [];
+    if (userRoleFilter !== "ALL") {
+      list = list.filter((u) => u.role?.roleName === userRoleFilter);
+    }
+    if (userStatusFilter === "active") {
+      list = list.filter((u) => u.active);
+    } else if (userStatusFilter === "inactive") {
+      list = list.filter((u) => !u.active);
+    }
+    if (userSearch.trim()) {
+      const q = userSearch.toLowerCase();
+      list = list.filter(
+        (u) =>
+          u.fullName?.toLowerCase().includes(q) ||
+          u.email?.toLowerCase().includes(q) ||
+          u.department?.toLowerCase().includes(q) ||
+          u.jobTitle?.toLowerCase().includes(q) ||
+          u.provinceName?.toLowerCase().includes(q) ||
+          u.role?.roleName?.toLowerCase().includes(q)
+      );
+    }
+
+    return [...list].sort((a, b) => {
+      let valA: string | number = "";
+      let valB: string | number = "";
+      if (userSortField === "fullName") {
+        valA = a.fullName ?? "";
+        valB = b.fullName ?? "";
+      } else if (userSortField === "email") {
+        valA = a.email ?? "";
+        valB = b.email ?? "";
+      } else if (userSortField === "department") {
+        valA = a.department ?? "";
+        valB = b.department ?? "";
+      } else if (userSortField === "role") {
+        valA = a.role?.roleName ?? "";
+        valB = b.role?.roleName ?? "";
+      } else if (userSortField === "province") {
+        valA = a.provinceName ?? "";
+        valB = b.provinceName ?? "";
+      }
+      if (valA < valB) return userSortDir === "asc" ? -1 : 1;
+      if (valA > valB) return userSortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [data?.data, userRoleFilter, userStatusFilter, userSearch, userSortField, userSortDir]);
+
+  const paginatedUsers = useMemo(() => {
+    const start = (userPage - 1) * userPageSize;
+    return filteredUsers.slice(start, start + userPageSize);
+  }, [filteredUsers, userPage, userPageSize]);
+
+  const handleExportUsers = () => {
+    const headers = ["Full Name", "Email", "Department", "Job Title", "Role", "Province / Scope", "Status", "Gender", "Phone"];
+    const rows = filteredUsers.map((u) => [
+      u.fullName ?? "",
+      u.email ?? "",
+      u.department ?? "",
+      u.jobTitle ?? "",
+      u.role?.roleName ?? "",
+      u.provinceName ?? "National",
+      u.active ? "Active" : "Inactive",
+      u.gender ?? "",
+      u.phoneNumber ?? "",
+    ]);
+    exportToCsv("users_export.csv", headers, rows);
+  };
   const { data: provincesData } = useGetProvinces({
     query: { queryKey: getGetProvincesQueryKey() },
   });
@@ -603,22 +719,30 @@ export default function Users() {
         subtitle="Manage system access, roles, and permissions."
         breadcrumbs={[{ label: "Users" }]}
         actions={
-          <Button onClick={() => {
-            setIsAddOpen(true);
-            setSelectedProvinceId(adminIsNational ? "" : adminProvinceId);
-            setSelectedDistrictId(adminIsNational ? "" : adminDistrictId);
-            setSelectedRoleScope("");
-            form.reset({
-              full_name: "", email: "", password: "", phone_number: "",
-              department: "", job_title: "", gender: "", date_of_birth: "",
-              role_id: "",
-              province_id: adminIsNational ? "" : adminProvinceId,
-              district_id: adminIsNational ? "" : adminDistrictId,
-              facility_id: adminIsNational ? "" : adminFacilityId,
-            });
-          }}>
-            <Plus className="w-4 h-4" /> Add user
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setIsBulkUploadOpen(true)}>
+              <Upload className="w-4 h-4 mr-1.5" /> Batch Upload
+            </Button>
+            <Button variant="outline" onClick={handleExportUsers} disabled={filteredUsers.length === 0}>
+              <Download className="w-4 h-4 mr-1.5" /> Export CSV
+            </Button>
+            <Button onClick={() => {
+              setIsAddOpen(true);
+              setSelectedProvinceId(adminIsNational ? "" : adminProvinceId);
+              setSelectedDistrictId(adminIsNational ? "" : adminDistrictId);
+              setSelectedRoleScope("");
+              form.reset({
+                full_name: "", email: "", password: "", phone_number: "",
+                department: "", job_title: "", gender: "", date_of_birth: "",
+                role_id: "",
+                province_id: adminIsNational ? "" : adminProvinceId,
+                district_id: adminIsNational ? "" : adminDistrictId,
+                facility_id: adminIsNational ? "" : adminFacilityId,
+              });
+            }}>
+              <Plus className="w-4 h-4 mr-1.5" /> Add user
+            </Button>
+          </div>
         }
       />
 
@@ -630,102 +754,232 @@ export default function Users() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="users" className="mt-4">
-          <div className="bg-card border rounded-lg overflow-x-auto">
+        <TabsContent value="users" className="mt-4 space-y-4">
+          {/* Table Rule 24 Toolbar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2 flex-1">
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search name, email, department..."
+                  value={userSearch}
+                  onChange={(e) => {
+                    setUserSearch(e.target.value);
+                    setUserPage(1);
+                  }}
+                  className="pl-8 h-9 text-sm"
+                />
+              </div>
+
+              <Select
+                value={userRoleFilter}
+                onValueChange={(val) => {
+                  setUserRoleFilter(val);
+                  setUserPage(1);
+                }}
+              >
+                <SelectTrigger className="w-48 h-9 text-xs">
+                  <SelectValue placeholder="Filter by role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Roles</SelectItem>
+                  {(rolesData ?? []).map((r) => (
+                    <SelectItem key={r.id} value={r.roleName}>
+                      {r.roleName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={userStatusFilter}
+                onValueChange={(val) => {
+                  setUserStatusFilter(val);
+                  setUserPage(1);
+                }}
+              >
+                <SelectTrigger className="w-36 h-9 text-xs">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Status</SelectItem>
+                  <SelectItem value="active">Active Only</SelectItem>
+                  <SelectItem value="inactive">Inactive Only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <ColumnVisibilityDropdown
+                columns={USER_COLUMNS}
+                visibleColumns={userVisibleColumns}
+                onChange={setUserVisibleColumns}
+              />
+            </div>
+          </div>
+
+          <div className="bg-card border rounded-lg overflow-x-auto shadow-sm">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Department / Title</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Province</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Active</TableHead>
-                  <TableHead>Actions</TableHead>
+                  {userVisibleColumns.name && (
+                    <SortableHeader
+                      label="Name"
+                      field="fullName"
+                      currentSortField={userSortField}
+                      currentSortDir={userSortDir}
+                      onSort={toggleUserSort}
+                    />
+                  )}
+                  {userVisibleColumns.email && (
+                    <SortableHeader
+                      label="Email"
+                      field="email"
+                      currentSortField={userSortField}
+                      currentSortDir={userSortDir}
+                      onSort={toggleUserSort}
+                    />
+                  )}
+                  {userVisibleColumns.department && (
+                    <SortableHeader
+                      label="Department / Title"
+                      field="department"
+                      currentSortField={userSortField}
+                      currentSortDir={userSortDir}
+                      onSort={toggleUserSort}
+                    />
+                  )}
+                  {userVisibleColumns.role && (
+                    <SortableHeader
+                      label="Role"
+                      field="role"
+                      currentSortField={userSortField}
+                      currentSortDir={userSortDir}
+                      onSort={toggleUserSort}
+                    />
+                  )}
+                  {userVisibleColumns.province && (
+                    <SortableHeader
+                      label="Province / Scope"
+                      field="province"
+                      currentSortField={userSortField}
+                      currentSortDir={userSortDir}
+                      onSort={toggleUserSort}
+                    />
+                  )}
+                  {userVisibleColumns.status && <TableHead className="w-24">Status</TableHead>}
+                  {userVisibleColumns.active && <TableHead className="w-20">Active</TableHead>}
+                  {userVisibleColumns.actions && <TableHead className="w-20">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell colSpan={8} className="text-center py-4 text-muted-foreground">
+                        <Skeleton className="h-5 w-full" />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : paginatedUsers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Loading users...</TableCell>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      No users found.
+                    </TableCell>
                   </TableRow>
-                ) : (data?.data as UserRow[])?.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No users found.</TableCell>
-                  </TableRow>
-                ) : usersPageItems.map((u) => (
+                ) : paginatedUsers.map((u) => (
                   <TableRow
                     key={u.id}
                     className="cursor-pointer hover:bg-muted/50 transition-colors"
                     onClick={() => openEditUser(u)}
                   >
-                    <TableCell>
-                      <div className="font-medium flex items-center gap-1.5">
-                        {u.fullName}
-                        {u.passwordResetAlert && (
-                          <TooltipProvider delayDuration={150}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span
-                                  className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
-                                  data-testid={`badge-reset-burst-${u.id}`}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <AlertTriangle className="w-3 h-3" />
-                                  {u.passwordResetAlert.count} resets
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="right" className="max-w-xs text-xs">
-                                {u.passwordResetAlert.count} password reset emails sent in the last{" "}
-                                {u.passwordResetAlert.windowMinutes} minutes (threshold: {u.passwordResetAlert.threshold}).
-                                Open the user to review the full reset history.
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                      </div>
-                      {u.gender && <div className="text-xs text-muted-foreground capitalize">{u.gender}</div>}
-                    </TableCell>
-                    <TableCell className="text-sm">{u.email}</TableCell>
-                    <TableCell>
-                      {u.department || u.jobTitle ? (
-                        <div>
-                          {u.department && <div className="text-sm font-medium">{u.department}</div>}
-                          {u.jobTitle && <div className="text-xs text-muted-foreground">{u.jobTitle}</div>}
+                    {userVisibleColumns.name && (
+                      <TableCell>
+                        <div className="font-medium flex items-center gap-1.5">
+                          {u.fullName}
+                          {u.passwordResetAlert && (
+                            <TooltipProvider delayDuration={150}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span
+                                    className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+                                    data-testid={`badge-reset-burst-${u.id}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <AlertTriangle className="w-3 h-3" />
+                                    {u.passwordResetAlert.count} resets
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-xs text-xs">
+                                  {u.passwordResetAlert.count} password reset emails sent in the last{" "}
+                                  {u.passwordResetAlert.windowMinutes} minutes (threshold: {u.passwordResetAlert.threshold}).
+                                  Open the user to review the full reset history.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                         </div>
-                      ) : <span className="text-muted-foreground text-xs">—</span>}
-                    </TableCell>
-                    <TableCell><Badge variant="outline">{u.role?.roleName}</Badge></TableCell>
-                    <TableCell>{u.provinceName || "National"}</TableCell>
-                    <TableCell>
-                      <Badge className={u.active ? "bg-green-600 hover:bg-green-700" : "bg-gray-500 hover:bg-gray-600"}>
-                        {u.active ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Switch
-                        checked={!!u.active}
-                        onCheckedChange={() => {
-                          if (u.active) {
-                            deactivateMutation.mutate({ id: u.id! });
-                          } else {
-                            reactivateUser(u.id!);
-                          }
-                        }}
-                        disabled={deactivateMutation.isPending || u.id === user?.id}
-                      />
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Button variant="ghost" size="sm" onClick={() => openEditUser(u)}>
-                        <Pencil className="w-3 h-3 mr-1" /> Edit
-                      </Button>
-                    </TableCell>
+                        {u.gender && <div className="text-xs text-muted-foreground capitalize">{u.gender}</div>}
+                      </TableCell>
+                    )}
+                    {userVisibleColumns.email && <TableCell className="text-sm">{u.email}</TableCell>}
+                    {userVisibleColumns.department && (
+                      <TableCell>
+                        {u.department || u.jobTitle ? (
+                          <div>
+                            {u.department && <div className="text-sm font-medium">{u.department}</div>}
+                            {u.jobTitle && <div className="text-xs text-muted-foreground">{u.jobTitle}</div>}
+                          </div>
+                        ) : <span className="text-muted-foreground text-xs">—</span>}
+                      </TableCell>
+                    )}
+                    {userVisibleColumns.role && <TableCell><Badge variant="outline">{u.role?.roleName}</Badge></TableCell>}
+                    {userVisibleColumns.province && <TableCell>{u.provinceName || "National"}</TableCell>}
+                    {userVisibleColumns.status && (
+                      <TableCell>
+                        <Badge className={u.active ? "bg-green-600 hover:bg-green-700" : "bg-gray-500 hover:bg-gray-600"}>
+                          {u.active ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                    )}
+                    {userVisibleColumns.active && (
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Switch
+                          checked={!!u.active}
+                          onCheckedChange={() => {
+                            if (u.active) {
+                              deactivateMutation.mutate({ id: u.id! });
+                            } else {
+                              reactivateUser(u.id!);
+                            }
+                          }}
+                          disabled={deactivateMutation.isPending || u.id === user?.id}
+                        />
+                      </TableCell>
+                    )}
+                    {userVisibleColumns.actions && (
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Button variant="ghost" size="sm" onClick={() => openEditUser(u)}>
+                          <Pencil className="w-3 h-3 mr-1" /> Edit
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-            <DataTablePagination {...usersPaginationProps} label="users" />
+            <DataTablePagination
+              page={userPage}
+              pageSize={userPageSize}
+              total={filteredUsers.length}
+              onPageChange={setUserPage}
+              onPageSizeChange={(newSize) => {
+                setUserPageSize(newSize);
+                setUserPage(1);
+              }}
+              pageSizeOptions={[10, 25, 50, 100]}
+              label="users"
+            />
           </div>
         </TabsContent>
 
@@ -1557,6 +1811,16 @@ export default function Users() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Batch Upload Modal for Users */}
+      <BulkUploadModal
+        open={isBulkUploadOpen}
+        onOpenChange={setIsBulkUploadOpen}
+        entityType="users"
+        onSuccess={() => {
+          refetch();
+        }}
+      />
     </div>
   );
 }
