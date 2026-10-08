@@ -13,8 +13,10 @@ const VALID_CONDITIONS = ["new", "good", "fair", "poor", "unserviceable"] as con
 router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
   if (!req.user) return;
 
-  const isAgencyScoped = req.user.scopeLevel === "agency" || !!req.user.agencyId;
-  const agencyId = isAgencyScoped ? req.user.agencyId : null;
+  const rawAgencyParam = (req.query.agency_id as string | undefined) || (req.headers["x-active-agency-id"] as string | undefined);
+  const targetAgencyId = rawAgencyParam && rawAgencyParam !== "all" ? rawAgencyParam : null;
+  const isAgencyScoped = req.user.scopeLevel === "agency" || !!req.user.agencyId || !!targetAgencyId;
+  const agencyId = targetAgencyId || (isAgencyScoped ? req.user.agencyId : null);
 
   const provinceId = isAgencyScoped
     ? null
@@ -23,7 +25,7 @@ router.get("/v1/dashboard/provincial", requireAuth, async (req, res) => {
         : req.user.provinceId);
 
   if (!isAgencyScoped && !provinceId) {
-    res.status(400).json({ success: false, message: "province_id required for national users", data: null });
+    res.status(400).json({ success: false, message: "province_id or agency_id required for national users", data: null });
     return;
   }
 
@@ -263,7 +265,9 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
     }
 
     // Base scope conditions (location scope — always applied to everything)
-    const effectiveAgencyId = req.user?.scopedAgencyId || req.user?.agencyId;
+    const rawAgencyParam = (req.query.agency_id as string | undefined) || (req.headers["x-active-agency-id"] as string | undefined);
+    const targetAgencyId = rawAgencyParam && rawAgencyParam !== "all" ? rawAgencyParam : null;
+    const effectiveAgencyId = targetAgencyId || req.user?.scopedAgencyId || req.user?.agencyId;
     const scopeConditions: ReturnType<typeof eq>[] = [isNull(assets.deletedAt) as unknown as ReturnType<typeof eq>];
     if (effectiveAgencyId) scopeConditions.push(eq(assets.agencyId, effectiveAgencyId) as unknown as ReturnType<typeof eq>);
     if (provinceIdParam) scopeConditions.push(eq(assets.provinceId, provinceIdParam) as ReturnType<typeof eq>);
@@ -309,6 +313,7 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
       .leftJoin(assets, and(
         eq(assets.provinceId, provinces.id),
         isNull(assets.deletedAt),
+        ...(effectiveAgencyId ? [eq(assets.agencyId, effectiveAgencyId)] : []),
         ...(safeStatus    ? [eq(assets.status, safeStatus)]      : []),
         ...(safeCondition ? [eq(assets.condition, safeCondition)]: []),
         ...(categoryId    ? [eq(assets.categoryId, categoryId)]  : []),

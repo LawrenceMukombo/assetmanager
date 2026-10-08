@@ -20,7 +20,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Box, AlertTriangle, Wrench, DollarSign, Map,
   ArrowUpDown, ArrowUp, ArrowDown, Activity, TrendingUp,
-  CheckCircle, XCircle, X, Filter, ChevronRight, ExternalLink, MapPin,
+  CheckCircle, XCircle, X, Filter, ChevronRight, ExternalLink, MapPin, Building2,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -71,12 +71,24 @@ const CONDITION_LABELS: Record<string, string> = {
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
-function fmtKina(v: string | number | null | undefined): string {
+function fmtVal(v: string | number | null | undefined, symbol = "$"): string {
   const n = typeof v === "string" ? parseFloat(v) : (v ?? 0);
-  if (isNaN(n)) return "K 0";
-  if (n >= 1_000_000) return `K ${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000)     return `K ${(n / 1_000).toFixed(1)}K`;
-  return `K ${n.toLocaleString()}`;
+  if (isNaN(n)) return `${symbol} 0`;
+  if (n >= 1_000_000) return `${symbol} ${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000)     return `${symbol} ${(n / 1_000).toFixed(1)}K`;
+  return `${symbol} ${n.toLocaleString()}`;
+}
+
+function fmtKina(v: string | number | null | undefined, symbol?: string): string {
+  if (symbol) return fmtVal(v, symbol);
+  try {
+    const raw = localStorage.getItem("npams_org_settings");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.currencySymbol) return fmtVal(v, parsed.currencySymbol);
+    }
+  } catch {}
+  return fmtVal(v, "K");
 }
 
 function fmtNum(n: number | null | undefined): string {
@@ -606,7 +618,15 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const { activeAgencyId } = useOrganization();
   const isNational = user?.scope_level === "national";
+
+  // When a specific agency is selected in the multi-tenant switcher,
+  // or the logged-in user belongs to an agency, show the Agency Dashboard.
+  if (activeAgencyId || user?.scope_level === "agency") {
+    return <ProvincialDashboard agencyId={activeAgencyId} />;
+  }
+
   if (isNational) return <NationalDashboard />;
   return <ProvincialDashboard />;
 }
@@ -640,7 +660,8 @@ interface NationalDashData {
 }
 
 function NationalDashboard() {
-  const { activeAgencyId } = useOrganization();
+  const { activeAgencyId, organization } = useOrganization();
+  const [, setLocation] = useLocation();
   const [filters, setFilters] = useState<DashFilters>(EMPTY_FILTERS);
   const [locationScope, setLocationScope] = useState<LocationScope>(EMPTY_LOCATION);
   const [pivot, setPivot] = useState<Pivot>("status");
@@ -648,10 +669,13 @@ function NationalDashboard() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [drawer, setDrawer] = useState<{ title: string; subtitle?: string; params: Record<string, string> } | null>(null);
 
+  const curSym = organization.currencySymbol || (organization.countryCode === "PNG" ? "K" : "$");
+  const fmtCur = (v: string | number | null | undefined) => fmtVal(v, curSym);
+
   const qKey = useMemo(() => ["national-dashboard", filters, activeAgencyId], [filters, activeAgencyId]);
   const { data: raw, isLoading } = useQuery({
     queryKey: qKey,
-    queryFn:  () => apiFetchJson(`/api/v1/dashboard/national${buildParams(filters)}`),
+    queryFn:  () => apiFetchJson(`/api/v1/dashboard/national${buildParams(filters, activeAgencyId ? { agency_id: activeAgencyId } : undefined)}`),
     staleTime: 30_000,
   });
   const d = raw?.data as NationalDashData | undefined;
@@ -728,27 +752,41 @@ function NationalDashboard() {
   if (filters.condition)    drawerBaseParams.condition    = filters.condition;
   if (filters.categoryName) drawerBaseParams.category_name = filters.categoryName;
 
+  const isPng = organization.countryCode === "PNG";
+
   return (
     <div className="space-y-6">
       <PageHeader
         icon={
-          <img
-            src="/flags/png_national.svg"
-            alt="Papua New Guinea"
-            className="w-10 h-10 object-cover rounded-md"
-          />
+          organization.logoUrl ? (
+            <img
+              src={organization.logoUrl}
+              alt={organization.organizationName}
+              className="w-10 h-10 object-contain rounded-md bg-white p-0.5 border"
+            />
+          ) : isPng ? (
+            <img
+              src="/flags/png_national.svg"
+              alt="Papua New Guinea"
+              className="w-10 h-10 object-cover rounded-md"
+            />
+          ) : (
+            <Building2 className="w-8 h-8 text-primary" />
+          )
         }
-        title="National Overview"
-        subtitle="Click any chart element or KPI card to cross-filter. Click again to deselect."
+        title={`${organization.organizationName} — Overview`}
+        subtitle={`${organization.countryName || organization.organizationName} · Click any chart element or KPI card to cross-filter.`}
         breadcrumbs={[{ label: "Dashboard" }]}
       />
 
-      {/* Location Filter Bar */}
-      <LocationFilterBar
-        scope={locationScope}
-        onChange={handleLocationChange}
-        showRegionProvince={true}
-      />
+      {/* Location Filter Bar - rendered only for PNG sovereign scope */}
+      {isPng && (
+        <LocationFilterBar
+          scope={locationScope}
+          onChange={handleLocationChange}
+          showRegionProvince={true}
+        />
+      )}
 
       {/* Filter Strip */}
       <FilterStrip
@@ -774,44 +812,87 @@ function NationalDashboard() {
         <StatCard
           title="Missing Assets" value={fmtNum(d?.missing_assets)} icon={AlertTriangle}
           description="Flagged as missing — click to view" accent={d?.missing_assets ? "#ef4444" : undefined} testId="kpi-missing-assets"
-          onClick={() => openDetail("Missing Assets", { status: "missing" }, "Assets flagged as missing across all provinces")}
+          onClick={() => openDetail("Missing Assets", { status: "missing" }, "Assets flagged as missing across all locations")}
         />
         <StatCard
-          title="Total Asset Value" value={fmtKina(d?.total_value)} icon={DollarSign}
+          title="Total Asset Value" value={fmtCur(d?.total_value)} icon={DollarSign}
           description="Estimated portfolio — click to browse" testId="kpi-total-value"
           onClick={() => openDetail("All Assets by Value", {}, "Full national portfolio")}
         />
       </div>
 
-      {/* Interactive Map */}
-      <DashboardMap
-        assetsByProvince={d?.assets_by_province ?? []}
-        selectedRegion={filters.region ?? undefined}
-        selectedProvinceCode={locationScope.provinceCode ?? undefined}
-        onProvinceClick={(code, name, id) => {
-          if (code === "__clearRegion__") {
-            handleLocationChange({ region: null, provinceId: null, districtId: null, facilityId: null,
-              provinceCode: null, provinceName: null, districtName: null, facilityName: null });
-          } else if (code === "__region__") {
-            handleLocationChange({ region: name, provinceId: null, districtId: null, facilityId: null,
-              provinceCode: null, provinceName: null, districtName: null, facilityName: null });
-          } else {
-            if (locationScope.provinceId === id) {
-              handleLocationChange({ provinceId: null, provinceCode: null, provinceName: null,
-                districtId: null, districtName: null, facilityId: null, facilityName: null });
+      {/* Interactive Map: PNG Boundary Map or Dynamic Sovereign Scope card */}
+      {isPng ? (
+        <DashboardMap
+          assetsByProvince={d?.assets_by_province ?? []}
+          selectedRegion={filters.region ?? undefined}
+          selectedProvinceCode={locationScope.provinceCode ?? undefined}
+          onProvinceClick={(code, name, id) => {
+            if (code === "__clearRegion__") {
+              handleLocationChange({ region: null, provinceId: null, districtId: null, facilityId: null,
+                provinceCode: null, provinceName: null, districtName: null, facilityName: null });
+            } else if (code === "__region__") {
+              handleLocationChange({ region: name, provinceId: null, districtId: null, facilityId: null,
+                provinceCode: null, provinceName: null, districtName: null, facilityName: null });
             } else {
-              handleLocationChange({ provinceId: id, provinceCode: code, provinceName: name,
-                districtId: null, districtName: null, facilityId: null, facilityName: null });
+              if (locationScope.provinceId === id) {
+                handleLocationChange({ provinceId: null, provinceCode: null, provinceName: null,
+                  districtId: null, districtName: null, facilityId: null, facilityName: null });
+              } else {
+                handleLocationChange({ provinceId: id, provinceCode: code, provinceName: name,
+                  districtId: null, districtName: null, facilityId: null, facilityName: null });
+              }
             }
-          }
-        }}
-      />
+          }}
+        />
+      ) : (
+        <Card className="border border-border/80 bg-linear-to-br from-card to-muted/20">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <div className="space-y-1">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-primary" />
+                {organization.organizationName} — Geospatial Scope
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Sovereign Territory: {organization.countryName || "Global"} ({organization.countryCode || "INTL"}) · Dynamic Geolocation & Site Management
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => setLocation("/gis")}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Open GIS Map
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="p-3 rounded-lg border bg-background/50">
+                <span className="text-muted-foreground block mb-1">Anchor Coordinates</span>
+                <span className="font-mono font-medium">
+                  {organization.defaultLatitude || "0.0000"}°, {organization.defaultLongitude || "0.0000"}°
+                </span>
+              </div>
+              <div className="p-3 rounded-lg border bg-background/50">
+                <span className="text-muted-foreground block mb-1">Hierarchy Preset</span>
+                <span className="font-medium capitalize">{organization.hierarchyPreset || "Administrative"}</span>
+              </div>
+              <div className="p-3 rounded-lg border bg-background/50">
+                <span className="text-muted-foreground block mb-1">Operational Currency</span>
+                <span className="font-medium">{organization.currencyCode || "USD"} ({organization.currencySymbol || "$"})</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="trends">Trends</TabsTrigger>
-          <TabsTrigger value="provinces">Provinces</TabsTrigger>
+          {isPng && <TabsTrigger value="provinces">Provinces</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6 mt-0">
@@ -1148,21 +1229,26 @@ interface ProvDashData {
   recent_assets: { id: string; assetTag: string; assetName: string; status: string; condition: string; purchaseCost?: string; createdAt: string; categoryName?: string | null; facilityName?: string | null; districtName?: string | null }[];
 }
 
-function ProvincialDashboard() {
+function ProvincialDashboard({ agencyId: propAgencyId }: { agencyId?: string | null } = {}) {
   const { applyBranding, branding } = useProvinceBranding();
   const { user } = useAuth();
-  const isAgency = user?.scope_level === "agency";
+  const { activeAgencyId, organization } = useOrganization();
+  const effectiveAgencyId = propAgencyId || activeAgencyId || (user?.scope_level === "agency" ? user?.agencyId : null);
+  const isAgency = !!effectiveAgencyId || user?.scope_level === "agency";
   const [, setLocation] = useLocation();
+
+  const curSym = organization.currencySymbol || (organization.countryCode === "PNG" ? "K" : "$");
+  const fmtCur = (v: string | number | null | undefined) => fmtVal(v, curSym);
 
   const [filters, setFilters] = useState<DashFilters>(EMPTY_FILTERS);
   const [locationScope, setLocationScope] = useState<LocationScope>(EMPTY_LOCATION);
   const [pivot, setPivot] = useState<Pivot>("status");
   const [drawer, setDrawer] = useState<{ title: string; subtitle?: string; params: Record<string, string> } | null>(null);
 
-  const qKey = useMemo(() => ["provincial-dashboard", filters], [filters]);
+  const qKey = useMemo(() => ["provincial-dashboard", filters, effectiveAgencyId], [filters, effectiveAgencyId]);
   const { data: raw, isLoading } = useQuery({
     queryKey: qKey,
-    queryFn:  () => apiFetchJson(`/api/v1/dashboard/provincial${buildParams(filters)}`),
+    queryFn:  () => apiFetchJson(`/api/v1/dashboard/provincial${buildParams(filters, effectiveAgencyId ? { agency_id: effectiveAgencyId } : undefined)}`),
     staleTime: 30_000,
   });
   const d = raw?.data as ProvDashData | undefined;
@@ -1227,7 +1313,7 @@ function ProvincialDashboard() {
   if (isLoading) {
     if (isAgency) {
       const userAgencyName = (user?.scope as { agency_name?: string } | undefined)?.agency_name ?? null;
-      const agencyDisplayName = branding.provinceName ?? userAgencyName;
+      const agencyDisplayName = d?.agency?.agencyName || organization.organizationName || branding.provinceName || userAgencyName;
       return (
         <div className="space-y-6">
           <PageHeader
@@ -1247,39 +1333,40 @@ function ProvincialDashboard() {
   if (filters.categoryName) drawerBaseParams.category_name = filters.categoryName;
   if (filters.districtId)   drawerBaseParams.district_id   = filters.districtId;
 
+  const agencyDisplayName = d?.agency?.agencyName || (isAgency ? organization.organizationName : undefined);
+  const agencyLogo = d?.agency?.logoUrl || (isAgency ? organization.logoUrl : null);
+
   return (
     <div className="space-y-6">
       <PageHeader
         icon={
-          d?.agency?.logoUrl ? (
-            <img src={d.agency.logoUrl} alt={`${d.agency.agencyName ?? ""} logo`} className="h-10 w-10 object-contain bg-white rounded-md p-0.5 border" />
+          agencyLogo ? (
+            <img src={agencyLogo} alt={`${agencyDisplayName ?? ""} logo`} className="h-10 w-10 object-contain bg-white rounded-md p-0.5 border" />
           ) : d?.province?.flagUrl ? (
             <img src={d.province.flagUrl} alt={`${d.province.provinceName ?? ""} flag`} className="h-7 w-10 object-cover rounded-sm border" />
-          ) : undefined
+          ) : (
+            <Building2 className="w-8 h-8 text-primary" />
+          )
         }
         title={
-          d?.agency?.agencyName
-            ? `${d.agency.agencyName} Dashboard`
-            : isAgency
-            ? branding.provinceName
-              ? `${branding.provinceName} Dashboard`
-              : (user?.scope as { agency_name?: string } | undefined)?.agency_name
-                ? `${(user!.scope as { agency_name?: string }).agency_name} Dashboard`
-                : "Agency Dashboard"
+          agencyDisplayName
+            ? `${agencyDisplayName} Dashboard`
             : d?.province?.provinceName
             ? `${d.province.provinceName} Dashboard`
-            : "Provincial Dashboard"
+            : "Dashboard"
         }
         subtitle={
           d?.agency
             ? <>{d.agency.agencyType ? `${d.agency.agencyType.toUpperCase()} · ` : ""}{d.agency.agencyCode ?? ""} · Click any chart or card to cross-filter</>
+            : isAgency
+            ? <>{organization.shortCode} · Click any chart or card to cross-filter</>
             : <>{d?.province?.region ? `${d.province.region} Region` : ""}{d?.province?.capitalCity ? ` · ${d.province.capitalCity}` : ""} · Click any chart or card to cross-filter</>
         }
         breadcrumbs={[{ label: "Dashboard" }]}
       />
 
       {/* Location Filter Bar — districts/facilities only apply for province scope */}
-      {!d?.agency && (
+      {!isAgency && !d?.agency && (
         <LocationFilterBar
           scope={locationScope}
           onChange={handleLocationChange}
@@ -1301,14 +1388,14 @@ function ProvincialDashboard() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard title="Total Assets" value={fmtNum(d?.total_assets)} icon={Box}
           description="Click to browse all assets" testId="kpi-total-assets"
-          onClick={() => openDetail("All Province Assets", {}, `${d?.total_assets?.toLocaleString()} total assets`)} />
+          onClick={() => openDetail(isAgency ? "All Agency Assets" : "All Province Assets", {}, `${d?.total_assets?.toLocaleString()} total assets`)} />
         <StatCard title="Active Assets" value={fmtNum(d?.active_assets)} icon={CheckCircle}
           description="In service — click to view" accent="#22c55e" testId="kpi-active-assets"
           onClick={() => openDetail("Active Assets", { status: "active" }, "Assets currently in service")} />
         <StatCard title="Missing Assets" value={fmtNum(d?.missing_assets)} icon={AlertTriangle}
           description="Flagged as missing — click to view" accent={d?.missing_assets ? "#ef4444" : undefined} testId="kpi-missing-assets"
           onClick={() => openDetail("Missing Assets", { status: "missing" }, "Assets flagged as missing")} />
-        <StatCard title="Portfolio Value" value={fmtKina(d?.total_value)} icon={DollarSign}
+        <StatCard title="Portfolio Value" value={fmtCur(d?.total_value)} icon={DollarSign}
           description="Estimated portfolio — click to browse" testId="kpi-portfolio-value"
           onClick={() => openDetail("All Assets by Value", {}, "Full portfolio")} />
       </div>
@@ -1322,7 +1409,7 @@ function ProvincialDashboard() {
           description="Decommissioned — click to view"
           onClick={() => openDetail("Disposed Assets", { status: "disposed" }, "Decommissioned assets")} />
         <StatCard title="Filtered View" value={d?.has_filters ? fmtNum(d.filtered_total) : "—"} icon={Filter}
-          description={d?.has_filters ? `${fmtKina(d.filtered_value)} filtered value — click to browse` : "Apply filters via charts to see subset"}
+          description={d?.has_filters ? `${fmtCur(d.filtered_value)} filtered value — click to browse` : "Apply filters via charts to see subset"}
           onClick={d?.has_filters ? () => openDetail("Filtered Assets", drawerBaseParams, "Assets matching active filters") : undefined}
           accent={d?.has_filters ? "hsl(var(--primary))" : undefined} />
       </div>

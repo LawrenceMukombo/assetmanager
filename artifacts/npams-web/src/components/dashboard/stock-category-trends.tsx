@@ -18,17 +18,21 @@ type CategorySummary = {
   weeklyBurn: number[];
 };
 
+import { useOrganization } from "@/context/organization-context";
+
 // How many top categories to surface on the dashboard. The Stock page itself
 // shows the full list; the dashboard is meant to be a glanceable summary.
 const TOP_N = 5;
 
 export function StockCategoryTrends() {
   const [, setLocation] = useLocation();
+  const { activeAgencyId } = useOrganization();
 
   const { data: categorySummary, isLoading } = useQuery<CategorySummary[]>({
-    queryKey: ["stock-category-summary"],
+    queryKey: ["stock-category-summary", activeAgencyId],
     queryFn: async () => {
-      const r = await apiFetchJson<CategorySummary[]>(`/api/v1/stock/category-summary`);
+      const url = activeAgencyId ? `/api/v1/stock/category-summary?agency_id=${encodeURIComponent(activeAgencyId)}` : `/api/v1/stock/category-summary`;
+      const r = await apiFetchJson<CategorySummary[]>(url);
       return r.data ?? [];
     },
     staleTime: 60_000,
