@@ -24,7 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
@@ -46,12 +46,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, ShieldCheck, Users as UsersIcon, Trash2, Activity as ActivityIcon, Mail, Loader2, ChevronDown, ChevronRight, AlertTriangle, Download, Upload, Search } from "lucide-react";
+import { Plus, Pencil, ShieldCheck, Users as UsersIcon, Trash2, Activity as ActivityIcon, Mail, Loader2, ChevronDown, ChevronRight, AlertTriangle, Download, Upload, Search, Sparkles } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageHeader } from "@/components/layout/page-header";
 import { Label } from "@/components/ui/label";
 import { useOrganization } from "@/context/organization-context";
 import { BulkUploadModal } from "@/components/bulk-upload-modal";
+import { OnboardingWizard } from "@/components/onboarding-wizard";
 import {
   ColumnVisibilityDropdown,
   SortableHeader,
@@ -238,6 +239,7 @@ export default function Users() {
   const adminScopeLevel = user?.scope_level ?? "";
   const adminIsNational = adminScopeLevel === "national";
 
+  const [activeTab, setActiveTab] = useState<string>("users");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedProvinceId, setSelectedProvinceId] = useState("");
   const [selectedDistrictId, setSelectedDistrictId] = useState("");
@@ -720,6 +722,9 @@ export default function Users() {
         breadcrumbs={[{ label: "Users" }]}
         actions={
           <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setActiveTab("onboarding")} className="border-primary/40 hover:bg-primary/5">
+              <Sparkles className="w-4 h-4 mr-1.5 text-primary" /> Onboarding Hub
+            </Button>
             <Button variant="outline" onClick={() => setIsBulkUploadOpen(true)}>
               <Upload className="w-4 h-4 mr-1.5" /> Batch Upload
             </Button>
@@ -746,11 +751,14 @@ export default function Users() {
         }
       />
 
-      <Tabs defaultValue="users">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="permissions">
             <ShieldCheck className="w-4 h-4 mr-1" /> Roles & Permissions
+          </TabsTrigger>
+          <TabsTrigger value="onboarding">
+            <Sparkles className="w-4 h-4 mr-1 text-primary" /> Onboarding Hub
           </TabsTrigger>
         </TabsList>
 
@@ -1012,6 +1020,10 @@ export default function Users() {
               ))}
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="onboarding" className="mt-4">
+          <OnboardingWizard onSuccess={() => { refetch(); setActiveTab("users"); }} />
         </TabsContent>
       </Tabs>
 

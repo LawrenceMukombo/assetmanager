@@ -263,7 +263,9 @@ router.get("/v1/dashboard/national", requireNational, async (req, res) => {
     }
 
     // Base scope conditions (location scope — always applied to everything)
+    const effectiveAgencyId = req.user?.scopedAgencyId || req.user?.agencyId;
     const scopeConditions: ReturnType<typeof eq>[] = [isNull(assets.deletedAt) as unknown as ReturnType<typeof eq>];
+    if (effectiveAgencyId) scopeConditions.push(eq(assets.agencyId, effectiveAgencyId) as unknown as ReturnType<typeof eq>);
     if (provinceIdParam) scopeConditions.push(eq(assets.provinceId, provinceIdParam) as ReturnType<typeof eq>);
     else if (regionProvinceIds && regionProvinceIds.length > 0) scopeConditions.push(inArray(assets.provinceId, regionProvinceIds) as unknown as ReturnType<typeof eq>);
     if (districtIdParam) scopeConditions.push(eq(assets.districtId, districtIdParam) as ReturnType<typeof eq>);

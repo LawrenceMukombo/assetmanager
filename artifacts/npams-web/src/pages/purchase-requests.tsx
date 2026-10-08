@@ -113,6 +113,7 @@ function PaginatedPRTable({
 
 export default function PurchaseRequestsPage() {
   const { user } = useAuth();
+  const { activeAgencyId } = useOrganization();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
@@ -143,7 +144,7 @@ export default function PurchaseRequestsPage() {
   const [newOpen, setNewOpen] = useState(false);
 
   const { data: rows, isLoading } = useQuery<PurchaseRequest[]>({
-    queryKey: ["purchase-requests", tab],
+    queryKey: ["purchase-requests", tab, activeAgencyId],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (tab === "pending") params.set("pending", "true");

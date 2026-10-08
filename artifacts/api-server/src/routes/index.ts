@@ -17,6 +17,7 @@ import stockRouter from "./stock";
 import purchaseRequestsRouter from "./purchase-requests";
 import systemRouter from "./system";
 import organizationRouter from "./organization";
+import onboardingRouter from "./onboarding";
 
 const router: IRouter = Router();
 
@@ -38,5 +39,6 @@ router.use(stockRouter);
 router.use(purchaseRequestsRouter);
 router.use(systemRouter);
 router.use(organizationRouter);
+router.use(onboardingRouter);
 
 export default router;

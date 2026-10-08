@@ -521,6 +521,10 @@ router.get("/v1/locations/facilities", requireAuth, async (req, res) => {
       .select({
         id: facilities.id,
         facilityName: facilities.facilityName,
+        facilityType: facilities.facilityType,
+        address: facilities.address,
+        gpsLatitude: facilities.gpsLatitude,
+        gpsLongitude: facilities.gpsLongitude,
         districtId: facilities.districtId,
         districtName: districts.districtName,
         provinceId: districts.provinceId,

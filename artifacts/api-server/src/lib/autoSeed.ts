@@ -57,8 +57,21 @@ export async function autoSeedIfEmpty(): Promise<void> {
   // Ensure additive column exists non-destructively
   try {
     await db.execute(sql`ALTER TABLE asset_categories ADD COLUMN IF NOT EXISTS industry varchar(100);`);
+    await db.execute(sql`ALTER TABLE audit_sessions ADD COLUMN IF NOT EXISTS agency_id uuid REFERENCES agencies(id);`);
+    await db.execute(sql`ALTER TABLE organization_settings ADD COLUMN IF NOT EXISTS agency_id uuid REFERENCES agencies(id);`);
+    await db.execute(sql`ALTER TABLE organization_settings ADD COLUMN IF NOT EXISTS country_code varchar(50) DEFAULT 'PNG';`);
+    await db.execute(sql`ALTER TABLE organization_settings ADD COLUMN IF NOT EXISTS country_name varchar(255) DEFAULT 'Papua New Guinea';`);
+    await db.execute(sql`ALTER TABLE organization_settings ADD COLUMN IF NOT EXISTS default_latitude varchar(50);`);
+    await db.execute(sql`ALTER TABLE organization_settings ADD COLUMN IF NOT EXISTS default_longitude varchar(50);`);
+    await db.execute(sql`ALTER TABLE organization_settings ADD COLUMN IF NOT EXISTS default_zoom varchar(10) DEFAULT '6';`);
+    // Backfill legacy audit sessions to PNGICA agency if agency_id is null
+    await db.execute(sql`
+      UPDATE audit_sessions 
+      SET agency_id = (SELECT id FROM agencies WHERE agency_code = 'PNGICA' LIMIT 1)
+      WHERE agency_id IS NULL;
+    `);
   } catch (err) {
-    logger.warn({ err }, "Auto-seed: could not ensure industry column on asset_categories");
+    logger.warn({ err }, "Auto-seed: could not ensure additive columns on tables");
   }
 
   // Idempotent — these check for existing rows themselves
@@ -2377,8 +2390,6 @@ async function seedMultiIndustryCategories(): Promise<void> {
         industry: cat.industry,
         categoryName: cat.categoryName,
         categoryCode: code,
-        usefulLifeYears: cat.usefulLifeYears,
-        depreciationMethod: cat.depreciationMethod,
         description: cat.description,
       });
       inserted++;

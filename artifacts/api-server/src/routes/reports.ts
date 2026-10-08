@@ -21,8 +21,9 @@ const router = Router();
 // geographic scope for province/district/facility users.
 function reportAssetScope(req: Express.Request) {
   const conditions = [isNull(assets.deletedAt)];
-  if (req.user?.scopedAgencyId) {
-    conditions.push(eq(assets.agencyId, req.user.scopedAgencyId));
+  const agencyId = req.user?.scopedAgencyId || req.user?.agencyId;
+  if (agencyId) {
+    conditions.push(eq(assets.agencyId, agencyId));
     return conditions;
   }
   if (req.user?.scopedProvinceId) conditions.push(eq(assets.provinceId, req.user.scopedProvinceId));
@@ -31,15 +32,11 @@ function reportAssetScope(req: Express.Request) {
   return conditions;
 }
 
-// Stock reports always join stockBalances → facilities, so we apply
-// item-level filters (agency / province) on `stockItems` AND location-level
-// filters (district / facility) on `stockBalances` via a facilities subquery
-// for district scope. This ensures district- and facility-scoped users cannot
-// see balances outside their geographic scope.
 function reportStockScope(req: Express.Request) {
   const conditions = [isNull(stockItems.deletedAt)];
-  if (req.user?.scopedAgencyId) {
-    conditions.push(eq(stockItems.agencyId, req.user.scopedAgencyId));
+  const agencyId = req.user?.scopedAgencyId || req.user?.agencyId;
+  if (agencyId) {
+    conditions.push(eq(stockItems.agencyId, agencyId));
   }
   if (req.user?.scopedProvinceId) {
     conditions.push(eq(stockItems.provinceId, req.user.scopedProvinceId));
@@ -55,12 +52,10 @@ function reportStockScope(req: Express.Request) {
   return conditions;
 }
 
-// Purchase-request scope: filters by agency/province/district/facility.
-// `purchaseRequests` has agency/province/facility columns directly; district
-// is resolved via the facility's district.
 function reportPurchaseRequestScope(req: Express.Request) {
   const conditions = [];
-  if (req.user?.scopedAgencyId) conditions.push(eq(purchaseRequests.agencyId, req.user.scopedAgencyId));
+  const agencyId = req.user?.scopedAgencyId || req.user?.agencyId;
+  if (agencyId) conditions.push(eq(purchaseRequests.agencyId, agencyId));
   if (req.user?.scopedProvinceId) conditions.push(eq(purchaseRequests.provinceId, req.user.scopedProvinceId));
   if (req.user?.scopedDistrictId) {
     conditions.push(

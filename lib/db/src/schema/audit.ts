@@ -4,6 +4,7 @@ import { provinces } from "./provinces";
 import { districts } from "./districts";
 import { facilities } from "./facilities";
 import { assets } from "./assets";
+import { agencies } from "./agencies";
 
 export const auditSessionStatusEnum = pgEnum("audit_session_status", [
   "planned",
@@ -29,6 +30,7 @@ export const auditSessions = pgTable("audit_sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
+  agencyId: uuid("agency_id").references(() => agencies.id),
   provinceId: uuid("province_id").references(() => provinces.id),
   createdBy: uuid("created_by").references(() => users.id),
   status: auditSessionStatusEnum("status").notNull().default("planned"),
@@ -38,6 +40,7 @@ export const auditSessions = pgTable("audit_sessions", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => [
   index("idx_audit_sessions_province").on(t.provinceId),
+  index("idx_audit_sessions_agency").on(t.agencyId),
   index("idx_audit_sessions_status").on(t.status),
 ]);
 

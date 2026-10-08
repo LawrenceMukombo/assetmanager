@@ -26,10 +26,11 @@ function orNull(v: unknown): string | null {
 }
 
 function scopeFilter(user: NonNullable<Express.Request["user"]>) {
-  if (user.scopeLevel === "national") return [];
-  if (user.scopeLevel === "agency" || user.agencyId) {
-    return user.agencyId ? [eq(stockItems.agencyId, user.agencyId)] : [sql`1=0`];
+  const effectiveAgencyId = user.scopedAgencyId || user.agencyId;
+  if (effectiveAgencyId) {
+    return [eq(stockItems.agencyId, effectiveAgencyId)];
   }
+  if (user.scopeLevel === "national") return [];
   if (user.facilityId) return [eq(stockItems.facilityId, user.facilityId)];
   if (user.districtId) {
     return [

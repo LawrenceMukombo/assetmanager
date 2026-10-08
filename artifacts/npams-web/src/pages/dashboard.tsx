@@ -6,6 +6,7 @@ import { StockCategoryTrends } from "@/components/dashboard/stock-category-trend
 import { useAuth } from "@/hooks/use-auth";
 import { useProvinceBranding } from "@/hooks/use-province-branding";
 import { useQuery } from "@tanstack/react-query";
+import { useOrganization } from "@/context/organization-context";
 import { apiFetchJson } from "@/lib/api-fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -639,6 +640,7 @@ interface NationalDashData {
 }
 
 function NationalDashboard() {
+  const { activeAgencyId } = useOrganization();
   const [filters, setFilters] = useState<DashFilters>(EMPTY_FILTERS);
   const [locationScope, setLocationScope] = useState<LocationScope>(EMPTY_LOCATION);
   const [pivot, setPivot] = useState<Pivot>("status");
@@ -646,7 +648,7 @@ function NationalDashboard() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [drawer, setDrawer] = useState<{ title: string; subtitle?: string; params: Record<string, string> } | null>(null);
 
-  const qKey = useMemo(() => ["national-dashboard", filters], [filters]);
+  const qKey = useMemo(() => ["national-dashboard", filters, activeAgencyId], [filters, activeAgencyId]);
   const { data: raw, isLoading } = useQuery({
     queryKey: qKey,
     queryFn:  () => apiFetchJson(`/api/v1/dashboard/national${buildParams(filters)}`),

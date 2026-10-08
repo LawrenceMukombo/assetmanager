@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { apiFetchJson } from "@/lib/api-fetch";
+import { queryClient } from "@/App";
 
 export interface OrganizationSettings {
   id?: string;
@@ -22,6 +23,11 @@ export interface OrganizationSettings {
   level2Plural: string;
   level3Label: string;
   level3Plural: string;
+  countryCode?: string | null;
+  countryName?: string | null;
+  defaultLatitude?: string | null;
+  defaultLongitude?: string | null;
+  defaultZoom?: string | null;
 }
 
 export interface HierarchyLabels {
@@ -80,6 +86,11 @@ const DEFAULT_ORGANIZATION: OrganizationSettings = {
   level2Plural: "Departments",
   level3Label: "Site / Room",
   level3Plural: "Sites / Rooms",
+  countryCode: "PNG",
+  countryName: "Papua New Guinea",
+  defaultLatitude: "-6.3150",
+  defaultLongitude: "143.9555",
+  defaultZoom: "6",
 };
 
 const STORAGE_KEY = "npams_org_settings";
@@ -206,7 +217,10 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(ACTIVE_AGENCY_KEY);
         setActiveAgencyIdState(null);
       }
-      // Re-fetch organization settings and notify components
+      // Clear react-query cache and re-fetch organization settings to guarantee
+      // that no records or views from the previous agency remain cached in memory.
+      queryClient.clear();
+      queryClient.invalidateQueries();
       refreshOrganization();
     },
     [refreshOrganization]

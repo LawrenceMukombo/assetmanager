@@ -31,6 +31,7 @@ router.get("/v1/maintenance", requireAuth, async (req, res) => {
         assetTag: assets.assetTag,
         assetName: assets.assetName,
         assetProvinceId: assets.provinceId,
+        assetAgencyId: assets.agencyId,
         provinceName: provinces.provinceName,
         assignedTo: maintenanceSchedules.assignedTo,
         assignedToName: users.fullName,
@@ -41,8 +42,11 @@ router.get("/v1/maintenance", requireAuth, async (req, res) => {
       .leftJoin(users, eq(maintenanceSchedules.assignedTo, users.id))
       .orderBy(desc(maintenanceSchedules.scheduledDate));
 
+    const effectiveAgencyId = user.scopedAgencyId || user.agencyId;
     let filtered = rows;
-    if (user.scopeLevel !== "national" && user.provinceId) {
+    if (effectiveAgencyId) {
+      filtered = filtered.filter(r => r.assetAgencyId === effectiveAgencyId);
+    } else if (user.scopeLevel !== "national" && user.provinceId) {
       filtered = filtered.filter(r => r.assetProvinceId === user.provinceId);
     }
     if (status) filtered = filtered.filter(r => r.status === status);

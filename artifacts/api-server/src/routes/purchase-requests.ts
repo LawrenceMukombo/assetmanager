@@ -59,10 +59,11 @@ function describeValue(v: unknown): string {
 }
 
 function scopeFilter(user: NonNullable<Express.Request["user"]>) {
-  if (user.scopeLevel === "national") return [];
-  if (user.scopeLevel === "agency" || user.agencyId) {
-    return user.agencyId ? [eq(purchaseRequests.agencyId, user.agencyId)] : [sql`1=0`];
+  const effectiveAgencyId = user.scopedAgencyId || user.agencyId;
+  if (effectiveAgencyId) {
+    return [eq(purchaseRequests.agencyId, effectiveAgencyId)];
   }
+  if (user.scopeLevel === "national") return [];
   if (user.facilityId) return [eq(purchaseRequests.facilityId, user.facilityId)];
   if (user.districtId) {
     return [
@@ -77,10 +78,11 @@ function isWithinStockScope(
   user: NonNullable<Express.Request["user"]>,
   item: { agencyId: string | null; provinceId: string | null; facilityId: string | null; districtId?: string | null },
 ): boolean {
-  if (user.scopeLevel === "national") return true;
-  if (user.scopeLevel === "agency" || user.agencyId) {
-    return !!user.agencyId && item.agencyId === user.agencyId;
+  const effectiveAgencyId = user.scopedAgencyId || user.agencyId;
+  if (effectiveAgencyId) {
+    return item.agencyId === effectiveAgencyId;
   }
+  if (user.scopeLevel === "national") return true;
   if (user.facilityId) return item.facilityId === user.facilityId;
   if (user.districtId) return !!item.districtId && item.districtId === user.districtId;
   if (user.provinceId) return item.provinceId === user.provinceId;

@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_ROLES } from "@/App";
 import { apiFetchJson } from "@/lib/api-fetch";
-import { useGetAssets, useGetProvinces } from "@workspace/api-client-react";
+import { useOrganization } from "@/context/organization-context";
+import { useGetAssets, useGetProvinces, getGetAssetsQueryKey } from "@workspace/api-client-react";
 import { format, isPast, isWithinInterval, addDays } from "date-fns";
 import {
   Card, CardContent, CardHeader, CardTitle,
@@ -60,6 +61,7 @@ const EMPTY_FORM = {
 
 export default function Maintenance() {
   const { user } = useAuth();
+  const { activeAgencyId } = useOrganization();
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -75,7 +77,7 @@ export default function Maintenance() {
   const [assetSearch, setAssetSearch] = useState("");
 
   const { data: records, isLoading } = useQuery<MaintenanceRecord[]>({
-    queryKey: ["maintenance"],
+    queryKey: ["maintenance", activeAgencyId],
     queryFn: async () => {
       const r = await apiFetchJson<MaintenanceRecord[]>("/api/v1/maintenance");
       return r.data ?? [];
@@ -83,9 +85,10 @@ export default function Maintenance() {
     refetchInterval: 30000,
   });
 
+  const assetFilters = { search: assetSearch, limit: 50 };
   const { data: assetsData } = useGetAssets(
-    { search: assetSearch, limit: 50 },
-    { query: { enabled: showCreate || !!editRecord } }
+    assetFilters,
+    { query: { queryKey: getGetAssetsQueryKey(assetFilters), enabled: showCreate || !!editRecord } }
   );
 
   const createMutation = useMutation({

@@ -15,8 +15,14 @@ import {
   Building2,
   Globe,
   Layers,
+  MapPin,
+  Search,
+  ExternalLink,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { useOrganization } from "@/context/organization-context";
+import { apiFetchJson } from "@/lib/api-fetch";
+import { Input } from "@/components/ui/input";
 
 // Maps DB province_code → PNG_PROVINCES id
 const DB_CODE_TO_GIS_ID: Record<string, string> = {
@@ -93,6 +99,55 @@ function StatBox({ label, value }: { label: string; value: string }) {
 export default function GISPage() {
   const { user } = useAuth();
   const { branding } = useProvinceBranding();
+  const { organization, activeAgencyId } = useOrganization();
+
+  const isPng = useMemo(() => {
+    if (organization.countryCode && organization.countryCode !== "PNG") return false;
+    const lower = (organization.organizationName || "").toLowerCase();
+    if (
+      lower.includes("zambia") ||
+      lower.includes("kenya") ||
+      lower.includes("rwanda") ||
+      lower.includes("ghana") ||
+      lower.includes("nigeria") ||
+      lower.includes("uganda") ||
+      lower.includes("south africa")
+    ) {
+      return false;
+    }
+    return true;
+  }, [organization.countryCode, organization.organizationName]);
+
+  const targetCenter: [number, number] = useMemo(() => {
+    if (isPng) return PNG_CENTER;
+    const lat = parseFloat(organization.defaultLatitude || "-13.1339");
+    const lng = parseFloat(organization.defaultLongitude || "27.8493");
+    return [isNaN(lat) ? -13.1339 : lat, isNaN(lng) ? 27.8493 : lng];
+  }, [isPng, organization.defaultLatitude, organization.defaultLongitude]);
+
+  const targetZoom = useMemo(() => {
+    if (isPng) return 6;
+    const z = parseInt(organization.defaultZoom || "6", 10);
+    return isNaN(z) ? 6 : z;
+  }, [isPng, organization.defaultZoom]);
+
+  const [agencyFacilities, setAgencyFacilities] = useState<any[]>([]);
+  const [facilitySearch, setFacilitySearch] = useState("");
+  const [selectedFacility, setSelectedFacility] = useState<any | null>(null);
+  const facilityLayerGroupRef = useRef<L.LayerGroup | null>(null);
+
+  const filteredFacilities = useMemo(() => {
+    if (!facilitySearch.trim()) return agencyFacilities;
+    const q = facilitySearch.toLowerCase();
+    return agencyFacilities.filter(
+      (f: any) =>
+        (f.facilityName && f.facilityName.toLowerCase().includes(q)) ||
+        (f.districtName && f.districtName.toLowerCase().includes(q)) ||
+        (f.facilityType && f.facilityType.toLowerCase().includes(q)) ||
+        (f.address && f.address.toLowerCase().includes(q))
+    );
+  }, [agencyFacilities, facilitySearch]);
+
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const circlesRef = useRef<Map<string, L.CircleMarker>>(new Map());
@@ -268,8 +323,11 @@ export default function GISPage() {
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
+    const initialCenter = isPng ? PNG_CENTER : targetCenter;
+    const initialZoom = isPng ? 6 : targetZoom;
+
     const map = L.map(mapContainerRef.current, {
-      center: PNG_CENTER, zoom: 6, zoomControl: false, attributionControl: true,
+      center: initialCenter, zoom: initialZoom, zoomControl: false, attributionControl: true,
     });
     L.control.zoom({ position: "bottomright" }).addTo(map);
 
@@ -292,7 +350,8 @@ export default function GISPage() {
     const districtGroup = L.layerGroup().addTo(map);
     districtMarkersRef.current = districtGroup;
 
-    // ── Province boundaries ─────────────────────────────────────────────────
+    if (isPng) {
+      // ── Province boundaries ─────────────────────────────────────────────────
     fetch("/png-provinces.geojson")
       .then((r) => r.json())
       .then((data: GeoJSON.FeatureCollection) => {
@@ -474,7 +533,7 @@ export default function GISPage() {
       const circle = L.circleMarker([prov.lat, prov.lng], {
         radius: Math.max(8, Math.min(20, prov.population_2021_est / 40000)),
         fillColor: color, color: "#fff", weight: 2, opacity: 1,
-        fillOpacity: 0.88, zIndexOffset: 500,
+        fillOpacity: 0.88,
       });
       circle.bindTooltip(
         `<div style="font-weight:bold;font-size:13px">${prov.name}</div>
@@ -503,9 +562,74 @@ export default function GISPage() {
     } else {
       map.fitBounds(bounds, { padding: [20, 20] });
     }
+  } else {
+    // ── Global Organization / Non-PNG Mode ──────────────────────────────────
+    const facGroup = L.layerGroup().addTo(map);
+    facilityLayerGroupRef.current = facGroup;
 
-    mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; geoLayerRef.current = null; districtGeoLayerRef.current = null; };
+    apiFetchJson<any>("/api/v1/locations/facilities")
+      .then((res) => {
+        const list = Array.isArray(res.data) ? res.data : Array.isArray(res?.data?.data) ? res.data.data : [];
+        setAgencyFacilities(list);
+        facGroup.clearLayers();
+
+        let hasPins = false;
+        list.forEach((f: any) => {
+          const lat = parseFloat(f.gpsLatitude);
+          const lng = parseFloat(f.gpsLongitude);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            hasPins = true;
+            const marker = L.circleMarker([lat, lng], {
+              radius: 8,
+              fillColor: organization.primaryColor || "#0F4C81",
+              color: "#ffffff",
+              weight: 2,
+              opacity: 1,
+              fillOpacity: 0.9,
+            });
+            marker.bindTooltip(
+              `<div style="font-weight:bold;font-size:12px">${f.facilityName}</div>
+               <div style="font-size:11px;color:#cbd5e1">${f.facilityType || "Facility"} · ${f.districtName || ""}</div>`,
+              { direction: "top", className: "leaflet-custom-tooltip" }
+            );
+            marker.on("click", () => {
+              setSelectedFacility(f);
+              map.setView([lat, lng], 13, { animate: true });
+            });
+            facGroup.addLayer(marker);
+          }
+        });
+
+        if (!hasPins) {
+          const hqMarker = L.circleMarker(targetCenter, {
+            radius: 12,
+            fillColor: organization.primaryColor || "#0F4C81",
+            color: "#ffffff",
+            weight: 2.5,
+            opacity: 1,
+            fillOpacity: 0.9,
+          });
+          hqMarker.bindTooltip(
+            `<div style="font-weight:bold;font-size:13px">${organization.organizationName}</div>
+             <div style="font-size:11px;color:#cbd5e1">${organization.countryName || "National Headquarters"}</div>`,
+            { permanent: true, direction: "top", className: "leaflet-custom-tooltip" }
+          );
+          facGroup.addLayer(hqMarker);
+        }
+      })
+      .catch((e) => console.warn("Failed to load facilities for GIS map", e));
+
+    map.setView(targetCenter, targetZoom, { animate: false });
+  }
+
+  mapRef.current = map;
+  return () => {
+    map.remove();
+    mapRef.current = null;
+    geoLayerRef.current = null;
+    districtGeoLayerRef.current = null;
+    facilityLayerGroupRef.current = null;
+  };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -565,6 +689,11 @@ export default function GISPage() {
   const resetView = () => {
     const map = mapRef.current;
     if (!map) return;
+    if (!isPng) {
+      map.setView(targetCenter, targetZoom, { animate: true });
+      setSelectedFacility(null);
+      return;
+    }
     if (userProvince) {
       map.setView([userProvince.lat, userProvince.lng], 8, { animate: true });
     } else {
@@ -575,6 +704,19 @@ export default function GISPage() {
       refreshGeoStyles();
       refreshDistrictStyles();
       refreshCircleStyles();
+    }
+  };
+
+  const handleFacilityClick = (f: any) => {
+    setSelectedFacility(f);
+    const map = mapRef.current;
+    if (!map) return;
+    const lat = parseFloat(f.gpsLatitude);
+    const lng = parseFloat(f.gpsLongitude);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      map.setView([lat, lng], 14, { animate: true });
+    } else {
+      map.setView(targetCenter, targetZoom, { animate: true });
     }
   };
 
@@ -609,9 +751,9 @@ export default function GISPage() {
       <div className="px-4 py-3 border-b bg-background shrink-0">
         <PageHeader
           icon={<Globe className="w-5 h-5" />}
-          title="GIS Province Map"
-          subtitle="Papua New Guinea — Interactive Geographic Information System"
-          breadcrumbs={[{ label: "GIS Province Map" }]}
+          title={isPng ? "GIS Province Map" : `${organization.organizationName} — GIS Map`}
+          subtitle={isPng ? "Papua New Guinea — Interactive Geographic Information System" : `${organization.countryName || organization.organizationName} — Interactive Geospatial Information System`}
+          breadcrumbs={[{ label: isPng ? "GIS Province Map" : "Geographic Information System" }]}
           actions={
             <>
               <div className="flex rounded-md border overflow-hidden text-xs">
@@ -625,10 +767,12 @@ export default function GISPage() {
                   </button>
                 ))}
               </div>
-              <Button variant={showDistricts ? "default" : "outline"} size="sm" onClick={toggleDistricts} className="text-xs" aria-pressed={showDistricts}>
-                <Layers className="w-3.5 h-3.5 mr-1" />
-                Districts
-              </Button>
+              {isPng && (
+                <Button variant={showDistricts ? "default" : "outline"} size="sm" onClick={toggleDistricts} className="text-xs" aria-pressed={showDistricts}>
+                  <Layers className="w-3.5 h-3.5 mr-1" />
+                  Districts
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={resetView} className="text-xs">
                 <RotateCcw className="w-3.5 h-3.5 mr-1" />
                 Reset
@@ -643,240 +787,401 @@ export default function GISPage() {
         <div className="flex-1 relative">
           <div ref={mapContainerRef} className="w-full h-full" />
 
-          {/* Region legend */}
-          <div className="absolute bottom-10 left-3 z-[1000] bg-background/90 backdrop-blur rounded-lg p-2 border text-xs shadow">
-            <div className="flex items-center justify-between mb-1.5 gap-3">
-              <p className="font-semibold text-xs">Regions</p>
-              {selectedRegion && (
-                <button onClick={() => setSelectedRegion(null)} className="text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2">
-                  Clear
-                </button>
-              )}
-            </div>
-            <div className="space-y-0.5">
-              {Object.entries(regionColors).map(([r, c]) => {
-                const count = PNG_PROVINCES.filter((p) => p.region === r).length;
-                const active = selectedRegion === r;
-                const dimmed = selectedRegion !== null && !active;
-                return (
-                  <button
-                    key={r}
-                    onClick={() => toggleRegionFilter(r)}
-                    className={`flex items-center gap-1.5 w-full px-1.5 py-1 rounded transition-all text-left ${active ? "bg-foreground/10 font-semibold" : dimmed ? "opacity-40" : "hover:bg-foreground/5"}`}
-                  >
-                    <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: c, outline: active ? `2px solid ${c}` : "none", outlineOffset: "1px", border: "1.5px solid rgba(255,255,255,0.5)" }} />
-                    <span className="flex-1">{r}</span>
-                    <span className={`text-[10px] ${active ? "text-foreground" : "text-muted-foreground"}`}>{count}</span>
+          {/* Legend */}
+          {isPng ? (
+            <div className="absolute bottom-10 left-3 z-[1000] bg-background/90 backdrop-blur rounded-lg p-2 border text-xs shadow">
+              <div className="flex items-center justify-between mb-1.5 gap-3">
+                <p className="font-semibold text-xs">Regions</p>
+                {selectedRegion && (
+                  <button onClick={() => setSelectedRegion(null)} className="text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2">
+                    Clear
                   </button>
-                );
-              })}
+                )}
+              </div>
+              <div className="space-y-0.5">
+                {Object.entries(regionColors).map(([r, c]) => {
+                  const count = PNG_PROVINCES.filter((p) => p.region === r).length;
+                  const active = selectedRegion === r;
+                  const dimmed = selectedRegion !== null && !active;
+                  return (
+                    <button
+                      key={r}
+                      onClick={() => toggleRegionFilter(r)}
+                      className={`flex items-center gap-1.5 w-full px-1.5 py-1 rounded transition-all text-left ${active ? "bg-foreground/10 font-semibold" : dimmed ? "opacity-40" : "hover:bg-foreground/5"}`}
+                    >
+                      <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: c, outline: active ? `2px solid ${c}` : "none", outlineOffset: "1px", border: "1.5px solid rgba(255,255,255,0.5)" }} />
+                      <span className="flex-1">{r}</span>
+                      <span className={`text-[10px] ${active ? "text-foreground" : "text-muted-foreground"}`}>{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t px-1.5">
+                <div className="w-3 h-3 rounded-full border border-black shrink-0" style={{ background: "#FCD116" }} />
+                <span className="text-muted-foreground">District capitals</span>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t px-1.5">
-              <div className="w-3 h-3 rounded-full border border-black shrink-0" style={{ background: "#FCD116" }} />
-              <span className="text-muted-foreground">District capitals</span>
+          ) : (
+            <div className="absolute bottom-10 left-3 z-[1000] bg-background/90 backdrop-blur rounded-lg p-3 border text-xs shadow min-w-[210px]">
+              <p className="font-semibold text-xs mb-1 flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-primary" />
+                <span>{organization.countryName || "Sovereign GIS Scope"}</span>
+              </p>
+              <p className="text-[11px] text-muted-foreground mb-2">
+                Active Tenant: <span className="font-medium text-foreground">{organization.organizationName}</span>
+              </p>
+              <div className="space-y-1 pt-1.5 border-t">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-muted-foreground">Currency:</span>
+                  <span className="font-semibold">{organization.currencyCode} ({organization.currencySymbol})</span>
+                </div>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-muted-foreground">Coordinates:</span>
+                  <span className="font-mono text-[10px]">{targetCenter[0].toFixed(2)}°, {targetCenter[1].toFixed(2)}°</span>
+                </div>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-muted-foreground">{organization.level3Plural || "Sites Plotted"}:</span>
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{agencyFacilities.length}</Badge>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* National stats */}
-          {user?.scope_level === "national" && (
-            <div className="absolute top-3 left-3 z-[1000] bg-background/90 backdrop-blur rounded-lg px-3 py-2 border shadow text-xs text-muted-foreground">
-              {selectedRegion ? (
-                <>
-                  <span className="font-semibold" style={{ color: regionColors[selectedRegion] }}>{selectedRegion} Region</span>
-                  {" · "}{PNG_PROVINCES.filter((p) => p.region === selectedRegion).length} provinces
-                  {" · "}{PNG_PROVINCES.filter((p) => p.region === selectedRegion).reduce((a, p) => a + p.num_districts, 0)} districts
-                </>
-              ) : (
-                <>{PNG_PROVINCES.length} provinces · {PNG_PROVINCES.reduce((a, p) => a + p.num_districts, 0)} districts</>
-              )}
+          {/* Stats bar */}
+          {isPng ? (
+            user?.scope_level === "national" && (
+              <div className="absolute top-3 left-3 z-[1000] bg-background/90 backdrop-blur rounded-lg px-3 py-2 border shadow text-xs text-muted-foreground">
+                {selectedRegion ? (
+                  <>
+                    <span className="font-semibold" style={{ color: regionColors[selectedRegion] }}>{selectedRegion} Region</span>
+                    {" · "}{PNG_PROVINCES.filter((p) => p.region === selectedRegion).length} provinces
+                    {" · "}{PNG_PROVINCES.filter((p) => p.region === selectedRegion).reduce((a, p) => a + p.num_districts, 0)} districts
+                  </>
+                ) : (
+                  <>{PNG_PROVINCES.length} provinces · {PNG_PROVINCES.reduce((a, p) => a + p.num_districts, 0)} districts</>
+                )}
+              </div>
+            )
+          ) : (
+            <div className="absolute top-3 left-3 z-[1000] bg-background/90 backdrop-blur rounded-lg px-3 py-2 border shadow text-xs text-muted-foreground flex items-center gap-2">
+              <span className="font-semibold text-foreground">{organization.organizationName}</span>
+              <span>·</span>
+              <span>{organization.countryName || "Sovereign Scope"}</span>
+              <span>·</span>
+              <span>{agencyFacilities.length} {organization.level3Plural || "Sites / Facilities"}</span>
             </div>
           )}
         </div>
 
         {/* Right info panel */}
         <div className="w-[360px] border-l flex flex-col overflow-hidden bg-background shrink-0">
-          {user?.scope_level === "national" && (
-            <div className="border-b px-3 py-2 bg-muted/30">
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  {selectedRegion ? `${selectedRegion} Region` : "All Provinces"}
-                </p>
-                <span className="text-[10px] text-muted-foreground">
-                  {selectedRegion ? PNG_PROVINCES.filter((p) => p.region === selectedRegion).length : PNG_PROVINCES.length} provinces
-                </span>
+          {!isPng ? (
+            <div className="flex flex-col h-full">
+              <div className="border-b px-3 py-2.5 bg-muted/30">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    {organization.level3Plural || "Facilities / Sites"}
+                  </p>
+                  <span className="text-[10px] text-muted-foreground">
+                    {filteredFacilities.length} of {agencyFacilities.length}
+                  </span>
+                </div>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={facilitySearch}
+                    onChange={(e) => setFacilitySearch(e.target.value)}
+                    placeholder={`Search ${organization.level3Plural?.toLowerCase() || "sites"}...`}
+                    className="h-8 pl-8 text-xs bg-background"
+                  />
+                </div>
               </div>
-              <div className="space-y-0.5 max-h-40 overflow-y-auto pr-1">
-                {PNG_PROVINCES.filter((p) => !selectedRegion || p.region === selectedRegion).map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => handleProvinceClick(p)}
-                    className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors flex items-center gap-2 ${selectedProvince?.id === p.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
-                  >
-                    <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: regionColors[p.region] ?? p.color }} />
-                    <span className="truncate">{p.name}</span>
-                  </button>
-                ))}
+
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                {selectedFacility ? (
+                  <div className="border rounded-lg p-3 space-y-3 bg-card shadow-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <Badge variant="outline" className="text-[10px] mb-1">
+                          {selectedFacility.facilityType || "Operational Site"}
+                        </Badge>
+                        <h4 className="font-bold text-sm leading-tight text-foreground">
+                          {selectedFacility.facilityName}
+                        </h4>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-1.5 text-xs text-muted-foreground"
+                        onClick={() => setSelectedFacility(null)}
+                      >
+                        Close
+                      </Button>
+                    </div>
+
+                    <div className="space-y-1.5 text-xs text-muted-foreground border-t pt-2">
+                      {selectedFacility.districtName && (
+                        <div className="flex justify-between">
+                          <span>{organization.level2Label || "District"}:</span>
+                          <span className="font-medium text-foreground">{selectedFacility.districtName}</span>
+                        </div>
+                      )}
+                      {selectedFacility.address && (
+                        <div className="flex justify-between">
+                          <span>Address:</span>
+                          <span className="font-medium text-foreground text-right">{selectedFacility.address}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span>Coordinates:</span>
+                        <span className="font-mono text-foreground">
+                          {selectedFacility.gpsLatitude && selectedFacility.gpsLongitude
+                            ? `${parseFloat(selectedFacility.gpsLatitude).toFixed(4)}°, ${parseFloat(selectedFacility.gpsLongitude).toFixed(4)}°`
+                            : "HQ Reference"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        className="w-full text-xs h-7"
+                        onClick={() => handleFacilityClick(selectedFacility)}
+                      >
+                        <MapPin className="w-3 h-3 mr-1" />
+                        Center On Map
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="space-y-1">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-1">
+                    Directory
+                  </p>
+                  {filteredFacilities.length === 0 ? (
+                    <div className="text-center py-8 text-xs text-muted-foreground">
+                      <Building2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      <p>No operational sites found matching your search</p>
+                    </div>
+                  ) : (
+                    filteredFacilities.map((f: any) => {
+                      const isSelected = selectedFacility?.id === f.id;
+                      const hasGps = f.gpsLatitude && f.gpsLongitude;
+                      return (
+                        <button
+                          key={f.id}
+                          onClick={() => handleFacilityClick(f)}
+                          className={`w-full text-left px-2.5 py-2 rounded-lg text-xs transition-colors flex items-center justify-between gap-2 border ${
+                            isSelected
+                              ? "bg-primary/10 border-primary font-medium"
+                              : "hover:bg-muted/60 border-transparent"
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium truncate text-foreground">{f.facilityName}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              {f.facilityType || "Facility"} {f.districtName ? `· ${f.districtName}` : ""}
+                            </p>
+                          </div>
+                          {hasGps ? (
+                            <Badge variant="secondary" className="text-[10px] shrink-0 font-mono py-0 px-1">
+                              GPS
+                            </Badge>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground shrink-0">HQ Ref</span>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
-          )}
-
-          <div className="flex-1 overflow-y-auto">
-            {prov ? (
-              <div className="p-4 space-y-4">
-                <div>
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <h3 className="font-bold text-base leading-tight">{prov.name}</h3>
-                    <Badge variant="outline" className="text-xs shrink-0 mt-0.5" style={{ borderColor: regionColors[prov.region], color: regionColors[prov.region] }}>
-                      {prov.region}
-                    </Badge>
+          ) : (
+            <>
+              {user?.scope_level === "national" && (
+                <div className="border-b px-3 py-2 bg-muted/30">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      {selectedRegion ? `${selectedRegion} Region` : "All Provinces"}
+                    </p>
+                    <span className="text-[10px] text-muted-foreground">
+                      {selectedRegion ? PNG_PROVINCES.filter((p) => p.region === selectedRegion).length : PNG_PROVINCES.length} provinces
+                    </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">Capital: <span className="font-medium text-foreground">{prov.capital}</span></p>
-                  <p className="text-xs text-muted-foreground">Province Code: <span className="font-mono font-medium text-foreground">{prov.code}</span> · Est. {prov.established}</p>
+                  <div className="space-y-0.5 max-h-40 overflow-y-auto pr-1">
+                    {PNG_PROVINCES.filter((p) => !selectedRegion || p.region === selectedRegion).map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => handleProvinceClick(p)}
+                        className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors flex items-center gap-2 ${selectedProvince?.id === p.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                      >
+                        <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: regionColors[p.region] ?? p.color }} />
+                        <span className="truncate">{p.name}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
+              )}
 
-                <Tabs defaultValue="profile">
-                  <TabsList className="w-full text-xs h-8">
-                    <TabsTrigger value="profile" className="flex-1 text-xs"><Info className="w-3 h-3 mr-1" />Profile</TabsTrigger>
-                    <TabsTrigger value="districts" className="flex-1 text-xs"><Building2 className="w-3 h-3 mr-1" />Districts</TabsTrigger>
-                    <TabsTrigger value="economy" className="flex-1 text-xs"><MapIcon className="w-3 h-3 mr-1" />Economy</TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="profile" className="space-y-3 mt-3">
-                    <p className="text-xs text-muted-foreground leading-relaxed">{prov.description}</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <StatBox label="Population (2021 est.)" value={formatNumber(prov.population_2021_est)} />
-                      <StatBox label="Population (2011)" value={formatNumber(prov.population_2011)} />
-                      <StatBox label="Area" value={`${prov.area_km2.toLocaleString()} km²`} />
-                      <StatBox label="Pop. Density" value={`${prov.density_per_km2}/km²`} />
-                      <StatBox label="Districts" value={prov.num_districts.toString()} />
-                      <StatBox label="Region" value={prov.region} />
-                    </div>
+              <div className="flex-1 overflow-y-auto">
+                {prov ? (
+                  <div className="p-4 space-y-4">
                     <div>
-                      <p className="text-xs font-semibold mb-1.5">Languages</p>
-                      <div className="flex flex-wrap gap-1">
-                        {prov.languages.map((l) => <Badge key={l} variant="secondary" className="text-xs">{l}</Badge>)}
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <h3 className="font-bold text-base leading-tight">{prov.name}</h3>
+                        <Badge variant="outline" className="text-xs shrink-0 mt-0.5" style={{ borderColor: regionColors[prov.region], color: regionColors[prov.region] }}>
+                          {prov.region}
+                        </Badge>
                       </div>
+                      <p className="text-xs text-muted-foreground">Capital: <span className="font-medium text-foreground">{prov.capital}</span></p>
+                      <p className="text-xs text-muted-foreground">Province Code: <span className="font-mono font-medium text-foreground">{prov.code}</span> · Est. {prov.established}</p>
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold mb-1.5">Notable Facts</p>
-                      <ul className="space-y-1">
-                        {prov.notable_facts.map((f, i) => (
-                          <li key={i} className="text-xs text-muted-foreground flex gap-1.5">
-                            <span className="shrink-0 mt-0.5 w-1.5 h-1.5 rounded-full bg-primary inline-block" />
-                            {f}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </TabsContent>
 
-                  <TabsContent value="districts" className="mt-3">
-                    <div className="space-y-1.5">
-                      {prov.districts.map((d) => {
-                        const baseName = d.name.replace(/ District$/i, "").trim();
-                        // Try to find matching polygon key (GADM names may differ slightly)
-                        const matchKey = Array.from(districtLayersMapRef.current.keys()).find(
-                          (k) => k.startsWith(prov.id + "::") &&
-                            k.toLowerCase().includes(baseName.toLowerCase().split("-")[0].split(" ")[0])
-                        ) ?? `${prov.id}::${baseName}`;
-                        const isSelected = selectedDistrictKey === matchKey;
-                        const provColor = getProvinceColor(prov);
-                        return (
-                          <div
-                            key={d.name}
-                            className={`border rounded-lg px-3 py-2 text-xs cursor-pointer transition-colors ${
-                              isSelected ? "border-2" : "hover:bg-muted/50"
-                            }`}
-                            style={isSelected ? {
-                              borderColor: provColor,
-                              backgroundColor: hexToRgba(provColor, 0.08),
-                            } : {}}
-                            onClick={() => {
-                              mapRef.current?.setView([d.lat, d.lng], 10, { animate: true });
-                              // Highlight matching polygon if found
-                              const targetLayer = districtLayersMapRef.current.get(matchKey);
-                              const prev = selectedDistrictMetaRef.current;
-                              const prevLayer = selectedDistrictLayerRef.current;
-                              if (prev && prevLayer) {
-                                const prevColor = getProvinceColor(prev.prov);
-                                const prevInProv = selectedProvinceRef.current?.id === prev.prov.id;
-                                prevLayer.setStyle({
-                                  fillOpacity: prevInProv ? 0.16 : 0.07,
-                                  fillColor: prevColor,
-                                  color: prevInProv ? hexToRgba(prevColor, 0.6) : hexToRgba(prevColor, 0.25),
-                                  weight: prevInProv ? 0.8 : 0.5,
-                                });
-                              }
-                              if (prev?.key === matchKey) {
-                                selectedDistrictMetaRef.current = null;
-                                selectedDistrictLayerRef.current = null;
-                                setSelectedDistrictKey(null);
-                              } else {
-                                selectedDistrictMetaRef.current = { key: matchKey, name: baseName, prov };
-                                selectedDistrictLayerRef.current = targetLayer ?? null;
-                                setSelectedDistrictKey(matchKey);
-                                if (targetLayer) {
-                                  targetLayer.setStyle({ fillColor: provColor, fillOpacity: 0.5, color: provColor, weight: 2.5, opacity: 1 });
-                                  (targetLayer as L.Path & { bringToFront(): void }).bringToFront();
-                                }
-                              }
-                            }}
-                          >
-                            <div className="flex items-center justify-between mb-0.5">
-                              <p className="font-semibold">{d.name}</p>
-                              {isSelected && (
-                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: hexToRgba(provColor, 0.15), color: provColor }}>
-                                  Selected
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-muted-foreground">Capital: {d.capital}</p>
-                            <p className="text-muted-foreground font-mono">{d.lat.toFixed(3)}°S, {d.lng.toFixed(3)}°E</p>
+                    <Tabs defaultValue="profile">
+                      <TabsList className="w-full text-xs h-8">
+                        <TabsTrigger value="profile" className="flex-1 text-xs"><Info className="w-3 h-3 mr-1" />Profile</TabsTrigger>
+                        <TabsTrigger value="districts" className="flex-1 text-xs"><Building2 className="w-3 h-3 mr-1" />Districts</TabsTrigger>
+                        <TabsTrigger value="economy" className="flex-1 text-xs"><MapIcon className="w-3 h-3 mr-1" />Economy</TabsTrigger>
+                      </TabsList>
+
+                      <TabsContent value="profile" className="space-y-3 mt-3">
+                        <p className="text-xs text-muted-foreground leading-relaxed">{prov.description}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <StatBox label="Population (2021 est.)" value={formatNumber(prov.population_2021_est)} />
+                          <StatBox label="Population (2011)" value={formatNumber(prov.population_2011)} />
+                          <StatBox label="Area" value={`${prov.area_km2.toLocaleString()} km²`} />
+                          <StatBox label="Pop. Density" value={`${prov.density_per_km2}/km²`} />
+                          <StatBox label="Districts" value={prov.num_districts.toString()} />
+                          <StatBox label="Region" value={prov.region} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold mb-1.5">Languages</p>
+                          <div className="flex flex-wrap gap-1">
+                            {prov.languages.map((l) => <Badge key={l} variant="secondary" className="text-xs">{l}</Badge>)}
                           </div>
-                        );
-                      })}
-                    </div>
-                  </TabsContent>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold mb-1.5">Notable Facts</p>
+                          <ul className="space-y-1">
+                            {prov.notable_facts.map((f, i) => (
+                              <li key={i} className="text-xs text-muted-foreground flex gap-1.5">
+                                <span className="shrink-0 mt-0.5 w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+                                {f}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </TabsContent>
 
-                  <TabsContent value="economy" className="mt-3 space-y-3">
-                    <div>
-                      <p className="text-xs font-semibold mb-1.5">Main Industries</p>
-                      <div className="flex flex-wrap gap-1">
-                        {prov.main_industries.map((ind) => <Badge key={ind} variant="outline" className="text-xs">{ind}</Badge>)}
-                      </div>
-                    </div>
-                    <div className="border rounded-lg p-3 space-y-2">
-                      <p className="text-xs font-semibold">Population Growth</p>
-                      <div className="flex items-end gap-2">
-                        <div className="flex-1">
-                          <p className="text-xs text-muted-foreground">2011 Census</p>
-                          <div className="mt-1 h-4 bg-blue-200 rounded"><div className="h-full bg-blue-500 rounded" style={{ width: "70%" }} /></div>
-                          <p className="text-xs font-mono mt-0.5">{formatNumber(prov.population_2011)}</p>
+                      <TabsContent value="districts" className="mt-3">
+                        <div className="space-y-1.5">
+                          {prov.districts.map((d) => {
+                            const baseName = d.name.replace(/ District$/i, "").trim();
+                            const matchKey = Array.from(districtLayersMapRef.current.keys()).find(
+                              (k) => k.startsWith(prov.id + "::") &&
+                                k.toLowerCase().includes(baseName.toLowerCase().split("-")[0].split(" ")[0])
+                            ) ?? `${prov.id}::${baseName}`;
+                            const isSelected = selectedDistrictKey === matchKey;
+                            const provColor = getProvinceColor(prov);
+                            return (
+                              <div
+                                key={d.name}
+                                className={`border rounded-lg px-3 py-2 text-xs cursor-pointer transition-colors ${
+                                  isSelected ? "border-2" : "hover:bg-muted/50"
+                                }`}
+                                style={isSelected ? {
+                                  borderColor: provColor,
+                                  backgroundColor: hexToRgba(provColor, 0.08),
+                                } : {}}
+                                onClick={() => {
+                                  mapRef.current?.setView([d.lat, d.lng], 10, { animate: true });
+                                  const targetLayer = districtLayersMapRef.current.get(matchKey);
+                                  const prev = selectedDistrictMetaRef.current;
+                                  const prevLayer = selectedDistrictLayerRef.current;
+                                  if (prev && prevLayer) {
+                                    const prevColor = getProvinceColor(prev.prov);
+                                    const prevInProv = selectedProvinceRef.current?.id === prev.prov.id;
+                                    prevLayer.setStyle({
+                                      fillOpacity: prevInProv ? 0.16 : 0.07,
+                                      fillColor: prevColor,
+                                      color: prevInProv ? hexToRgba(prevColor, 0.6) : hexToRgba(prevColor, 0.25),
+                                      weight: prevInProv ? 0.8 : 0.5,
+                                    });
+                                  }
+                                  if (prev?.key === matchKey) {
+                                    selectedDistrictMetaRef.current = null;
+                                    selectedDistrictLayerRef.current = null;
+                                    setSelectedDistrictKey(null);
+                                  } else {
+                                    selectedDistrictMetaRef.current = { key: matchKey, name: baseName, prov };
+                                    selectedDistrictLayerRef.current = targetLayer ?? null;
+                                    setSelectedDistrictKey(matchKey);
+                                    if (targetLayer) {
+                                      targetLayer.setStyle({ fillColor: provColor, fillOpacity: 0.5, color: provColor, weight: 2.5, opacity: 1 });
+                                      (targetLayer as L.Path & { bringToFront(): void }).bringToFront();
+                                    }
+                                  }
+                                }}
+                              >
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <p className="font-semibold">{d.name}</p>
+                                  {isSelected && (
+                                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: hexToRgba(provColor, 0.15), color: provColor }}>
+                                      Selected
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-muted-foreground">Capital: {d.capital}</p>
+                                <p className="text-muted-foreground font-mono">{d.lat.toFixed(3)}°S, {d.lng.toFixed(3)}°E</p>
+                              </div>
+                            );
+                          })}
                         </div>
-                        <div className="flex-1">
-                          <p className="text-xs text-muted-foreground">2021 Estimate</p>
-                          <div className="mt-1 h-4 bg-green-200 rounded"><div className="h-full bg-green-500 rounded" style={{ width: "90%" }} /></div>
-                          <p className="text-xs font-mono mt-0.5">{formatNumber(prov.population_2021_est)}</p>
+                      </TabsContent>
+
+                      <TabsContent value="economy" className="mt-3 space-y-3">
+                        <div>
+                          <p className="text-xs font-semibold mb-1.5">Main Industries</p>
+                          <div className="flex flex-wrap gap-1">
+                            {prov.main_industries.map((ind) => <Badge key={ind} variant="outline" className="text-xs">{ind}</Badge>)}
+                          </div>
                         </div>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Growth: +{((prov.population_2021_est - prov.population_2011) / prov.population_2011 * 100).toFixed(1)}% over ~10 years
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <StatBox label="Area" value={`${prov.area_km2.toLocaleString()} km²`} />
-                      <StatBox label="Density" value={`${prov.density_per_km2} /km²`} />
-                    </div>
-                  </TabsContent>
-                </Tabs>
+                        <div className="border rounded-lg p-3 space-y-2">
+                          <p className="text-xs font-semibold">Population Growth</p>
+                          <div className="flex items-end gap-2">
+                            <div className="flex-1">
+                              <p className="text-xs text-muted-foreground">2011 Census</p>
+                              <div className="mt-1 h-4 bg-blue-200 rounded"><div className="h-full bg-blue-500 rounded" style={{ width: "70%" }} /></div>
+                              <p className="text-xs font-mono mt-0.5">{formatNumber(prov.population_2011)}</p>
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-xs text-muted-foreground">2021 Estimate</p>
+                              <div className="mt-1 h-4 bg-green-200 rounded"><div className="h-full bg-green-500 rounded" style={{ width: "90%" }} /></div>
+                              <p className="text-xs font-mono mt-0.5">{formatNumber(prov.population_2021_est)}</p>
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Growth: +{((prov.population_2021_est - prov.population_2011) / prov.population_2011 * 100).toFixed(1)}% over ~10 years
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <StatBox label="Area" value={`${prov.area_km2.toLocaleString()} km²`} />
+                          <StatBox label="Density" value={`${prov.density_per_km2} /km²`} />
+                        </div>
+                      </TabsContent>
+                    </Tabs>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-center p-6">
+                    <Globe className="w-12 h-12 text-muted-foreground/30 mb-3" />
+                    <p className="text-sm text-muted-foreground">Click a province on the map to view its profile</p>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center p-6">
-                <Globe className="w-12 h-12 text-muted-foreground/30 mb-3" />
-                <p className="text-sm text-muted-foreground">Click a province on the map to view its profile</p>
-              </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
       </div>
 

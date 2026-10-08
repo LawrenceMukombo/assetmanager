@@ -44,9 +44,11 @@ import {
   Image as ImageIcon,
   Pipette,
   X,
+  Sparkles,
 } from "lucide-react";
 
 import { LogoUploaderField, BrandColorPickerField, PRESET_BRAND_COLORS } from "@/components/brand-fields";
+import { OnboardingWizard } from "@/components/onboarding-wizard";
 
 interface EnrichedOrganization extends OrganizationSummary {
   assetCount: number;
@@ -92,6 +94,7 @@ export default function OrganizationsPage() {
   // Modal dialogs state
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState<EnrichedOrganization | null>(null);
 
   // Form states
@@ -338,10 +341,20 @@ export default function OrganizationsPage() {
         breadcrumbs={[{ label: "Administration" }, { label: "Organizations" }]}
         actions={
           isSuperAdmin && (
-            <Button onClick={() => setCreateDialogOpen(true)} className="gap-2">
-              <Plus className="w-4 h-4" />
-              Register Organization
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setOnboardingOpen(true)}
+                className="gap-2 border-primary/40 hover:bg-primary/5 text-primary"
+              >
+                <Sparkles className="w-4 h-4 text-primary" />
+                Onboarding Hub
+              </Button>
+              <Button onClick={() => setCreateDialogOpen(true)} className="gap-2">
+                <Plus className="w-4 h-4" />
+                Register Organization
+              </Button>
+            </div>
           )
         }
       />
@@ -1092,6 +1105,27 @@ export default function OrganizationsPage() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Sovereign & Enterprise Onboarding Hub Modal Dialog */}
+      <Dialog open={onboardingOpen} onOpenChange={setOnboardingOpen}>
+        <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader className="pb-2">
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+              <Sparkles className="w-5 h-5 text-primary" />
+              Sovereign & Enterprise Onboarding Hub
+            </DialogTitle>
+            <DialogDescription>
+              Launch a sovereign national container or configure an independent enterprise organization with tailored hierarchy, maps, and branding.
+            </DialogDescription>
+          </DialogHeader>
+          <OnboardingWizard
+            onSuccess={() => {
+              setOnboardingOpen(false);
+              refetch();
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

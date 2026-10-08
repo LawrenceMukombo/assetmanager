@@ -69,7 +69,7 @@ const EMPTY_FORM = {
 
 export default function StockPage() {
   const { user } = useAuth();
-  const { organization, formatCurrency } = useOrganization();
+  const { organization, formatCurrency, activeAgencyId } = useOrganization();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
@@ -113,7 +113,7 @@ export default function StockPage() {
   const [reorderItem, setReorderItem] = useState<ReorderItem | null>(null);
 
   const { data: items, isLoading } = useQuery<StockItem[]>({
-    queryKey: ["stock", { search, lowOnly, categoryFilter }],
+    queryKey: ["stock", { search, lowOnly, categoryFilter, activeAgencyId }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
@@ -141,7 +141,7 @@ export default function StockPage() {
   // toggle above the breakdown cards.
   const [trendWeeks, setTrendWeeks] = useState<4 | 8 | 12>(8);
   const { data: categorySummary } = useQuery<CategorySummary[]>({
-    queryKey: ["stock-category-summary", trendWeeks],
+    queryKey: ["stock-category-summary", trendWeeks, activeAgencyId],
     queryFn: async () => {
       const r = await apiFetchJson<CategorySummary[]>(`/api/v1/stock/category-summary?weeks=${trendWeeks}`);
       return r.data ?? [];

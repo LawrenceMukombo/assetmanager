@@ -21,6 +21,7 @@ router.get("/v1/audit/sessions", requireAuth, async (req, res) => {
         startDate: auditSessions.startDate,
         endDate: auditSessions.endDate,
         createdAt: auditSessions.createdAt,
+        agencyId: auditSessions.agencyId,
         provinceId: auditSessions.provinceId,
         provinceName: provinces.provinceName,
         createdByName: users.fullName,
@@ -30,9 +31,13 @@ router.get("/v1/audit/sessions", requireAuth, async (req, res) => {
       .leftJoin(users, eq(auditSessions.createdBy, users.id))
       .orderBy(desc(auditSessions.createdAt));
 
-    const filtered = user.scopeLevel === "national"
-      ? rows
-      : rows.filter(r => !r.provinceId || r.provinceId === user.provinceId);
+    const effectiveAgencyId = user.scopedAgencyId || user.agencyId;
+    let filtered = rows;
+    if (effectiveAgencyId) {
+      filtered = filtered.filter(r => r.agencyId === effectiveAgencyId);
+    } else if (user.scopeLevel !== "national" && user.provinceId) {
+      filtered = filtered.filter(r => !r.provinceId || r.provinceId === user.provinceId);
+    }
 
     const pageParams = readPageParams(req);
     if (pageParams.enabled) {
@@ -54,11 +59,13 @@ router.post("/v1/audit/sessions", requireAuth, requireAssetAdmin, async (req, re
     };
     if (!name?.trim()) { res.status(400).json({ success: false, message: "Name is required", data: null }); return; }
 
+    const effectiveAgencyId = req.user!.scopedAgencyId || req.user!.agencyId || null;
     const scopedProvinceId = req.user!.scopeLevel !== "national" ? req.user!.provinceId : (provinceId ?? null);
 
     const [created] = await db.insert(auditSessions).values({
       name: name.trim(),
       description: description?.trim() ?? null,
+      agencyId: effectiveAgencyId,
       provinceId: scopedProvinceId,
       createdBy: req.user!.userId,
       startDate: startDate ? new Date(startDate) : null,

@@ -8,6 +8,7 @@ import {
   roles,
   userScope,
   provinces,
+  agencies,
   districts,
   facilities,
   refreshTokens,

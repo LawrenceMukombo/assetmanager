@@ -34,7 +34,7 @@ import SystemStatusPage from "@/pages/system-status";
 import OrganizationsPage from "@/pages/organizations";
 const GIS = lazy(() => import("@/pages/gis"));
 
-const queryClient = new QueryClient();
+export const queryClient = new QueryClient();
 
 export const ADMIN_ROLES = [
   "Super Admin",

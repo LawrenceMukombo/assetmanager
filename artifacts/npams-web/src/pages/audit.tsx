@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_ROLES, OFFICER_ROLES } from "@/App";
 import { apiFetchJson } from "@/lib/api-fetch";
 import { useGetProvinces } from "@workspace/api-client-react";
+import { useOrganization } from "@/context/organization-context";
 import { format } from "date-fns";
 import {
   Card, CardContent, CardHeader, CardTitle,
@@ -99,6 +100,7 @@ function statusLabel(s: string) {
 
 export default function Audit() {
   const { user } = useAuth();
+  const { activeAgencyId } = useOrganization();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -110,7 +112,7 @@ export default function Audit() {
   const [form, setForm] = useState({ name: "", description: "", provinceId: "", startDate: "", endDate: "" });
 
   const { data: sessions, isLoading } = useQuery<AuditSession[]>({
-    queryKey: ["audit-sessions"],
+    queryKey: ["audit-sessions", activeAgencyId],
     queryFn: async () => {
       const r = await apiFetchJson<AuditSession[]>("/api/v1/audit/sessions");
       return r.data ?? [];
@@ -118,7 +120,7 @@ export default function Audit() {
   });
 
   const { data: myAssignments } = useQuery<MyAssignment[]>({
-    queryKey: ["my-audit-assignments"],
+    queryKey: ["my-audit-assignments", activeAgencyId],
     queryFn: async () => {
       const r = await apiFetchJson<MyAssignment[]>("/api/v1/audit/assignments/mine");
       return r.data ?? [];
