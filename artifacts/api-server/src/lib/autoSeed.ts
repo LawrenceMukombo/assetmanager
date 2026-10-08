@@ -54,6 +54,13 @@ export async function autoSeedIfEmpty(): Promise<void> {
     await seedAgencies();
   }
 
+  // Ensure additive column exists non-destructively
+  try {
+    await db.execute(sql`ALTER TABLE asset_categories ADD COLUMN IF NOT EXISTS industry varchar(100);`);
+  } catch (err) {
+    logger.warn({ err }, "Auto-seed: could not ensure industry column on asset_categories");
+  }
+
   // Idempotent — these check for existing rows themselves
   await seedIcaPresenceFacilities();
   await pruneNonImmigrationFacilities();
