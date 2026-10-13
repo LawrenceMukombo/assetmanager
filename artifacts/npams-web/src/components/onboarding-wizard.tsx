@@ -212,6 +212,41 @@ export const INDUSTRY_SECTORS = [
     primaryColor: "#0F172A",
     accentColor: "#0284C7",
   },
+  {
+    id: "forestry",
+    name: "Forestry, Environment & Natural Resources",
+    preset: "public_sector",
+    level1: "Regional Office",
+    level1Plural: "Regional Offices",
+    level2: "Provincial Forest Office",
+    level2Plural: "Provincial Forest Offices",
+    level3: "Forest Station / Concession",
+    level3Plural: "Forest Stations & Concessions",
+    primaryColor: "#166534",
+    accentColor: "#CA8A04",
+  },
+];
+
+/** One-click organization templates (prefill only — user still reviews and submits). */
+export const ORGANIZATION_QUICK_STARTS = [
+  {
+    key: "pngfa",
+    label: "PNG Forest Authority",
+    industryId: "forestry",
+    organizationName: "PNG Forest Authority",
+    shortCode: "PNGFA",
+    description:
+      "Statutory authority responsible for the management, regulation and sustainable development of Papua New Guinea's forest resources.",
+    countryCode: "PNG",
+    currencyCode: "PGK",
+    currencySymbol: "K",
+    // PNGFA Headquarters, Hohola, Port Moresby (NCD)
+    defaultLatitude: "-9.4320",
+    defaultLongitude: "147.1690",
+    defaultZoom: "6",
+    adminJobTitle: "PNGFA Asset Administrator",
+    adminDepartment: "Corporate Services",
+  },
 ];
 
 interface OnboardingWizardProps {
@@ -377,6 +412,43 @@ export function OnboardingWizard({ onSuccess }: OnboardingWizardProps) {
       primaryColor: sector.primaryColor,
       accentColor: sector.accentColor,
     }));
+  };
+
+  const applyOrgQuickStart = (qs: typeof ORGANIZATION_QUICK_STARTS[0]) => {
+    const sector = INDUSTRY_SECTORS.find((s) => s.id === qs.industryId);
+    setOrgForm((prev) => ({
+      ...prev,
+      ...(sector
+        ? {
+            industry: sector.id,
+            organizationType: sector.name,
+            hierarchyPreset: sector.preset,
+            level1Label: sector.level1,
+            level1Plural: sector.level1Plural,
+            level2Label: sector.level2,
+            level2Plural: sector.level2Plural,
+            level3Label: sector.level3,
+            level3Plural: sector.level3Plural,
+            primaryColor: sector.primaryColor,
+            accentColor: sector.accentColor,
+          }
+        : {}),
+      organizationName: qs.organizationName,
+      shortCode: qs.shortCode,
+      description: qs.description,
+      countryCode: qs.countryCode,
+      currencyCode: qs.currencyCode,
+      currencySymbol: qs.currencySymbol,
+      defaultLatitude: qs.defaultLatitude,
+      defaultLongitude: qs.defaultLongitude,
+      defaultZoom: qs.defaultZoom,
+      adminJobTitle: qs.adminJobTitle,
+      adminDepartment: qs.adminDepartment,
+    }));
+    toast({
+      title: `${qs.label} template applied`,
+      description: "Review the details, add the lead administrator, then click create.",
+    });
   };
 
   const handleCountrySubmit = async (e: React.FormEvent) => {
@@ -823,6 +895,24 @@ export function OnboardingWizard({ onSuccess }: OnboardingWizardProps) {
                   <CardDescription className="text-xs">
                     Choose industry archetype to automatically cascade relevant organizational hierarchy levels and colors.
                   </CardDescription>
+
+                  {/* Quick-start templates */}
+                  <div className="pt-2 flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground font-medium">Quick start:</span>
+                    {ORGANIZATION_QUICK_STARTS.map((qs) => (
+                      <Button
+                        key={qs.key}
+                        id={`org-quickstart-${qs.key}`}
+                        type="button"
+                        size="sm"
+                        variant={orgForm.shortCode === qs.shortCode ? "default" : "outline"}
+                        className="h-7 text-xs"
+                        onClick={() => applyOrgQuickStart(qs)}
+                      >
+                        {qs.label} ({qs.shortCode})
+                      </Button>
+                    ))}
+                  </div>
 
                   {/* Industry Archetype Selector */}
                   <div className="pt-2">

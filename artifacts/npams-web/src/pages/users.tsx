@@ -50,6 +50,7 @@ import { Plus, Pencil, ShieldCheck, Users as UsersIcon, Trash2, Activity as Acti
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageHeader } from "@/components/layout/page-header";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useOrganization } from "@/context/organization-context";
 import { BulkUploadModal } from "@/components/bulk-upload-modal";
 import { OnboardingWizard } from "@/components/onboarding-wizard";
@@ -313,8 +314,15 @@ export default function Users() {
     }
   };
 
+  const usersList = useMemo<UserRow[]>(() => {
+    const raw = data?.data as unknown;
+    if (Array.isArray(raw)) return raw as UserRow[];
+    const items = (raw as { items?: unknown } | undefined)?.items;
+    return Array.isArray(items) ? (items as UserRow[]) : [];
+  }, [data?.data]);
+
   const filteredUsers = useMemo(() => {
-    let list = (data?.data as UserRow[]) ?? [];
+    let list = usersList;
     if (userRoleFilter !== "ALL") {
       list = list.filter((u) => u.role?.roleName === userRoleFilter);
     }
@@ -359,7 +367,7 @@ export default function Users() {
       if (valA > valB) return userSortDir === "asc" ? 1 : -1;
       return 0;
     });
-  }, [data?.data, userRoleFilter, userStatusFilter, userSearch, userSortField, userSortDir]);
+  }, [usersList, userRoleFilter, userStatusFilter, userSearch, userSortField, userSortDir]);
 
   const paginatedUsers = useMemo(() => {
     const start = (userPage - 1) * userPageSize;
@@ -548,8 +556,6 @@ export default function Users() {
   });
   const resetHistory = resetHistoryResp?.data ?? [];
 
-  if (!isAdmin) return <Redirect to="/dashboard" />;
-
   const onSubmit = (values: UserFormValues) => {
     const role = rolesData?.find((r) => r.id === values.role_id);
     const scope = role?.scopeLevel ?? "";
@@ -632,7 +638,7 @@ export default function Users() {
     const editId = params.get("edit");
     if (!editId) return;
     if (handledDeepLinkRef.current === editId) return;
-    const list = data?.data ?? [];
+    const list = usersList;
     const target = list.find((u) => u.id === editId);
     if (!target) return;
     handledDeepLinkRef.current = editId;
@@ -640,7 +646,7 @@ export default function Users() {
     params.delete("edit");
     const remaining = params.toString();
     navigate(remaining ? `/users?${remaining}` : "/users", { replace: true });
-  }, [search, data, navigate]);
+  }, [search, usersList, navigate]);
 
   const onSubmitEdit = async (values: EditUserFormValues) => {
     if (!editUser?.id) return;
@@ -712,6 +718,9 @@ export default function Users() {
 
   const isNationalRole = NATIONAL_SCOPES.includes(selectedRoleScope);
   const isEditNationalRole = NATIONAL_SCOPES.includes(editRoleScope);
+
+  // Redirect only after ALL hooks above have run (Rules of Hooks).
+  if (!isAdmin) return <Redirect to="/dashboard" />;
 
   return (
     <div className="space-y-6">

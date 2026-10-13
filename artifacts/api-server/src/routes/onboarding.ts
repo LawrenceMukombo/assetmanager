@@ -215,6 +215,19 @@ export const INDUSTRY_PRESETS = [
     primaryColor: "#0F172A",
     accentColor: "#0284C7",
   },
+  {
+    id: "forestry",
+    name: "Forestry, Environment & Natural Resources",
+    preset: "public_sector",
+    level1: "Regional Office",
+    level1Plural: "Regional Offices",
+    level2: "Provincial Forest Office",
+    level2Plural: "Provincial Forest Offices",
+    level3: "Forest Station / Concession",
+    level3Plural: "Forest Stations & Concessions",
+    primaryColor: "#166534",
+    accentColor: "#CA8A04",
+  },
 ];
 
 // GET /v1/onboarding/options

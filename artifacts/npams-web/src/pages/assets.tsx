@@ -771,75 +771,69 @@ export default function Assets() {
               </div>
             )}
 
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-medium text-muted-foreground">
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">
+                  Sector
+                </p>
+                <Select
+                  value={industryFilter}
+                  onValueChange={(val) => {
+                    setIndustryFilter(val);
+                    setCategoryId("");
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger className="w-[220px]" aria-label="Filter by sector">
+                    <SelectValue placeholder="All Sectors" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Sectors</SelectItem>
+                    {availableIndustries.map((ind) => (
+                      <SelectItem key={ind} value={ind}>
+                        {ind}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">
                   Category
                 </p>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-muted-foreground">Sector:</span>
-                  <Select
-                    value={industryFilter}
-                    onValueChange={(val) => {
-                      setIndustryFilter(val);
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger className="h-7 text-xs w-[180px]">
-                      <SelectValue placeholder="All Sectors" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL">All Sectors</SelectItem>
-                      {availableIndustries.map((ind) => (
-                        <SelectItem key={ind} value={ind}>
-                          {ind}
+                <Select
+                  value={categoryId || ALL}
+                  onValueChange={(v) => {
+                    setCategoryId(v === ALL ? "" : v);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger className="w-[300px]" aria-label="Filter by category">
+                    <SelectValue placeholder="All Categories" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[320px]">
+                    <SelectItem value={ALL}>
+                      All Categories ({filteredCategories.length})
+                    </SelectItem>
+                    {filteredCategories.map((c) => {
+                      const meta = getCategoryMeta(c.categoryName, c.categoryCode, c.iconName, c.accentColor);
+                      const Icon = meta.icon;
+                      return (
+                        <SelectItem key={c.id} value={c.id!}>
+                          <span className="inline-flex items-center gap-2">
+                            <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: meta.color }} />
+                            <span className="truncate">{c.categoryName}</span>
+                            {c.categoryCode && (
+                              <span className="font-mono text-[10px] text-muted-foreground">
+                                {c.categoryCode}
+                              </span>
+                            )}
+                          </span>
                         </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {filteredCategories.map((c) => {
-                  const isSelected = categoryId === c.id;
-                  const meta = getCategoryMeta(c.categoryName, c.categoryCode, c.iconName, c.accentColor);
-                  const Icon = meta.icon;
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => {
-                        setCategoryId(isSelected ? "" : c.id!);
-                        setPage(1);
-                      }}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition-all duration-150",
-                        "hover:scale-105 active:scale-95 cursor-pointer select-none",
-                        isSelected
-                          ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                          : "bg-background text-foreground border-border hover:border-primary/50 hover:bg-accent"
-                      )}
-                    >
-                      <Icon
-                        className="h-3.5 w-3.5 shrink-0"
-                        style={isSelected ? undefined : { color: meta.color }}
-                      />
-                      <span>{c.categoryName}</span>
-                      {c.categoryCode && (
-                        <span
-                          className={cn(
-                            "ml-0.5 font-mono text-[10px] px-1 py-0.5 rounded",
-                            isSelected
-                              ? "bg-primary-foreground/20 text-primary-foreground"
-                              : "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          {c.categoryCode}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
